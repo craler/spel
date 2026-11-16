@@ -29,15 +29,16 @@ body.crashed .guide,body.crashed .tools,body.crashed #feedback{visibility:hidden
 @media(max-width:1440px){#hud{top:82px}}
 @media(max-width:1100px){#hud{top:82px}#meter{width:min(88vw,630px)}}
 @media(max-width:640px){#reserve{bottom:134px}.tools{flex-wrap:wrap}}
+#brief{white-space:pre-line}#flash{position:fixed;inset:0;pointer-events:none;opacity:0;box-shadow:inset 0 0 160px 40px #e3263c}#flash.on{animation:hurt .6s ease-out}@keyframes hurt{from{opacity:.9}to{opacity:0}}
 </style>
 <canvas id="world" aria-label="Flygspel med tangentbordsstyrning"></canvas>
 <div id="hud"><strong id="hits">0 träffar</strong><span id="time">60 s</span><span class="badge" id="mode">Glidflykt</span><span id="speed"></span></div>
 <div id="meter" role="progressbar" aria-label="Kaosmätare" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="meter-fill"></div><span id="meter-label">KAOS · 0 / 100</span></div>
 <div id="stars" aria-label="Efterlysningsnivå">☆☆☆☆☆</div><label id="reserve">Bajs <progress id="ammo" max="1" value="1"></progress></label>
 <div class="tools"><button id="camera">Vy: bakom</button><button id="invert" class="pitch-switch">Höjdroder</button><button id="audio">Ljud på</button><button id="pause">Paus</button></div>
-<div id="feedback"></div><div class="guide">A/D eller ←/→ sväng · <span id="pitch-guide">↓/S stig · ↑/W sjunk</span> · Shift dyk · Space spruta / släpp för att ladda · C byt vy</div>
+<div id="flash"></div><div id="feedback"></div><div class="guide">A/D eller ←/→ sväng · <span id="pitch-guide">↓/S stig · ↑/W sjunk</span> · Shift dyk · Space spruta / släpp för att ladda · C byt vy</div>
 <div id="crash-banner" hidden>wasted</div>
-<div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">Nå 100 poäng på 60 sekunder för att starta jakten. Varje ny full mätare tänder en stjärna. Väj för frukten!</p><button id="go" autofocus>Ta sats och flyg →</button><button id="invert-menu" class="pitch-switch">Höjdroder</button><a href="../">Till Spelhörnan</a></section></div>
+<div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">Nå 100 poäng på 60 sekunder för att starta jakten. Träffar i lågflyg och störtdyk ger dubbelt, snabba träffar i rad bygger kombo. Tre fjädrar tål frukt – väggar tål ingen.</p><button id="go" autofocus>Ta sats och flyg →</button><button id="invert-menu" class="pitch-switch">Höjdroder</button><a href="../">Till Spelhörnan</a></section></div>
 <script src="./effects.js"></script>
 <script>
 'use strict';
@@ -113,7 +114,16 @@ function puff(){
  f.type='lowpass';f.frequency.value=390;g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.13,t+.018);g.gain.exponentialRampToValueAtTime(.001,t+.17);
  osc.connect(f);f.connect(g);g.connect(master);osc.start(t);osc.stop(t+.18);
 }
-const goal=100, fallen=new Map(), wrecks=new Map();
+const thresholds=[100,300,600,1000,1500], fallen=new Map(), wrecks=new Map();
+let combo=0,comboTime=0,bestCombo=0,feathers=3,shield=0,carsHit=0,best=0;
+try{best=+localStorage.getItem('fagelbajs.best')||0;}catch{}
+const ranks=[[0,'Blyg sparv'],[100,'Parkens busfrö'],[300,'Torgets skräck'],[600,'Stadens plåga'],[1000,'Efterlyst legend'],[1500,'Himlens härskare']];
+function finish(heading,cause,action){
+ state='end';keys.clear();
+ const record=points>best;if(record){best=points;try{localStorage.setItem('fagelbajs.best',String(best));}catch{}}
+ const rank=ranks.filter(r=>points>=r[0]).at(-1)[1];
+ panel(heading,cause+'\n\n'+points+' poäng'+(record?' · NYTT REKORD!':' · rekord '+best)+'\n'+'★'.repeat(wanted)+'☆'.repeat(maxWanted-wanted)+' · '+hits+' träffar · '+carsHit+' bilar\nBästa kombo ×'+bestCombo+' · '+Math.round(elapsed)+' s i luften\n\nTitel: '+rank,action);
+}
 let points=0,cars=[],sprayCount=0;
 const carPaint=['#ff715f','#37b9ca','#ffd950','#7ea3f5','#e682c2'];
 const maxWanted=5, sidewalkEdge=6.45, sidewalkLength=tile-2*sidewalkEdge;
@@ -198,6 +208,12 @@ function updateThreats(dt){
   o.age+=dt;o.x+=o.vx*dt;o.z+=o.vz*dt;o.y+=o.vy*dt-gravity*dt*dt/2;o.vy-=gravity*dt;
   if(solid(o.x,o.y,o.z)||o.age>3.8)return false;
   if(state==='play'&&Math.hypot(o.x-bird.x,o.y-bird.y,o.z-bird.z)<.83){
+   if(shield>0)return false;
+   if(--feathers>0){ // A fruit costs a feather; only the last one brings the bird down.
+    shield=1.5;bird.vy-=7;bird.speed=Math.max(10,bird.speed*.7);combo=0;comboTime=0;
+    announce('AJ! −1 fjäder');tone(260,90,.25,'sawtooth',.06);
+    const fl=$('flash');fl.classList.remove('on');void fl.offsetWidth;fl.classList.add('on');return false;
+   }
    const len=Math.max(.01,Math.hypot(o.vx,o.vy,o.vz));
    startCrash({n:[o.vx/len,o.vy/len,o.vz/len],depth:0,thrown:true});return false;
   }
@@ -294,10 +310,17 @@ function crashCar(c){
  Object.assign(c,{startX:c.x,startZ:c.z,startYaw:c.yaw,hitTime:elapsed,spin:hash(c.x,c.z,2)>.5?1:-1});
  wrecks.set(c.id,c);tone(310,63,.26,'sawtooth',.038);
 }
-function award(amount,label){
- points+=amount;hits++;const level=Math.min(maxWanted,Math.floor(points/goal));
+function award(base,label,p,targetY=0){
+ // Risk pays: releasing low or in a dive doubles the hit, quick successive hits build a combo.
+ let mult=1,tag='';
+ if(p){if(p.dive){mult*=2;tag+='STÖRTDYK ';}if(p.alt-targetY<14){mult*=2;tag+='LÅGFLYG ';}}
+ combo=comboTime>0?combo+1:1;comboTime=2.6;bestCombo=Math.max(bestCombo,combo);
+ const amount=Math.round(base*mult*(1+.25*Math.min(8,combo-1)));
+ points+=amount;hits++;
+ let level=0;while(level<maxWanted&&points>=thresholds[level])level++;
  if(level>wanted){wanted=level;throwWait=1.1;announce('EFTERLYST! '+ '★'.repeat(level));messageTime=1.6;tone(430,700,.22);}
- else announce(label+' +'+amount);
+ else announce(tag+label+' +'+amount+(combo>1?' · kombo ×'+combo:''));
+ if(combo>1)tone(500+60*Math.min(10,combo),760+60*Math.min(10,combo),.09,'triangle',.04,.05);
 }
 function drawCar(c){
  const sn=Math.sin(c.yaw),cs=Math.cos(c.yaw);
@@ -325,7 +348,7 @@ function drawCar(c){
  }
 }
 function reset(){
- resetChase();points=0;sprayCount=0;lastPuff=-2;fallen.clear();wrecks.clear();cars=[];
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=shield=0;feathers=3;sprayCount=0;lastPuff=-2;fallen.clear();wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
  bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0};elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();messageTime=0;$('feedback').textContent='';
@@ -388,7 +411,7 @@ function drop(){
  if(cooldown>0||emptyTank||tank+1e-8<1/60)return;
  const p=payload(),n=++sprayCount,lateral=.46*Math.sin(n*.73)+.22*Math.sin(n*2.11);
  p.vx+=Math.cos(bird.angle)*lateral;p.vz-=Math.sin(bird.angle)*lateral;p.vy+=.32*Math.sin(n*1.4);
- p.end=landingTime(p);p.age=0;p.seed=n;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.5;
+ p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.5;
  if(tank<1/60-1e-8)emptyTank=true;
  for(let k=0;k<2;k++){const a=(n*2+k)*2.39996,drift=.65+hash(n,k,1)*1.5;
   mist.push({x:p.x,y:p.y,z:p.z,vx:p.vx+Math.cos(a)*drift,vy:p.vy*.85+Math.sin(a),vz:p.vz+Math.sin(a)*drift,age:0,life:.65+hash(k,n,3)*.8});}
@@ -425,7 +448,7 @@ function simulate(dt){
  if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
  if(b.y<1.77){const vehicle=cars.find(c=>carContact(c,b.x,b.y,b.z,.28));if(vehicle){const surface=carContact(vehicle,b.x,b.y,b.z,.28);crashCar(vehicle);startCrash(surface);return;}}
  const wingCycle=Math.floor(wingPhase/tau);
- elapsed+=dt;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+23*b.effort);
+ elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+23*b.effort);
  if(pitch>0&&!dive&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
  gather(dt);updateMist(dt);updateThreats(dt);if(state!=='play')return;
@@ -436,17 +459,17 @@ function simulate(dt){
    const head=h.y+1.8;if(head>y0||head<y1||scored.has(h.id))return false;
    const f=(y0-head)/(y0-y1);return Math.hypot(h.x-mix(x0,x1,f),h.z-mix(z0,z1,f))<1.65;
   });
-  if(victim){stains.push({x:victim.x,y:victim.y+1.9,z:victim.z,t:elapsed,person:true});scored.add(victim.id);fallen.set(victim.id,elapsed);award(10,'SPLATT!');tone(430,750,.15);tone(690,980,.14,'sine',.05,.09);return false;}
+  if(victim){stains.push({x:victim.x,y:victim.y+1.9,z:victim.z,t:elapsed,person:true});scored.add(victim.id);fallen.set(victim.id,elapsed);award(10,'SPLATT!',p,victim.y);tone(430,750,.15);tone(690,980,.14,'sine',.05,.09);return false;}
  }
  const carTime=flightTime(p,1.48);
  if(carTime>=0&&carTime<=end&&prev<=carTime&&p.age>=carTime){
   const [x,,z]=at(p,carTime),vehicle=cars.find(c=>carContact(c,x,1.47,z));
-  if(vehicle){if(!wrecks.has(vehicle.id)){crashCar(vehicle);award(25,'PLÅTSMÄLL!');}return false;}
+  if(vehicle){if(!wrecks.has(vehicle.id)){crashCar(vehicle);carsHit++;award(25,'PLÅTSMÄLL!',p,0);}return false;}
  }
  if(p.age>=end){const [x,y,z]=at(p,end);stains.push({x,y,z,t:elapsed});tone(88,42,.08,'triangle',.032);return false;}return true;});
  if((messageTime-=dt)<=0)$('feedback').textContent='';
  if(stains.length>650)stains.splice(0,stains.length-600);
- if(!wanted&&elapsed>=60){state='end';keys.clear();panel('Tiden är ute!',points+' poäng på 60 sekunder. Ett varv till?','Flyg igen →');}
+ if(!wanted&&elapsed>=60){finish('Tiden är ute!','Du hann inte starta jakten.','Flyg igen →');}
 }
 // Resolve the nearest contact plane for the tumbling body, including roof edges.
 function contact(radius){
@@ -531,7 +554,7 @@ function advanceCrash(dt){
  if(c.age>.9)$('crash-banner').hidden=false;
  if(c.age>=3.7){
   state='end';$('crash-banner').hidden=true;
-  panel('wasted',(c.thrown?'Träffad av frukt!':c.vehicle?'Bilen vann.':c.ground?'Marken vann.':'Huset vann.')+' '+points+' poäng.','Ta ny sats →');
+  finish('wasted',c.thrown?'Träffad av frukt!':c.vehicle?'Bilen vann.':c.ground?'Marken vann.':'Huset vann.','Ta ny sats →');
  }
 }
 function crashFeathers(){
@@ -839,16 +862,16 @@ function render(dt=1/60){
  if(drops.length || (stains.length && elapsed-stains.at(-1).t<1.2)) impactView(aim);
  }
  renderBird();if(crash)crashFeathers();
- const fill=wanted===maxWanted?goal:points%goal;
+ const lo=thresholds[wanted-1]||0,hi=thresholds[wanted],fill=wanted===maxWanted?100:Math.round(100*(points-lo)/(hi-lo));
  const meter=$('meter');if(meter.getAttribute('aria-valuenow')!==String(fill)){
   meter.setAttribute('aria-valuenow',String(fill));$('meter-fill').style.width=fill+'%';
  }
- hud('meter-label',wanted===maxWanted?'MAXKAOS · '+points+' P':'KAOS · '+fill+' / '+goal);
+ hud('meter-label',wanted===maxWanted?'MAXKAOS · '+points+' P':'KAOS · '+points+' / '+hi);
  hud('stars','★'.repeat(wanted)+'☆'.repeat(maxWanted-wanted));$('ammo').value=tank;
  windLevel();
- hud('speed',Math.round(Math.hypot(forwardSpeed(),bird.vy)*3.6)+' km/h · '+Math.round(bird.y)+' m');
+ hud('speed','🪶'.repeat(feathers)+(combo>1?' · kombo ×'+combo:''));
  hud('hits',hits+(hits===1?' träff':' träffar'));hud('time',wanted?'Jakt · '+points+' p':Math.max(0,Math.ceil(60-elapsed))+' s');
- hud('mode',bird.climb>.9?'Nära stall':bird.fold>.5?'Dyk!':bird.flare>2?'Uppvind':'Glidflykt');
+ hud('mode',bird.fold>.5||bird.vy<-14?'Störtdyk ×2':bird.y<14?'Lågflyg ×2':bird.climb>.9?'Nära stall':'Glidflykt');
 }
 reset();gather();traffic();let prev=0;
 function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}else if(state==='crash')advanceCrash(dt);else if(state==='menu')wingPhase+=dt*3;render(dt);requestAnimationFrame(frame);}
