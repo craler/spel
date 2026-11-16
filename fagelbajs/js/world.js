@@ -251,11 +251,11 @@ function updateTanks(dt){
  if(wanted<5){tanks=[];return;}
  tankWait-=dt;
  if(tankWait<=0&&tanks.filter(t=>t.hp>0).length<2){
-  // Arrive at a crossing a few blocks away, on the street grid.
-  const sx=Math.random()<.5?-1:1,sz=Math.random()<.5?-1:1;
-  tanks.push({x:(Math.round(bird.x/tile)+3*sx)*tile,z:(Math.round(bird.z/tile)+2*sz)*tile,ax:0,dir:-sx,yaw:-sx*Math.PI/2,turret:0,hp:14,cool:3,aim:0,dead:0,splats:[],id:Math.random()});
+  // Arrive at a crossing a couple of blocks ahead of the bird, so flying straight on does not shake them off.
+  const tx=Math.round((bird.x+Math.sin(bird.angle)*105)/tile)*tile,tz=Math.round((bird.z+Math.cos(bird.angle)*105)/tile)*tile,sx=Math.sign(tx-bird.x)||1;
+  tanks.push({x:tx,z:tz,ax:0,dir:-sx,yaw:-sx*Math.PI/2,turret:0,hp:14,cool:3,aim:0,dead:0,splats:[],id:Math.random()});
   if(tankWait>-90)banner('STRIDSVAGNAR','De skjuter nät. Sväng när de siktar – och dränk dem i bajs','alert',3.6);
-  tankWait=16;
+  tankWait=9;
  }
  for(const t of tanks){
   if(t.hp<=0){t.dead+=dt;continue;}
@@ -283,5 +283,5 @@ function updateTanks(dt){
    }
   }else if(t.cool<=0&&far<140&&bird.y>4){t.aim=1.2;t.cool=5.5;}
  }
- tanks=tanks.filter(t=>(t.hp>0||t.dead<25)&&Math.hypot(t.x-bird.x,t.z-bird.z)<320);
+ tanks=tanks.filter(t=>(t.hp>0||t.dead<25)&&Math.hypot(t.x-bird.x,t.z-bird.z)<210);
 }
