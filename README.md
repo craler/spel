@@ -27,6 +27,8 @@ Bra att veta:
 - Hökens skugga är en egen platt siluett som bara ritas i skuggkartan (`hawkShadow()` i `render.js`).
 - Träffytan växer med fallhöjden (`hitRadius()` i `game.js`); siktet ritar samma radie på marken.
 - Fyra tider på dygnet (`skies` i `gl.js`), en ny för varje flygning.
+- Topplistan med namn (`scores` i `game.js`) sparas i webbläsaren, alltså per dator, inte gemensamt på nätet.
+- Stridsvagnar och nät finns i `updateTanks()` (`world.js`) och `updateThreats()` (`game.js`).
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
 
 Trimvärden att känna till: stjärngränser `thresholds` (game.js), riskbonus och kombo i `award()` (game.js),

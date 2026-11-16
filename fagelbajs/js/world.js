@@ -83,14 +83,14 @@ function traffic(){
     const id='car:'+across+','+lane+','+n;if(wrecks.has(id))continue;
     const along=n*spacing+offset,side=lane*tile+direction*1.45;
     cars.push({id,across,lane,along,direction,x:across?along:side,z:across?side:along,yaw:(across?Math.PI/2:0)+(direction<0?Math.PI:0),
-     speed:Math.abs(speed)*trafficFactor,cab:hash(lane,n,7+across)<.16,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
+     speed:Math.abs(speed)*trafficFactor,cab:hash(lane,n,7+across)<.16,hatch:hash(lane,n,3)<.45,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
    }
   }
  }
  // Parked cars: they do not move, but they can be hit (the alarm goes off) and flown into.
  const px=Math.floor(bird.x/tile),pz=Math.floor(bird.z/tile);
  for(let i=px-2;i<=px+2;i++)for(let j=pz-2;j<=pz+2;j++)for(const [n,p] of block(i,j).parked.entries()){
-  const id='park:'+i+','+j+','+n;if(!wrecks.has(id))cars.push({id,parked:true,x:p.x,z:p.z,yaw:p.yaw,speed:0,cab:false,color:p.c});
+  const id='park:'+i+','+j+','+n;if(!wrecks.has(id))cars.push({id,parked:true,x:p.x,z:p.z,yaw:p.yaw,speed:0,cab:false,hatch:n%2===0,color:p.c});
  }
  // Pile-ups: a car that reaches a wreck in its own lane joins it. Wrecks are towed after a while.
  for(const w of [...wrecks.values()]){
@@ -238,4 +238,50 @@ function updateHawk(dt){
  const yaw=Math.atan2(h.vx,h.vz),turn=wrap(yaw-h.yaw+Math.PI,tau)-Math.PI;
  h.bank=mix(h.bank,clamp(turn/dt*.5,-1,1),ease(4));h.yaw=yaw;
  h.beat-=dt;if(h.dread>.3&&h.beat<=0){heartbeat(h.dread);h.beat=mix(1,.36,h.dread);}
+}
+
+// ---- Five stars: tanks roll in along the streets and fire shells that burst into wide nets.
+let tanks=[],tankWait=0;
+function tankContact(t,x,y,z,r=0){
+ if(y>2.7+r)return false;
+ const dx=x-t.x,dz=z-t.z,s=Math.sin(t.yaw),c=Math.cos(t.yaw);
+ return Math.abs(dx*c-dz*s)<1.9+r&&Math.abs(dx*s+dz*c)<3.5+r;
+}
+function updateTanks(dt){
+ if(wanted<5){tanks=[];return;}
+ tankWait-=dt;
+ if(tankWait<=0&&tanks.filter(t=>t.hp>0).length<2){
+  // Arrive at a crossing a few blocks away, on the street grid.
+  const sx=Math.random()<.5?-1:1,sz=Math.random()<.5?-1:1;
+  tanks.push({x:(Math.round(bird.x/tile)+3*sx)*tile,z:(Math.round(bird.z/tile)+2*sz)*tile,ax:0,dir:-sx,yaw:-sx*Math.PI/2,turret:0,hp:14,cool:3,aim:0,dead:0,splats:[],id:Math.random()});
+  if(tankWait>-90)banner('STRIDSVAGNAR','De skjuter nät. Sväng när de siktar – och dränk dem i bajs','alert',3.6);
+  tankWait=16;
+ }
+ for(const t of tanks){
+  if(t.hp<=0){t.dead+=dt;continue;}
+  // Drive along the street; at each crossing turn towards the bird if that is the shorter way.
+  const along=t.ax?'z':'x',cross=t.ax?'x':'z',before=t[along],node=Math.round(before/tile)*tile;
+  t[along]+=t.dir*9*dt;
+  if((before-node)*(t[along]-node)<=0){
+   const ahead=bird[along]-node,side=bird[cross]-t[cross];
+   if(Math.abs(side)>Math.abs(ahead)||ahead*t.dir<-8){t[along]=node;t.ax=1-t.ax;t.dir=Math.sign(side)||1;}
+  }
+  const heading=t.ax?(t.dir>0?0:Math.PI):t.dir*Math.PI/2;
+  t.yaw+=clamp(wrap(heading-t.yaw+Math.PI,tau)-Math.PI,-dt*1.6,dt*1.6);
+  for(const c of cars)if(!c.parked&&!wrecks.has(c.id)&&tankContact(t,c.x,1,c.z,1))crashCar(c); // nothing stops a tank
+  const dx=bird.x-t.x,dz=bird.z-t.z,far=Math.hypot(dx,dz);
+  t.turret+=clamp(wrap(Math.atan2(dx,dz)-t.turret+Math.PI,tau)-Math.PI,-dt*2.2,dt*2.2);
+  t.cool-=dt;
+  if(t.aim>0){
+   t.aim-=dt;
+   if(t.aim<=0){ // fire at where the bird will be; the shell cannot turn
+    const speed=62,T=Math.hypot(far,bird.y-2.8)/speed,v=forwardSpeed();
+    const tx=bird.x+Math.sin(bird.angle)*v*T-t.x,ty=bird.y+bird.vy*T*.5-2.8,tz=bird.z+Math.cos(bird.angle)*v*T-t.z,l=Math.hypot(tx,ty,tz)||1;
+    thrown.push({kind:'shell',x:t.x+tx/l*3.5,y:2.8+ty/l*3.5,z:t.z+tz/l*3.5,vx:tx/l*speed,vy:ty/l*speed,vz:tz/l*speed,age:0,windup:0,fuse:Math.max(.15,T-.13),spin:0});
+    burst({from:500,to:50,gain:.7*clamp(1.3-far/110,.25,1),dur:.5});tone(95,32,.4,'triangle',.3*clamp(1.3-far/110,.25,1));
+    if(far<60)shake=Math.max(shake,.35);
+   }
+  }else if(t.cool<=0&&far<140&&bird.y>4){t.aim=1.2;t.cool=5.5;}
+ }
+ tanks=tanks.filter(t=>(t.hp>0||t.dead<25)&&Math.hypot(t.x-bird.x,t.z-bird.z)<320);
 }

@@ -68,7 +68,7 @@ function fit(){
 onresize=fit;fit();
 reset();gather();traffic();let prev=0;
 if(best)$('record').textContent='Ditt rekord: '+number(best)+' poäng · '+rankOf(best);
-$('feats').innerHTML=featList();
+$('feats').innerHTML=(scores.length?'<details class="feats"><summary>Topplista</summary>'+scoreList()+'</details>':'')+featList();
 function frame(now){
  const real=Math.min(.05,(now-prev)/1000),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
  frameTime=mix(frameTime,real,.04);

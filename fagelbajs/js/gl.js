@@ -212,6 +212,33 @@ class Mesh{
   }
   return this;
  }
+ // A body lofted through cross-sections [z, yBottom, yTop, halfWidthBottom, halfWidthTop]: sides, top and end caps.
+ loft(sec,col,t=0){
+  const c=([z,y0,y1,wb,wt])=>[[-wb,y0,z],[wb,y0,z],[wt,y1,z],[-wt,y1,z]];
+  for(let i=1;i<sec.length;i++){const a=c(sec[i-1]),b=c(sec[i]);
+   this.quad(a[0],b[0],b[3],a[3],col,t);this.quad(a[1],a[2],b[2],b[1],col,t);this.quad(a[3],b[3],b[2],a[2],col,t);}
+  for(const e of [c(sec[0]),c(sec.at(-1))])this.quad(e[0],e[1],e[2],e[3],col,t);
+  return this;
+ }
+ // A wheel on a sideways axle, with a lighter hub on the outer face.
+ wheel(x,y,z,r,w,out,tyre,hub){
+  const n=10,p=(i,rad,dx)=>{const a=i*tau/n;return [x+dx,y+rad*Math.sin(a),z+rad*Math.cos(a)];};
+  for(let i=0;i<n;i++){
+   this.quad(p(i,r,-w/2),p(i+1,r,-w/2),p(i+1,r,w/2),p(i,r,w/2),tyre);
+   this.quad(p(i,r,out*w/2),p(i+1,r,out*w/2),p(i+1,r*.55,out*w/2),p(i,r*.55,out*w/2),tyre);
+   this.tri([x+out*(w/2+.01),y,z],p(i,r*.55,out*(w/2+.01)),p(i+1,r*.55,out*(w/2+.01)),hub);
+  }
+  return this;
+ }
+ // A square beam between two points.
+ beam(a,b,r,col,t=0){
+  const d=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],up=Math.abs(d[1])>Math.hypot(d[0],d[2])?[1,0,0]:[0,1,0];
+  let u=[d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]],l=Math.hypot(...u);u=u.map(v=>v/l*r);
+  let v=[d[1]*u[2]-d[2]*u[1],d[2]*u[0]-d[0]*u[2],d[0]*u[1]-d[1]*u[0]];l=Math.hypot(...v);v=v.map(n=>n/l*r);
+  const ring=o=>[[1,1],[1,-1],[-1,-1],[-1,1]].map(([i,j])=>[o[0]+u[0]*i+v[0]*j,o[1]+u[1]*i+v[1]*j,o[2]+u[2]*i+v[2]*j]),p=ring(a),q=ring(b);
+  for(let i=0;i<4;i++){const j=(i+1)%4;this.quad(p[i],p[j],q[j],q[i],col,t);}
+  this.quad(q[0],q[1],q[2],q[3],col,t);this.quad(p[0],p[1],p[2],p[3],col,t);return this;
+ }
  build(){
   this.count=this.d.length/STRIDE;this.vao=gl.createVertexArray();gl.bindVertexArray(this.vao);
   this.vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(this.d),gl.STATIC_DRAW);this.d=null;
