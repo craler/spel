@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>Spelhörnan</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #111827; color: #f9fafb; font: 17px/1.6 system-ui, sans-serif; }
+    main { width: min(900px, 100%); margin: auto; padding: 72px 24px; }
+    .label { color: #a3e635; font-size: 13px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 12px 0; font-size: clamp(40px, 8vw, 64px); line-height: 1.1; letter-spacing: -.04em; }
+    .intro { color: #cbd5e1; margin-bottom: 40px; }
+    #games { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 18px; }
+    .card { display: block; padding: 26px; border: 1px solid #334155; border-radius: 18px; background: #1e293b; color: inherit; text-decoration: none; }
+    a.card:hover { border-color: #a3e635; }
+    a.card:focus-visible { outline: 3px solid #a3e635; outline-offset: 5px; }
+    h2 { margin: 0 0 10px; font-size: 23px; }
+    .card p { color: #cbd5e1; margin: 0; }
+    .play { display: inline-block; margin-top: 24px; color: #a3e635; font-weight: 750; }
+    footer { margin-top: 44px; color: #94a3b8; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="label">Egna idéer. Egna spel.</div>
+    <h1>Spelhörnan 🎮</h1>
+    <p class="intro">Välkommen till mina spel! Välj ett spel och kör direkt i webbläsaren.</p>
+    <section id="games" aria-label="Alla spel">
+      <div class="card" id="empty">
+        <h2>Första spelet är på gång!</h2>
+        <p>Här kommer mina spel att dyka upp. Kom tillbaka snart!</p>
+      </div>
+    </section>
+    <footer>Skapat med fantasi och hjälp av AI.</footer>
+  </main>
+  <script>
+    // Lägg nya spel i egna mappar och lägg till dem här.
+    // Exempel: { title: 'Rymdäventyret', description: 'Undvik meteoriter!', url: './spel/rymdaventyret/' }
+    const games = [];
+    const list = document.querySelector('#games');
+    if (games.length) document.querySelector('#empty').remove();
+    for (const game of games) {
+      const card = document.createElement('a');
+      card.className = 'card';
+      card.href = game.url;
+      const title = document.createElement('h2');
+      title.textContent = game.title;
+      const description = document.createElement('p');
+      description.textContent = game.description;
+      const play = document.createElement('span');
+      play.className = 'play';
+      play.textContent = 'Spela →';
+      card.append(title, description, play);
+      list.append(card);
+    }
+  </script>
+</body>
+</html>
