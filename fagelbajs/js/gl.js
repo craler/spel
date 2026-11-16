@@ -2,6 +2,7 @@
 // A small WebGL2 renderer with no dependencies: instanced lit meshes, one sun shadow map,
 // and procedural shaders for the ground, the building facades and the sky.
 const glCanvas=$('world'), gl=glCanvas.getContext('webgl2',{antialias:true,alpha:false,powerPreference:'high-performance'});
+if(!gl)$('brief').textContent='Din webbläsare saknar WebGL 2, som spelet behöver.';
 const colorCache=new Map();
 // '#rrggbb' or 'hsl(h s% l%)' to linear RGB.
 function rgb(str){
