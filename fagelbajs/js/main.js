@@ -58,16 +58,21 @@ function showTips(){
  const tip=state==='play'&&flights<=3?tips.find(t=>elapsed>=t[0]&&elapsed<t[1]):null,text=tip?tip[touchMode?3:2]:'';
  const el=$('tip');if(el.textContent!==text){el.textContent=text;el.classList.toggle('on',!!text);}
 }
+// The picture is rendered at up to 1.5 device pixels. If the machine cannot keep up, the resolution steps down.
+let density=Math.min(devicePixelRatio||1,1.5),frameTime=1/60,lastTune=0;
 function fit(){
- width=innerWidth;height=innerHeight;const density=Math.min(devicePixelRatio||1,1.5);
+ width=innerWidth;height=innerHeight;
  for(const c of [glCanvas,overlay]){c.width=Math.round(width*density);c.height=Math.round(height*density);}
  ctx.setTransform(density,0,0,density,0,0);
 }
 onresize=fit;fit();
 reset();gather();traffic();let prev=0;
 if(best)$('record').textContent='Ditt rekord: '+number(best)+' poäng · '+rankOf(best);
+$('feats').innerHTML=featList();
 function frame(now){
  const real=Math.min(.05,(now-prev)/1000),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
+ frameTime=mix(frameTime,real,.04);
+ if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>.75){density=Math.max(.75,density-.25);lastTune=now;fit();}
  if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu')wingPhase+=dt*3;

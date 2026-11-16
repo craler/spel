@@ -8,12 +8,13 @@ const setType=(i,j,t)=>{cityType[(i&63)+(j&63)*CITY]=t;};
 setType(0,0,0);setType(-1,0,1);setType(0,1,2);setType(-1,1,0);setType(0,-1,0);setType(-1,-1,0);
 function blockType(i,j){return cityType[(i&63)+(j&63)*CITY];}
 const wallPaint=['#a8483a','#c58a4e','#e2d2b0','#d4b07a','#9aa3a0','#c9c2b4','#8a4636','#b4c2ac','#d09a74','#ebe3d2','#7d8790','#c46a4a'];
+const parkedPaint=['#2b3038','#c9ccd1','#7c2420','#27507a','#e9e6df','#5f7a4c','#8a8f96','#b98a2e'];
 const parasolPaint=['#d4443c','#e8b23a','#2f7fa8','#3f9a6f','#e8e4da'];
 const blockCache=new Map();
 function block(i,j){
  const key=i+','+j;let b=blockCache.get(key);if(b)return b;
  const x=i*tile,z=j*tile,type=blockType(i,j),R=n=>hash(i,j,n);
- b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],food:[],folk:[],statue:null};
+ b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],food:[],folk:[],parked:[],statue:null};
  // Heights follow whole 3.1 m storeys so the window rows line up with the roof.
  const storeys=(n,lo,hi)=>3.1*(lo+Math.floor(R(n)*(hi-lo+1)))+.8;
  const add=(a,c,w,d,h,n)=>b.blds.push([x+a,z+c,w,d,h,Math.floor(R(n)*wallPaint.length),R(n+1)]);
@@ -48,6 +49,11 @@ function block(i,j){
   }
  }
  for(const [lx,lz] of [[5.5,5.5],[36.5,5.5],[5.5,36.5],[36.5,36.5]])b.lamps.push([x+lx,z+lz]);
+ // Cars parked along two kerbs, facing the way the lane beside them runs.
+ for(let n=0;n<4;n++){
+  if(R(120+n)<.2)b.parked.push({x:x+12.5+n*5.6,z:z+3.9,yaw:j%2===0?Math.PI/2:-Math.PI/2,c:parkedPaint[Math.floor(R(130+n)*parkedPaint.length)]});
+  if(R(140+n)<.2)b.parked.push({x:x+3.9,z:z+12.5+n*5.6,yaw:i%2===0?0:Math.PI,c:parkedPaint[Math.floor(R(150+n)*parkedPaint.length)]});
+ }
  if(blockCache.size>=600)blockCache.delete(blockCache.keys().next().value);
  blockCache.set(key,b);return b;
 }

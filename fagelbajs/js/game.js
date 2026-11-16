@@ -7,15 +7,15 @@ const ranks=[[0,'Blyg sparv'],[100,'Parkens busfrö'],[400,'Torgets skräck'],[1
 const number=n=>n.toLocaleString('sv-SE');
 function rankOf(score){return ranks.filter(r=>score>=r[0]).at(-1)[1];}
 function finish(heading,cause,action){
- state='end';keys.clear();
+ state='end';keys.clear();checkFeats();
  const record=points>best;if(record){best=points;try{localStorage.setItem('fagelbajs.best',String(best));}catch{}}
  const row=(k,v)=>'<div><dt>'+k+'</dt><dd>'+v+'</dd></div>',mins=Math.floor(elapsed/60),secs=String(Math.floor(elapsed%60)).padStart(2,'0');
  panel(heading,'<p class="cause">'+cause+'</p><p class="score">'+number(points)+'<small> poäng</small>'+(record?'<em>NYTT REKORD</em>':'')+'</p>'+
   '<dl class="stats">'+row('Stjärnor','★'.repeat(wanted)||'–')+row('Träffar',hits)+row('Bilar',carsHit)+row('Bästa kombo','×'+bestCombo)+row('Snodd mat',foodEaten)+row('I luften',mins+':'+secs)+'</dl>'+
-  '<p class="rank">Titel: <b>'+rankOf(points)+'</b>'+(record?'':' · rekord '+number(best))+'</p>',action);
+  '<p class="rank">Titel: <b>'+rankOf(points)+'</b>'+(record?'':' · rekord '+number(best))+'</p>'+featList(),action);
 }
 let points=0,cars=[],sprayCount=0;
-const carPaint=['#ff715f','#37b9ca','#ffd950','#7ea3f5','#e682c2'];
+const carPaint=['#c8382e','#2f8fa0','#e0b030','#4f74b8','#d9d6cf','#8a3f6a','#3f7a52'];
 const maxWanted=5, sidewalkEdge=6.45, sidewalkLength=tile-2*sidewalkEdge;
 let wanted=0,trafficClock=0,trafficFactor=1,throwWait=1,thrown=[],mist=[],tank=1,refillWait=0,emptyTank=false;
 const runners=new Map();
@@ -67,6 +67,34 @@ function carContact(c,x,y,z,r=0){
  const n=depth===depths[2]?[0,1,0]:depth===depths[0]?[sign(side)*cs,0,-sign(side)*sn]:[sign(along)*sn,0,sign(along)*cs];
  return {n,depth,car:true};
 }
+// ---- Bedrifter: small goals that are remembered between flights.
+let run={},slipTick=0;
+const feats=[
+ ['first','Premiärbajsaren','Träffa din första fotgängare',()=>hits>=1],
+ ['star1','Efterlyst','Starta jakten',()=>wanted>=1],
+ ['combo','Kombokung','Bygg en kombo ×8',()=>bestCombo>=8],
+ ['cars','Plåtskadan','Krocka fem bilar på en flygning',()=>carsHit>=5],
+ ['chain','Kedjereaktion','Orsaka en kedjekrock med tre bilar',()=>run.chain>=3],
+ ['slip','Halkbana','Få en bil att halka i bajset',()=>run.carSlips>=1],
+ ['alarm','Billarmet','Sätt igång tre billarm på en flygning',()=>run.alarms>=3],
+ ['statue','Kulturfiende','Pricka statyn på torget',()=>run.statue>=1],
+ ['wedding','Objuden gäst','Pricka både bruden och brudgummen',()=>run.wedding>=2],
+ ['food','Gourmand','Sno mat fem gånger på en flygning',()=>foodEaten>=5],
+ ['hawk','Hökdansen','Få höken att missa',()=>run.dodges>=1],
+ ['max','Maxkaos','Nå fem stjärnor',()=>wanted>=5],
+];
+let done=new Set();try{done=new Set(JSON.parse(localStorage.getItem('fagelbajs.feats')||'[]'));}catch{}
+function checkFeats(){
+ for(const [id,name,,test] of feats){
+  if(done.has(id)||!test())continue;
+  done.add(id);try{localStorage.setItem('fagelbajs.feats',JSON.stringify([...done]));}catch{}
+  feedLine('BEDRIFT: '+name.toUpperCase());tone(660,990,.12,'triangle',.06);tone(990,1320,.18,'triangle',.06,.11);
+ }
+}
+function featList(){
+ return '<details class="feats"><summary>Bedrifter '+done.size+' / '+feats.length+'</summary><ul>'+
+  feats.map(([id,name,text])=>'<li class="'+(done.has(id)?'done':'')+'"><b>'+name+'</b> '+text+'</li>').join('')+'</ul></details>';
+}
 // ---- Feedback: banner for big moments, a score feed by the sight, numbers and speech bubbles in the world.
 let popups=[],feed=[],bubbles=[],splash=[],marker=-9,markerGold=false,bannerUntil=0,lastDrop=-9,lastBubble=-9;
 const wantedNote=['','Nu kastar de frukt – väj undan','De klättrar upp på taken efter dig','Paraplyerna åker fram','En hök har fått syn på dig','Maxkaos – hela staden är efter dig'];
@@ -116,16 +144,16 @@ function award(base,label,p,targetY=0,pos){
  addPoints(amount);
 }
 function reset(){
- resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;brokeUmb.clear();eaten.clear();sprayCount=0;fallen.clear();
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;brokeUmb.clear();eaten.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0};
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
  bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }
 // body is HTML built from the game's own strings and numbers.
-function panel(heading,body,action){$('title').textContent=heading;$('brief').innerHTML=body;$('record').textContent='';$('go').textContent=action;$('overlay').hidden=false;$('go').focus();}
+function panel(heading,body,action){$('title').textContent=heading;$('brief').innerHTML=body;$('record').textContent='';$('feats').textContent='';$('go').textContent=action;$('overlay').hidden=false;document.body.classList.add('menu');$('go').focus();}
 function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','<p class="cause">Duvan väntar där du lämnade den.</p>','Fortsätt flyga →');}else if(state==='pause')start();}
-function start(){if(state!=='pause'){reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
+function start(){if(state!=='pause'){reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;document.body.classList.remove('menu');$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
 function view(){if(crash)return;above=!above;rig=null;$('camera').textContent=above?'Vy: ovanifrån':'Vy: bakom';}
 // Convert the stored dive speed into horizontal travel as the nose tips down.
 function forwardSpeed(){
@@ -208,7 +236,7 @@ function simulate(dt){
     splashAt(victim.x,victim.y+2.4,victim.z,5);splat(victim.x,victim.y,victim.z);return false;
    }
    if(victim){
-    scored.add(victim.id);fallen.set(victim.id,elapsed);
+    scored.add(victim.id);fallen.set(victim.id,elapsed);if(victim.base>=60)run.wedding++;yelp();
     award(victim.base||10,victim.label||'SPLATT',p,victim.y,[victim.x,victim.y+2.4,victim.z]);
     bubble(victim.x,victim.y+2.1,victim.z,victim.shout||shouts[Math.floor(Math.random()*shouts.length)]);
     splashAt(victim.x,victim.y+1.8,victim.z,6);splat(victim.x,victim.y,victim.z,true);return false;
@@ -218,7 +246,9 @@ function simulate(dt){
   if(carTime>=0&&carTime<=end&&prev<=carTime&&p.age>=carTime){
    const [x,,z]=at(p,carTime),vehicle=cars.find(c=>carContact(c,x,1.47,z,extra));
    if(vehicle){
-    if(!wrecks.has(vehicle.id)){
+    if(vehicle.parked){ // a parked car cannot crash, but its alarm goes off
+     if(!alarms.has(vehicle.id)){alarms.set(vehicle.id,elapsed);run.alarms++;award(5,'BILLARM',p,0,[vehicle.x,2.5,vehicle.z]);carAlarm(Math.hypot(vehicle.x-bird.x,vehicle.z-bird.z));}
+    }else if(!wrecks.has(vehicle.id)){
      crashCar(vehicle);carsHit++;award(vehicle.cab?50:25,vehicle.cab?'CABBEN':'PLÅTSMÄLL',p,0,[vehicle.x,2.5,vehicle.z]);
      bubble(vehicle.x,2.3,vehicle.z,vehicle.cab?'MIN FRISYR!':'MIN LACK!');
     }
@@ -234,12 +264,13 @@ function simulate(dt){
    }else splashAt(x,y,z,p.big?7:3);
    stains.push(stain);splat(x,y,z,p.big);
    const sq=block(Math.floor(x/tile),Math.floor(z/tile));
-   if(sq.statue&&y>.5&&!scored.has('st'+sq.key)&&Math.hypot(x-sq.statue[0],z-sq.statue[1])<1.9+extra){scored.add('st'+sq.key);award(40,'KULTURSKYMF',p,0,[sq.statue[0],6.4,sq.statue[1]]);}
+   if(sq.statue&&y>.5&&!scored.has('st'+sq.key)&&Math.hypot(x-sq.statue[0],z-sq.statue[1])<1.9+extra){scored.add('st'+sq.key);run.statue++;award(40,'KULTURSKYMF',p,0,[sq.statue[0],6.4,sq.statue[1]]);}
    return false;
   }
   return true;
  });
  if(elapsed>bannerUntil)$('feedback').classList.remove('on');
+ if(++slipTick%5===0)slips();if(slipTick%30===0)checkFeats();
  popups=popups.filter(p=>elapsed-p.t<1.1);bubbles=bubbles.filter(b=>elapsed-b.t<1.5);
  if(stains.length>650)stains.splice(0,stains.length-600);
  if(!wanted&&elapsed>=60){finish('Tiden är ute!','Du hann inte starta jakten.','Flyg igen →');}

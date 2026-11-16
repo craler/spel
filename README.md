@@ -21,5 +21,13 @@ Koden är vanliga skript (inga moduler, inget byggsteg) som delar ett globalt sc
 
 Testa lokalt: `python3 -m http.server` i repots rot och öppna `http://localhost:8000/fagelbajs/`.
 
+Bra att veta:
+
+- Allt ljud utom krasch och vingslag syntas i `js/audio.js` (sprut, nedslag, träffmarkör, hök, billarm, stadsbrus).
+- Hökens skugga är en egen platt siluett som bara ritas i skuggkartan (`hawkShadow()` i `render.js`).
+- Träffytan växer med fallhöjden (`hitRadius()` i `game.js`); siktet ritar samma radie på marken.
+- Fyra tider på dygnet (`skies` i `gl.js`), en ny för varje flygning.
+- Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
+
 Trimvärden att känna till: stjärngränser `thresholds` (game.js), riskbonus och kombo i `award()` (game.js),
 tankens påfyllning `recharge()` och hökens fart `updateHawk()` (world.js), kvarterstyper i `city.js`.

@@ -74,6 +74,10 @@ vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec
  if(y>size.y-.75)return base*.58;
  if(u<m||u>w-m)return wall;
  bool shop=fy<1.;
+ if(shop&&f.y>.88&&fract(seed*13.)<.6){ // a striped awning over the shop windows
+  vec3 dye=.5+.5*cos(6.283*(seed*5.+vec3(0.,.33,.67)));
+  return mix(vec3(.72,.7,.64),dye*.55+.06,step(.5,fract(u*1.3)));
+ }
  vec2 lo=shop?vec2(.07,.13):vec2(.25,.27),hi=shop?vec2(.93,.86):vec2(.75,.81);
  if(f.x>lo.x&&f.x<hi.x&&f.y>lo.y&&f.y<hi.y){
   vec2 d=min(f-lo,hi-f)*vec2(bay,3.1);

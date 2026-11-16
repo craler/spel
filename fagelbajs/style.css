@@ -8,7 +8,7 @@ button{cursor:pointer;font:inherit;color:inherit}
 button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
 
 /* ---- HUD: numbers sit straight on the picture with a soft shadow, no boxes ---- */
-.hud{position:fixed;pointer-events:none;text-shadow:0 2px 0 #0009,0 0 16px #000b;font-variant-numeric:tabular-nums}
+.hud{position:fixed;pointer-events:none;transition:opacity .3s;text-shadow:0 2px 0 #0009,0 0 16px #000b;font-variant-numeric:tabular-nums}
 .hud small{display:block;font-size:11px;font-weight:800;letter-spacing:.18em;opacity:.85}
 .hud b{display:block;font-size:46px;font-weight:900;line-height:1;letter-spacing:-.02em}
 #score{left:20px;top:14px}
@@ -62,8 +62,8 @@ body.crashed .tools,body.crashed #feedback,body.crashed .hud,body.crashed #tip,b
 h1{margin:8px 0 14px;font-size:clamp(40px,6vw,60px);font-weight:900;font-style:italic;line-height:.95;letter-spacing:-.03em}
 #brief{margin:0 0 18px;color:#cfd5de;font-weight:500}
 #brief ul{margin:0;padding:0;list-style:none}
-#brief li{position:relative;padding:4px 0 4px 20px}
-#brief li::before{content:"";position:absolute;left:2px;top:12px;width:7px;height:7px;border-radius:50%;background:var(--gold)}
+#brief>ul>li{position:relative;padding:4px 0 4px 20px}
+#brief>ul>li::before{content:"";position:absolute;left:2px;top:12px;width:7px;height:7px;border-radius:50%;background:var(--gold)}
 #brief b{color:#fff;font-weight:700}
 #record{margin:0 0 14px;color:var(--gold);font-size:13px;font-weight:700}#record:empty{display:none}
 #go{width:100%;padding:13px;border:0;border-radius:12px;background:var(--gold);color:var(--ink);font-size:16px;font-weight:900}
@@ -79,6 +79,16 @@ h1{margin:8px 0 14px;font-size:clamp(40px,6vw,60px);font-weight:900;font-style:i
 .stats dt{color:#8d97a5;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 .stats dd{margin:2px 0 0;font-size:19px;font-weight:800}
 .rank{margin:0;color:#aab3bf}#brief .rank b{color:var(--gold)}
+.feats{margin:12px 0 0;font-size:13px;color:#8d97a5}#feats .feats{margin:0 0 14px}
+.feats summary{cursor:pointer;color:#cfd5de;font-weight:700}
+.feats ul{margin:8px 0 0;padding:0;list-style:none;columns:2;column-gap:14px}
+.feats li{padding:3px 0 3px 18px;position:relative;break-inside:avoid;opacity:.6}
+.feats li::before{content:"";position:absolute;left:1px;top:8px;width:9px;height:9px;border-radius:50%;box-shadow:inset 0 0 0 2px #8d97a5}
+.feats li.done{opacity:1}.feats li.done::before{background:var(--gold);box-shadow:none}
+.feats li b{display:block;color:#fff;font-weight:700}
+
+body.menu .hud,body.menu #tip{opacity:0}
+@media(max-height:700px){.panel{padding:20px 24px}h1{margin:6px 0 10px;font-size:40px}#brief{margin-bottom:12px;font-size:14px}#brief>ul>li{padding:2px 0 2px 20px}.keys{margin-top:8px}.panel a{margin-top:8px}}
 
 /* ---- Touch ---- */
 #touch{position:fixed;inset:0;pointer-events:none}#touch[hidden]{display:none}

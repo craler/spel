@@ -263,7 +263,7 @@ function buildStatics(){
  }
  for(const m of statics)m.upload();
 }
-const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#5e6b30');
+const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#5e6b30'), amber=rgb('#ffb020');
 function buildMoving(){
  for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
@@ -285,6 +285,12 @@ function buildMoving(){
  }
  for(const c of cars){
   (c.cab?M.cab:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
+  const alarm=alarms.get(c.id);
+  if(alarm!==undefined){ // hit while parked: a white cap on the roof and, for a while, flashing indicators
+   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol);
+   if(elapsed-alarm<6&&(elapsed*3.3)%1<.5)for(const sx of [-1,1])for(const sz of [-1,1]){
+    const lx=sx*.8,lz=sz*1.95,sn=Math.sin(c.yaw),cs=Math.cos(c.yaw);M.ball.add(c.x+lx*cs+lz*sn,.72,c.z-lx*sn+lz*cs,0,.14,.1,.14,amber,2);}
+  }
   if(wrecks.has(c.id)){
    M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol);M.ball.add(c.x+Math.sin(c.yaw)*.9,1.2,c.z+Math.cos(c.yaw)*.9,c.yaw,.4,.25,.1,splatCol);
    for(let i=0;i<3;i++){const t=((elapsed-c.hitTime)*.6+i/3)%1;
@@ -366,6 +372,16 @@ function hawkShadow(){
   for(let i=1;i<pts.length;i++)omen.tri([h.x,h.y,h.z],pts[i-1],pts[i],WHITE);
  }
 }
+// A compass-style arrow near the edge of the picture, pointing at something on the ground that is out of view.
+function groundArrow(pos,label){
+ const m=point(pos);if(m&&m[0]>40&&m[0]<width-40&&m[1]>60&&m[1]<height-40)return;
+ const dx=pos[0]-bird.x,dz=pos[2]-bird.z,s=Math.sin(bird.angle),c=Math.cos(bird.angle),right=dx*c-dz*s,ahead=dx*s+dz*c,l=Math.hypot(right,ahead)||1;
+ const ux=right/l,uy=-ahead/l,reach=Math.min(width,height),x=width/2+ux*reach*.4,y=height*.5+uy*reach*.36;
+ ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(uy,ux));
+ ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-9,-11);ctx.lineTo(-4,0);ctx.lineTo(-9,11);ctx.closePath();
+ ctx.lineJoin='round';ctx.lineWidth=4;ctx.strokeStyle='#0b0e14';ctx.stroke();ctx.fillStyle='#ffd24a';ctx.fill();ctx.restore();
+ text(label+' '+Math.round(l)+' m',x,y+28,12,'#ffd24a','center',800);
+}
 function drawThreats(){
  let danger=false;
  for(const o of thrown){
@@ -429,12 +445,21 @@ function render(dt=1/60){
  if(!crash&&state!=='menu'){
   drawThreats();
   // Food markers, most visible when the tank is running low.
-  const hungry=tank<.5;
+  const hungry=tank<.5;let foodInView=false;
   for(const f of nearbyFood()){
    const far=Math.hypot(f.x-bird.x,f.z-bird.z);if(far>(hungry?120:55))continue;
    const m=point([f.x,f.y+1.5+.15*Math.sin(elapsed*3+f.x),f.z]);if(!m||m[0]<0||m[0]>width||m[1]<0||m[1]>height)continue;
+   foodInView=true;
    const r=hungry?9:6;ctx.save();ctx.translate(...m);ctx.globalAlpha=hungry?1:.7*clamp(1.6-far/40,0,1);ctx.beginPath();ctx.moveTo(0,r);ctx.lineTo(r,-r*.6);ctx.lineTo(-r,-r*.6);ctx.closePath();
    ctx.lineWidth=3;ctx.strokeStyle='#4a2f12';ctx.stroke();ctx.fillStyle='#ffd24a';ctx.fill();ctx.restore();
+  }
+  if(tank<.3&&!foodInView){const f=nearestFood();if(f)groundArrow([f.x,f.y,f.z],'MAT');}
+  // Gold stars mark the targets that are worth going out of your way for.
+  const star=(x,y,z)=>{const far=Math.hypot(x-bird.x,z-bird.z);if(far>150)return;const m=point([x,y,z]);if(m)text('★',m[0],m[1],14+7*clamp(1-far/90,0,1),'#ffd24a');};
+  for(const h of people)if(h.base>=60&&!scored.has(h.id))star(h.x,h.y+2.9,h.z);
+  for(const c of cars)if(c.cab&&!wrecks.has(c.id))star(c.x,2.7,c.z);
+  for(let i=Math.floor(bird.x/tile)-3;i<=Math.floor(bird.x/tile)+3;i++)for(let j=Math.floor(bird.z/tile)-3;j<=Math.floor(bird.z/tile)+3;j++){
+   const b=block(i,j);if(b.statue&&!scored.has('st'+b.key))star(b.statue[0],6.7,b.statue[1]);
   }
   const R=hitRadius(bird.y-aim[1]);
   const target=people.find(h=>{
@@ -446,7 +471,7 @@ function render(dt=1/60){
    return Math.hypot(px-hx,pz-hz)<R;
   })||(()=>{
    const t=flightTime(p,1.48);if(t<0||t>tt)return null;
-   const [x,,z]=at(p,t);return cars.find(c=>!wrecks.has(c.id)&&carContact(c,x-Math.sin(c.yaw)*c.speed*t,1.47,z-Math.cos(c.yaw)*c.speed*t,R-1.65));
+   const [x,,z]=at(p,t);return cars.find(c=>!wrecks.has(c.id)&&!alarms.has(c.id)&&carContact(c,x-Math.sin(c.yaw)*c.speed*t,1.47,z-Math.cos(c.yaw)*c.speed*t,R-1.65));
   })();
   // Dashes run down the predicted arc at a fixed pixel size.
   for(let i=0;i<12;i++){
@@ -487,7 +512,7 @@ function render(dt=1/60){
  $('chip').classList.toggle('warn',stall);
  // Sound and mood that follow the frame.
  windLevel();
- if(sound){sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);}
+ if(sound){sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);}
  const fear=playing&&hawk?hawk.dread*(.8+.2*Math.sin(elapsed*9)):0,veil=$('dread');
  if(Math.abs(fear-(+veil.style.opacity||0))>.01)veil.style.opacity=fear.toFixed(2);
 }

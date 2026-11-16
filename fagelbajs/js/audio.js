@@ -3,7 +3,7 @@
 // (crash tail and eight wing strokes) in audio/samples.mp3.
 const sampleCuts=[[0.0, 5.4], [5.45, 0.19], [5.69, 0.19], [5.93, 0.19], [6.17, 0.19], [6.41, 0.19], [6.65, 0.19], [6.89, 0.19], [7.13, 0.19]];
 let bank=null,bankLoading=false,lastWing=0,wind=null,master=null,crashVoice=null;
-let noiseBuf=null,sprayNodes=null,droneNodes=null,lastSplat=0;
+let noiseBuf=null,sprayNodes=null,droneNodes=null,humNodes=null,lastSplat=0,lastYelp=0,nextHorn=6;
 function tone(from,to,duration,type='sine',gain=.08,delay=0){
  if(!sound||muted)return;
  const t=sound.currentTime+delay, osc=sound.createOscillator(), vol=sound.createGain();
@@ -116,4 +116,35 @@ function dread(level){
   droneNodes={g,lp};
  }
  droneNodes.g.gain.setTargetAtTime(.085*level,sound.currentTime,.25);droneNodes.lp.frequency.setTargetAtTime(150+280*level,sound.currentTime,.3);
+}
+// A startled yelp: a voice-like sweep through a vowel filter, pitched differently every time.
+function yelp(){
+ if(!master||muted)return;
+ const t=sound.currentTime;if(t-lastYelp<.22)return;lastYelp=t;
+ const f=330+380*Math.random(),osc=sound.createOscillator(),bp=sound.createBiquadFilter(),g=sound.createGain();
+ osc.type='sawtooth';osc.frequency.setValueAtTime(f,t);osc.frequency.linearRampToValueAtTime(f*1.55,t+.07);osc.frequency.linearRampToValueAtTime(f*.8,t+.24);
+ bp.type='bandpass';bp.frequency.value=900+500*Math.random();bp.Q.value=2.2;
+ g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(.2,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.26);
+ osc.connect(bp);bp.connect(g);g.connect(master);osc.start(t);osc.stop(t+.3);
+}
+function carAlarm(distance){
+ const vol=.06*clamp(1.2-distance/60,.15,1);
+ for(let i=0;i<10;i++)tone(i%2?740:985,i%2?741:986,.17,'square',vol,i*.22);
+}
+// The city itself: a low hum that fades with altitude and the odd car horn somewhere below.
+function ambience(playing,dt){
+ if(!master)return;
+ if(!humNodes){
+  const src=sound.createBufferSource(),lp=sound.createBiquadFilter(),g=sound.createGain();
+  src.buffer=noiseBuf;src.loop=true;lp.type='lowpass';lp.frequency.value=210;g.gain.value=0;
+  src.connect(lp);lp.connect(g);g.connect(master);src.start();humNodes={g};
+ }
+ const near=clamp(1.1-bird.y/75,.25,1);
+ humNodes.g.gain.setTargetAtTime(playing?.11*near:0,sound.currentTime,.4);
+ if(!playing)return;
+ nextHorn-=dt;
+ if(nextHorn<=0){
+  nextHorn=6+10*Math.random();const f=370+90*Math.random(),len=.18+.3*Math.random(),vol=.022*near;
+  tone(f,f*1.001,len,'sawtooth',vol);tone(f*1.26,f*1.261,len,'sawtooth',vol);
+ }
 }

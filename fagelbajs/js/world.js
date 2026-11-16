@@ -58,7 +58,7 @@ function pedestrian(i,j,k,dt){
   umb:wanted>=3&&hash(i,j,k+20)<.3&&!brokeUmb.has(id)};
 }
 
-const brokeUmb=new Set(), eaten=new Map();
+const brokeUmb=new Set(), eaten=new Map(), alarms=new Map();
 let hawk=null;
 function gather(dt=0){
  people=[];const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile);
@@ -87,11 +87,17 @@ function traffic(){
    }
   }
  }
+ // Parked cars: they do not move, but they can be hit (the alarm goes off) and flown into.
+ const px=Math.floor(bird.x/tile),pz=Math.floor(bird.z/tile);
+ for(let i=px-2;i<=px+2;i++)for(let j=pz-2;j<=pz+2;j++)for(const [n,p] of block(i,j).parked.entries()){
+  const id='park:'+i+','+j+','+n;if(!wrecks.has(id))cars.push({id,parked:true,x:p.x,z:p.z,yaw:p.yaw,speed:0,cab:false,color:p.c});
+ }
  // Pile-ups: a car that reaches a wreck in its own lane joins it. Wrecks are towed after a while.
  for(const w of [...wrecks.values()]){
   if(elapsed-w.pileTime>24){wrecks.delete(w.id);continue;}
+  if(w.parked)continue;
   for(const c of cars){
-   if(c.lane!==w.lane||c.across!==w.across||wrecks.has(c.id))continue;
+   if(c.parked||c.lane!==w.lane||c.across!==w.across||wrecks.has(c.id))continue;
    const gap=((w.across?w.x:w.z)-c.along)*c.direction;
    if(gap>0&&gap<4.7)crashCar(c,w);
   }
@@ -110,7 +116,7 @@ function crashCar(c,parent){
  Object.assign(c,{startX:c.x,startZ:c.z,startYaw:c.yaw,hitTime:elapsed,spin:hash(c.x,c.z,2)>.5?1:-1,
   pileTime:parent?parent.pileTime:elapsed,chain:parent?parent.chain+1:1});
  wrecks.set(c.id,c);crunch();if(Math.hypot(c.x-bird.x,c.z-bird.z)<30)shake=Math.max(shake,.4);
- if(parent){carsHit++;award(15*c.chain,'KEDJEKROCK ×'+c.chain,null,0,[c.x,2.5,c.z]);}
+ if(parent){carsHit++;run.chain=Math.max(run.chain,c.chain);award(15*c.chain,'KEDJEKROCK ×'+c.chain,null,0,[c.x,2.5,c.z]);}
 }
 // The tank only trickles back by itself, and faster before the chase begins.
 // Food on café tables, market stalls and picnic blankets fills it at once.
@@ -125,6 +131,36 @@ function nearbyFood(){
  const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile),list=[];
  for(let i=ix-2;i<=ix+2;i++)for(let j=iz-2;j<=iz+2;j++)for(const f of block(i,j).food)if(foodReady(f))list.push(f);
  return list;
+}
+// Where to go when the tank is empty: the closest food, or failing that the closest park or square.
+function nearestFood(){
+ let best=null,d=1e9;
+ for(const f of nearbyFood()){const q=Math.hypot(f.x-bird.x,f.z-bird.z);if(q<d){d=q;best=f;}}
+ if(best)return best;
+ const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile);
+ for(let i=ix-6;i<=ix+6;i++)for(let j=iz-6;j<=iz+6;j++){
+  if(!blockType(i,j))continue;
+  const x=i*tile+21,z=j*tile+21,q=Math.hypot(x-bird.x,z-bird.z);if(q<d){d=q;best={x,y:1,z};}
+ }
+ return best;
+}
+// Fresh droppings on the ground are slippery: cars spin out on a big patch, people on a small one.
+function slips(){
+ const fresh=stains.filter(s=>!s.used&&s.wall===undefined&&s.y<.3&&elapsed-s.t<25);if(fresh.length<2)return;
+ const near=(x,z,r)=>fresh.filter(s=>!s.used&&(s.x-x)**2+(s.z-z)**2<r*r);
+ for(const c of cars){
+  if(c.parked||wrecks.has(c.id))continue;
+  const patch=near(c.x,c.z,1.8);if(patch.length<6)continue;
+  for(const s of patch)s.used=true;
+  crashCar(c);carsHit++;run.carSlips++;award(20,'BAJSHALKA',null,0,[c.x,2.5,c.z]);bubble(c.x,2.3,c.z,'JAG HALKAR!');
+ }
+ for(const h of people){
+  if(h.fixed||h.climbing||h.y>.1||scored.has(h.id))continue;
+  const patch=near(h.x,h.z,.9);if(patch.length<2)continue;
+  for(const s of patch)s.used=true;
+  scored.add(h.id);fallen.set(h.id,elapsed);hits++;feedLine('HALKADE',5);addPoints(5);
+  popups.push({x:h.x,y:2.2,z:h.z,text:'+5',t:elapsed});bubble(h.x,2.1,h.z,'HOPPSAN!');yelp();
+ }
 }
 function updateFood(){
  for(const f of nearbyFood()){
@@ -189,7 +225,7 @@ function updateHawk(dt){
   h.x+=h.vx*dt;h.y+=h.vy*dt;h.z+=h.vz*dt;h.tuck=mix(h.tuck,1,ease(6));h.dread=1;h.size=mix(h.size,2.6,ease(3));h.miss=Math.min(h.miss,d);
   if(d<1.9&&shield<=0){hurt('HÖKEN SLOG TILL',{n:[h.vx/speed,h.vy/speed,h.vz/speed],depth:0,cause:'Höken tog dig.'});leave();}
   else if((cos<0&&d>3)||h.y<14||h.t<=0||solid(h.x,h.y,h.z)){
-   if(h.miss<9&&state==='play'){addPoints(30);feedLine('HÖKEN MISSADE',30);popups.push({x:b.x,y:b.y+1.2,z:b.z,text:'+30',t:elapsed,gold:true});whoosh();}
+   if(h.miss<9&&state==='play'){run.dodges++;addPoints(30);feedLine('HÖKEN MISSADE',30);popups.push({x:b.x,y:b.y+1.2,z:b.z,text:'+30',t:elapsed,gold:true});whoosh();}
    leave();
   }
  }else{ // climb away, then start circling again
