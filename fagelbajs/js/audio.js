@@ -1,23 +1,24 @@
 'use strict';
-// Sound: synthesised tones plus a sample bank (crash tail and eight wing strokes) in audio/samples.mp3.
+// Sound. Everything is synthesised with WebAudio except a small sample bank
+// (crash tail and eight wing strokes) in audio/samples.mp3.
 const sampleCuts=[[0.0, 5.4], [5.45, 0.19], [5.69, 0.19], [5.93, 0.19], [6.17, 0.19], [6.41, 0.19], [6.65, 0.19], [6.89, 0.19], [7.13, 0.19]];
+let bank=null,bankLoading=false,lastWing=0,wind=null,master=null,crashVoice=null;
+let noiseBuf=null,sprayNodes=null,droneNodes=null,lastSplat=0;
 function tone(from,to,duration,type='sine',gain=.08,delay=0){
  if(!sound||muted)return;
  const t=sound.currentTime+delay, osc=sound.createOscillator(), vol=sound.createGain();
  osc.type=type;osc.frequency.setValueAtTime(from,t);osc.frequency.exponentialRampToValueAtTime(to,t+duration);
- vol.gain.setValueAtTime(.001,t);vol.gain.exponentialRampToValueAtTime(gain,t+.012);vol.gain.exponentialRampToValueAtTime(.001,t+duration);
+ vol.gain.setValueAtTime(.001,t);vol.gain.exponentialRampToValueAtTime(gain,t+Math.min(.012,duration*.4));vol.gain.exponentialRampToValueAtTime(.001,t+duration);
  osc.connect(vol);vol.connect(sound.destination);osc.start(t);osc.stop(t+duration);
 }
-let rig=null,crash=null;
-let bank=null,bankLoading=false,lastWing=0,wind=null,master=null,crashVoice=null,lastPuff=-2;
 function setupAudio(){
  if(!sound)return;
  if(!master){
   master=sound.createGain();master.gain.value=muted?0:.85;master.connect(sound.destination);
-  const noise=sound.createBuffer(1,sound.sampleRate*2,sound.sampleRate),data=noise.getChannelData(0);
+  noiseBuf=sound.createBuffer(1,sound.sampleRate*2,sound.sampleRate);const data=noiseBuf.getChannelData(0);
   for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
   const source=sound.createBufferSource(),filter=sound.createBiquadFilter(),gain=sound.createGain();
-  source.buffer=noise;source.loop=true;filter.type='bandpass';filter.Q.value=.7;gain.gain.value=0;
+  source.buffer=noiseBuf;source.loop=true;filter.type='bandpass';filter.Q.value=.7;gain.gain.value=0;
   source.connect(filter);filter.connect(gain);gain.connect(master);source.start();wind={gain,filter};
  }
  if(!bank&&!bankLoading){
@@ -43,10 +44,76 @@ function windLevel(){
  wind.gain.gain.setTargetAtTime(v*.145,sound.currentTime,.1);
  wind.filter.frequency.setTargetAtTime(280+v*1900,sound.currentTime,.13);
 }
-function puff(){
- if(!sound||muted||elapsed-lastPuff<.14)return;lastPuff=elapsed;
- const t=sound.currentTime,osc=sound.createOscillator(),f=sound.createBiquadFilter(),g=sound.createGain();
- osc.type='sawtooth';osc.frequency.setValueAtTime(80+Math.random()*28,t);osc.frequency.exponentialRampToValueAtTime(34,t+.15);
- f.type='lowpass';f.frequency.value=390;g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.13,t+.018);g.gain.exponentialRampToValueAtTime(.001,t+.17);
- osc.connect(f);f.connect(g);g.connect(master);osc.start(t);osc.stop(t+.18);
+// A short burst of filtered noise whose filter sweeps from one frequency to another:
+// the building block for splats, ticks, crunches and whooshes.
+function burst({type='lowpass',from=2000,to=from,q=1,gain=.2,attack=.004,dur=.12,delay=0}){
+ if(!master||muted)return;
+ const t=sound.currentTime+delay,src=sound.createBufferSource(),f=sound.createBiquadFilter(),g=sound.createGain();
+ src.buffer=noiseBuf;f.type=type;f.Q.value=q;
+ f.frequency.setValueAtTime(from,t);f.frequency.exponentialRampToValueAtTime(Math.max(20,to),t+dur);
+ g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(gain,t+attack);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ src.connect(f);f.connect(g);g.connect(master);src.start(t,Math.random()*1.5,dur+.05);
+}
+// The spray itself: a raspberry (an unsteady low pulse) under a wet hiss, running for as long as it flows.
+function sprayVoice(on){
+ if(!master)return;
+ if(!sprayNodes){
+  const osc=sound.createOscillator(),lp=sound.createBiquadFilter(),og=sound.createGain();
+  const src=sound.createBufferSource(),bp=sound.createBiquadFilter(),ng=sound.createGain();
+  osc.type='sawtooth';osc.frequency.value=72;lp.type='lowpass';lp.frequency.value=480;lp.Q.value=5;og.gain.value=0;
+  osc.connect(lp);lp.connect(og);og.connect(master);osc.start();
+  src.buffer=noiseBuf;src.loop=true;bp.type='bandpass';bp.frequency.value=1500;bp.Q.value=1.6;ng.gain.value=0;
+  src.connect(bp);bp.connect(ng);ng.connect(master);src.start();
+  sprayNodes={osc,lp,og,bp,ng,on:false};
+ }
+ const n=sprayNodes,t=sound.currentTime;
+ if(on&&!n.on){tone(360,95,.1,'sine',.17);burst({type:'bandpass',from:950,to:280,q:2.2,gain:.22,dur:.1});} // the opening "plopp"
+ n.on=on;
+ n.og.gain.setTargetAtTime(on?.15:0,t,on?.012:.045);n.ng.gain.setTargetAtTime(on?.08:0,t,on?.02:.06);
+ if(on){
+  n.osc.frequency.setTargetAtTime(50+42*Math.random()+14*Math.sin(t*31),t,.018);
+  n.lp.frequency.setTargetAtTime(300+640*Math.random(),t,.03);
+  n.bp.frequency.setTargetAtTime(900+1900*Math.random(),t,.035);
+ }
+}
+// A wet slap where it lands, quieter with distance.
+function splat(x,y,z,big){
+ if(!master||muted)return;
+ const t=sound.currentTime;if(t-lastSplat<.045)return;lastSplat=t;
+ const vol=clamp(1.25-Math.hypot(x-bird.x,y-bird.y,z-bird.z)/55,.12,1)*(big?1.5:1);
+ burst({from:2600+900*Math.random(),to:260,gain:.36*vol,dur:.17+.06*Math.random()});
+ burst({type:'bandpass',from:700,to:180,q:3,gain:.3*vol,dur:.11,delay:.012});
+ tone(150,52,.1,'sine',.14*vol);
+}
+// A dry double tick in the spirit of a shooter's hit marker; big hits add a low thump.
+function hitTick(strong,pitch=1){
+ if(!master||muted)return;
+ for(const [delay,g] of [[0,.95],[.032,.5]])burst({type:'bandpass',from:2700*pitch,to:2000*pitch,q:1.2,gain:g,attack:.001,dur:.034,delay});
+ tone(1900*pitch,1250*pitch,.024,'square',.045);
+ if(strong){tone(210,62,.13,'triangle',.22,.012);burst({from:900,to:140,gain:.2,dur:.1,delay:.012});}
+}
+function crunch(){burst({from:2400,to:160,gain:.55,dur:.34});burst({type:'bandpass',from:1800,to:700,q:6,gain:.34,dur:.2,delay:.02});tone(310,63,.26,'sawtooth',.045);}
+function whoosh(){burst({type:'bandpass',from:420,to:2400,q:1.1,gain:.65,attack:.09,dur:.4});}
+// The hawk: a falling cry with a fast vibrato, a heartbeat, and a low drone that swells as it locks on.
+function screech(){
+ if(!master||muted)return;
+ const t=sound.currentTime;
+ for(const [delay,dur,f0] of [[0,.75,2500],[.9,.5,2300]]){
+  const osc=sound.createOscillator(),lfo=sound.createOscillator(),lg=sound.createGain(),bp=sound.createBiquadFilter(),g=sound.createGain(),s=t+delay;
+  osc.type='sawtooth';osc.frequency.setValueAtTime(f0,s);osc.frequency.exponentialRampToValueAtTime(f0*.55,s+dur);
+  lfo.frequency.value=31;lg.gain.value=140;lfo.connect(lg);lg.connect(osc.frequency);
+  bp.type='bandpass';bp.frequency.value=2100;bp.Q.value=3;
+  g.gain.setValueAtTime(.0001,s);g.gain.linearRampToValueAtTime(.45,s+.04);g.gain.exponentialRampToValueAtTime(.0001,s+dur);
+  osc.connect(bp);bp.connect(g);g.connect(master);osc.start(s);lfo.start(s);osc.stop(s+dur+.05);lfo.stop(s+dur+.05);
+ }
+}
+function heartbeat(v){tone(84,40,.14,'triangle',.5*v);tone(76,38,.13,'triangle',.34*v,.17);}
+function dread(level){
+ if(!master)return;
+ if(!droneNodes){
+  const g=sound.createGain(),lp=sound.createBiquadFilter();g.gain.value=0;lp.type='lowpass';lp.frequency.value=170;lp.connect(g);g.connect(master);
+  for(const f of [49,49.6,73.7]){const o=sound.createOscillator();o.type='sawtooth';o.frequency.value=f;o.connect(lp);o.start();}
+  droneNodes={g,lp};
+ }
+ droneNodes.g.gain.setTargetAtTime(.085*level,sound.currentTime,.25);droneNodes.lp.frequency.setTargetAtTime(150+280*level,sound.currentTime,.3);
 }

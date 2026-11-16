@@ -1,14 +1,18 @@
 'use strict';
 // Game rules and simulation: flight, spray, scoring, threats, crash.
-const thresholds=[100,300,600,1000,1500], fallen=new Map(), wrecks=new Map();
+const thresholds=[100,400,1000,2000,3500], fallen=new Map(), wrecks=new Map();
 let combo=0,comboTime=0,bestCombo=0,feathers=3,shield=0,carsHit=0,foodEaten=0,best=0;
 try{best=+localStorage.getItem('fagelbajs.best')||0;}catch{}
-const ranks=[[0,'Blyg sparv'],[100,'Parkens busfrö'],[300,'Torgets skräck'],[600,'Stadens plåga'],[1000,'Efterlyst legend'],[1500,'Himlens härskare']];
+const ranks=[[0,'Blyg sparv'],[100,'Parkens busfrö'],[400,'Torgets skräck'],[1000,'Stadens plåga'],[2000,'Efterlyst legend'],[3500,'Himlens härskare'],[6000,'Stadens mardröm']];
+const number=n=>n.toLocaleString('sv-SE');
+function rankOf(score){return ranks.filter(r=>score>=r[0]).at(-1)[1];}
 function finish(heading,cause,action){
  state='end';keys.clear();
  const record=points>best;if(record){best=points;try{localStorage.setItem('fagelbajs.best',String(best));}catch{}}
- const rank=ranks.filter(r=>points>=r[0]).at(-1)[1];
- panel(heading,cause+'\n\n'+points+' poäng'+(record?' · NYTT REKORD!':' · rekord '+best)+'\n'+'★'.repeat(wanted)+'☆'.repeat(maxWanted-wanted)+' · '+hits+' träffar · '+carsHit+' bilar · '+foodEaten+' snodda mål\nBästa kombo ×'+bestCombo+' · '+Math.round(elapsed)+' s i luften\n\nTitel: '+rank,action);
+ const row=(k,v)=>'<div><dt>'+k+'</dt><dd>'+v+'</dd></div>',mins=Math.floor(elapsed/60),secs=String(Math.floor(elapsed%60)).padStart(2,'0');
+ panel(heading,'<p class="cause">'+cause+'</p><p class="score">'+number(points)+'<small> poäng</small>'+(record?'<em>NYTT REKORD</em>':'')+'</p>'+
+  '<dl class="stats">'+row('Stjärnor','★'.repeat(wanted)||'–')+row('Träffar',hits)+row('Bilar',carsHit)+row('Bästa kombo','×'+bestCombo)+row('Snodd mat',foodEaten)+row('I luften',mins+':'+secs)+'</dl>'+
+  '<p class="rank">Titel: <b>'+rankOf(points)+'</b>'+(record?'':' · rekord '+number(best))+'</p>',action);
 }
 let points=0,cars=[],sprayCount=0;
 const carPaint=['#ff715f','#37b9ca','#ffd950','#7ea3f5','#e682c2'];
@@ -63,27 +67,65 @@ function carContact(c,x,y,z,r=0){
  const n=depth===depths[2]?[0,1,0]:depth===depths[0]?[sign(side)*cs,0,-sign(side)*sn]:[sign(along)*sn,0,sign(along)*cs];
  return {n,depth,car:true};
 }
-function award(base,label,p,targetY=0){
+// ---- Feedback: banner for big moments, a score feed by the sight, numbers and speech bubbles in the world.
+let popups=[],feed=[],bubbles=[],splash=[],marker=-9,markerGold=false,bannerUntil=0,lastDrop=-9,lastBubble=-9;
+const wantedNote=['','Nu kastar de frukt – väj undan','De klättrar upp på taken efter dig','Paraplyerna åker fram','En hök har fått syn på dig','Maxkaos – hela staden är efter dig'];
+const shouts=['USCH!','ÄSCH!','MEN VA?!','MIN FRISYR!','FY BUBBLAN!','NEEEJ!','MITT I NYLLET!','BLÄ!','DUVJÄKEL!','INTE IGEN!'];
+function banner(title,sub='',kind='',time=2.2){
+ const el=$('feedback'),big=document.createElement('strong');el.className=kind;el.textContent='';big.textContent=title;el.append(big);
+ if(sub){const line=document.createElement('span');line.textContent=sub;el.append(line);}
+ void el.offsetWidth;el.classList.add('on');bannerUntil=elapsed+time;
+}
+function feedLine(label,amount=0,tags=''){feed.unshift({label:label.replace(/!+$/,''),amount,tags,t:elapsed});if(feed.length>5)feed.length=5;}
+function bubble(x,y,z,text){if(elapsed-lastBubble<.2)return;lastBubble=elapsed;bubbles.push({x,y,z,text,t:elapsed});if(bubbles.length>8)bubbles.shift();}
+// The spray fans out on the way down, so the area it can hit grows with the fall.
+function hitRadius(fall){return clamp(1.65+(fall-10)*.0325,1.65,3.6);}
+function splashAt(x,y,z,n,nx=0,nz=0){
+ for(let k=0;k<n;k++){const a=Math.random()*tau,s=1.2+2.6*Math.random();
+  splash.push({x,y:y+.05,z,vx:Math.cos(a)*s+nx*2.5,vy:1.5+3*Math.random(),vz:Math.sin(a)*s+nz*2.5,age:0,life:.35+.3*Math.random()});}
+ if(splash.length>260)splash.splice(0,splash.length-260);
+}
+function updateSplash(dt){
+ for(const s of splash){s.age+=dt;s.vy-=gravity*dt;s.x+=s.vx*dt;s.y+=s.vy*dt;s.z+=s.vz*dt;}
+ splash=splash.filter(s=>s.age<s.life&&s.y>0);
+}
+// Which wall, if any, a drop has just hit: returns the wall's facing and the point on its surface.
+function wallAt(x,y,z){
+ for(const [a,b,w,d,h] of buildings(Math.floor(x/tile),Math.floor(z/tile))){
+  if(x<a-.4||x>a+w+.4||z<b-.4||z>b+d+.4||y>h-.15)continue;
+  const gap=[x-a,a+w-x,z-b,b+d-z].map(Math.abs),k=gap.indexOf(Math.min(...gap));
+  return {yaw:[-Math.PI/2,Math.PI/2,Math.PI,0][k],x:k===0?a-.03:k===1?a+w+.03:x,z:k===2?b-.03:k===3?b+d+.03:z};
+ }
+ return null;
+}
+// Every point goes through here so the wanted level always follows the score.
+function addPoints(n){
+ points+=n;let level=0;while(level<maxWanted&&points>=thresholds[level])level++;
+ if(level>wanted){wanted=level;throwWait=1.1;banner('EFTERLYST '+'★'.repeat(level),wantedNote[level],'alert',2.8);tone(430,700,.22);}
+}
+function award(base,label,p,targetY=0,pos){
  // Risk pays: releasing low or in a dive doubles the hit, quick successive hits build a combo.
- let mult=1,tag='';
- if(p){if(p.dive){mult*=2;tag+='STÖRTDYK ';}if(p.alt-targetY<14){mult*=2;tag+='LÅGFLYG ';}}
+ let mult=1;const tags=[];
+ if(p){if(p.dive){mult*=2;tags.push('STÖRTDYK ×2');}if(p.alt-targetY<14){mult*=2;tags.push('LÅGFLYG ×2');}}
  combo=comboTime>0?combo+1:1;comboTime=2.6;bestCombo=Math.max(bestCombo,combo);
  const amount=Math.round(base*mult*(1+.25*Math.min(8,combo-1)));
- points+=amount;hits++;
- let level=0;while(level<maxWanted&&points>=thresholds[level])level++;
- if(level>wanted){wanted=level;throwWait=1.1;announce('EFTERLYST! '+ '★'.repeat(level));messageTime=1.6;tone(430,700,.22);}
- else announce(tag+label+' +'+amount+(combo>1?' · kombo ×'+combo:''));
- if(combo>1)tone(500+60*Math.min(10,combo),760+60*Math.min(10,combo),.09,'triangle',.04,.05);
+ hits++;feedLine(label,amount,tags.join(' · '));
+ if(pos)popups.push({x:pos[0],y:pos[1],z:pos[2],text:'+'+amount,t:elapsed,gold:mult>1});
+ marker=elapsed;markerGold=mult>1;hitTick(base>=25||mult>1,1+.035*Math.min(10,combo-1));
+ if(base>=40){slowmo=.35;shake=Math.max(shake,.35);} // the big ones get a beat of slow motion
+ addPoints(amount);
 }
 function reset(){
- resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;brokeUmb.clear();eaten.clear();sprayCount=0;lastPuff=-2;fallen.clear();wrecks.clear();cars=[];
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;brokeUmb.clear();eaten.clear();sprayCount=0;fallen.clear();
+ popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
- bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0};elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();messageTime=0;$('feedback').textContent='';
+ bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }
-function panel(heading,body,action){$('title').textContent=heading;$('brief').textContent=body;$('go').textContent=action;$('overlay').hidden=false;$('go').focus();}
-function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','Duvan väntar där du lämnade den.','Fortsätt flyga →');}else if(state==='pause')start();}
-function start(){if(state!=='pause'){reset();flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
+// body is HTML built from the game's own strings and numbers.
+function panel(heading,body,action){$('title').textContent=heading;$('brief').innerHTML=body;$('record').textContent='';$('go').textContent=action;$('overlay').hidden=false;$('go').focus();}
+function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','<p class="cause">Duvan väntar där du lämnade den.</p>','Fortsätt flyga →');}else if(state==='pause')start();}
+function start(){if(state!=='pause'){reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
 function view(){if(crash)return;above=!above;rig=null;$('camera').textContent=above?'Vy: ovanifrån':'Vy: bakom';}
 // Convert the stored dive speed into horizontal travel as the nose tips down.
 function forwardSpeed(){
@@ -111,15 +153,17 @@ function landingTime(p){
 }
 function drop(){
  if(cooldown>0||emptyTank||tank+1e-8<1/60)return;
- const p=payload(),n=++sprayCount,lateral=.46*Math.sin(n*.73)+.22*Math.sin(n*2.11);
- p.vx+=Math.cos(bird.angle)*lateral;p.vz-=Math.sin(bird.angle)*lateral;p.vy+=.32*Math.sin(n*1.4);
+ const p=payload(),n=++sprayCount,big=elapsed-lastDrop>.3;lastDrop=elapsed;
+ if(!big){ // the stream wavers sideways and fans out; the opening blob flies true
+  const lateral=.46*Math.sin(n*.73)+.22*Math.sin(n*2.11),fan=n*2.39996,wide=.55*Math.sqrt(hash(n,5,9));
+  p.vx+=Math.cos(bird.angle)*lateral+Math.cos(fan)*wide;p.vz+=-Math.sin(bird.angle)*lateral+Math.sin(fan)*wide;p.vy+=.32*Math.sin(n*1.4);
+ }
+ p.big=big;p.r=big?.19:.055+.05*hash(n,2,6);p.dark=n%4===0;
  p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.5;
- if(tank<1/60-1e-8)emptyTank=true;
+ if(tank<1/60-1e-8){emptyTank=true;banner('TANKEN ÄR TOM','Sno mat vid de gula pilarna','hurt',2);}
  for(let k=0;k<2;k++){const a=(n*2+k)*2.39996,drift=.65+hash(n,k,1)*1.5;
   mist.push({x:p.x,y:p.y,z:p.z,vx:p.vx+Math.cos(a)*drift,vy:p.vy*.85+Math.sin(a),vz:p.vz+Math.sin(a)*drift,age:0,life:.65+hash(k,n,3)*.8});}
- puff();
 }
-function announce(text){$('feedback').textContent=text;messageTime=.95;}
 function simulate(dt){
  const b=bird,held=(...codes)=>codes.some(c=>keys.has(c)),dive=held('ShiftLeft','ShiftRight');
  const steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
@@ -143,30 +187,60 @@ function simulate(dt){
  trafficFactor=mix(trafficFactor,1+.61*wanted,1-Math.exp(-dt*1.5));trafficClock+=dt*trafficFactor;traffic();
  if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
  if(b.y<1.77){const vehicle=cars.find(c=>carContact(c,b.x,b.y,b.z,.28));if(vehicle){const surface=carContact(vehicle,b.x,b.y,b.z,.28);crashCar(vehicle);startCrash(surface);return;}}
+ // Skimming a wall, a roof edge or the ground at speed without touching pays a little.
+ if(solid(b.x,b.y,b.z,1.15)&&Math.hypot(forwardSpeed(),b.vy)>12)b.skim+=dt;
+ else{if(b.skim>.12&&elapsed-b.lastSkim>2){b.lastSkim=elapsed;feedLine('NÄRA ÖGAT',10);addPoints(10);tone(900,1300,.07,'triangle',.04);}b.skim=0;}
  const wingCycle=Math.floor(wingPhase/tau);
  elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+23*b.effort);
  if(pitch>0&&!dive&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
- gather(dt);updateMist(dt);updateThreats(dt);updateHawk(dt);updateFood();if(state!=='play')return;
- drops=drops.filter(p=>{const prev=p.age;p.age+=dt;const end=p.end;
- const [x0,y0,z0]=at(p,prev),[x1,y1,z1]=at(p,Math.min(end,p.age));
- if(y1<y0){
-  const victim=people.find(h=>{
-   const head=h.y+1.8;if(head>y0||head<y1||scored.has(h.id))return false;
-   const f=(y0-head)/(y0-y1);return Math.hypot(h.x-mix(x0,x1,f),h.z-mix(z0,z1,f))<1.65;
-  });
-  if(victim&&victim.umb){brokeUmb.add(victim.id);stains.push({x:victim.x,y:victim.y+2.5,z:victim.z,t:elapsed,person:true});announce('PARAPLY!');tone(300,180,.12,'square',.03);return false;}
-  if(victim){stains.push({x:victim.x,y:victim.y+1.9,z:victim.z,t:elapsed,person:true});scored.add(victim.id);fallen.set(victim.id,elapsed);award(victim.base||10,victim.label||'SPLATT!',p,victim.y);tone(430,750,.15);tone(690,980,.14,'sine',.05,.09);return false;}
- }
- const carTime=flightTime(p,1.48);
- if(carTime>=0&&carTime<=end&&prev<=carTime&&p.age>=carTime){
-  const [x,,z]=at(p,carTime),vehicle=cars.find(c=>carContact(c,x,1.47,z));
-  if(vehicle){if(!wrecks.has(vehicle.id)){crashCar(vehicle);carsHit++;award(vehicle.cab?50:25,vehicle.cab?'CABBEN!':'PLÅTSMÄLL!',p,0);}return false;}
- }
- if(p.age>=end){const [x,y,z]=at(p,end);stains.push({x,y,z,t:elapsed});
-  const sq=block(Math.floor(x/tile),Math.floor(z/tile));
-  if(sq.statue&&y>.5&&!scored.has('st'+sq.key)&&Math.hypot(x-sq.statue[0],z-sq.statue[1])<1.9){scored.add('st'+sq.key);award(40,'KULTURSKYMF!',p,0);}tone(88,42,.08,'triangle',.032);return false;}return true;});
- if((messageTime-=dt)<=0)$('feedback').textContent='';
+ gather(dt);updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateFood();if(state!=='play')return;
+ drops=drops.filter(p=>{
+  const prev=p.age;p.age+=dt;const end=p.end;
+  const [x0,y0,z0]=at(p,prev),[x1,y1,z1]=at(p,Math.min(end,p.age));
+  if(y1<y0){
+   const victim=people.find(h=>{
+    const head=h.y+1.8;if(head>y0||head<y1||scored.has(h.id))return false;
+    const f=(y0-head)/(y0-y1);return Math.hypot(h.x-mix(x0,x1,f),h.z-mix(z0,z1,f))<hitRadius(p.alt-head)+(p.big?.4:0);
+   });
+   if(victim&&victim.umb){
+    brokeUmb.add(victim.id);feedLine('PARAPLYET TOG SMÄLLEN');bubble(victim.x,victim.y+2.7,victim.z,'HA! MISS!');
+    splashAt(victim.x,victim.y+2.4,victim.z,5);splat(victim.x,victim.y,victim.z);return false;
+   }
+   if(victim){
+    scored.add(victim.id);fallen.set(victim.id,elapsed);
+    award(victim.base||10,victim.label||'SPLATT',p,victim.y,[victim.x,victim.y+2.4,victim.z]);
+    bubble(victim.x,victim.y+2.1,victim.z,victim.shout||shouts[Math.floor(Math.random()*shouts.length)]);
+    splashAt(victim.x,victim.y+1.8,victim.z,6);splat(victim.x,victim.y,victim.z,true);return false;
+   }
+  }
+  const extra=hitRadius(p.alt-1.5)-1.65,carTime=flightTime(p,1.48);
+  if(carTime>=0&&carTime<=end&&prev<=carTime&&p.age>=carTime){
+   const [x,,z]=at(p,carTime),vehicle=cars.find(c=>carContact(c,x,1.47,z,extra));
+   if(vehicle){
+    if(!wrecks.has(vehicle.id)){
+     crashCar(vehicle);carsHit++;award(vehicle.cab?50:25,vehicle.cab?'CABBEN':'PLÅTSMÄLL',p,0,[vehicle.x,2.5,vehicle.z]);
+     bubble(vehicle.x,2.3,vehicle.z,vehicle.cab?'MIN FRISYR!':'MIN LACK!');
+    }
+    splashAt(vehicle.x,1.5,vehicle.z,4);splat(x,1.5,z);return false;
+   }
+  }
+  if(p.age>=end){
+   const [x,y,z]=at(p,end),fall=clamp(p.alt-y,0,80),stain={x,y,z,t:elapsed,seed:hash(p.seed,3,1),r:(p.big?1.15:.55)*(1+.011*fall)};
+   const wall=y>.3?wallAt(x,y,z):null;
+   if(wall){ // on a wall it sticks, then runs
+    stain.x=wall.x;stain.z=wall.z;stain.wall=wall.yaw;stain.drip=.3+1.9*hash(p.seed,5,2);
+    splashAt(wall.x,y,wall.z,p.big?5:2,Math.sin(wall.yaw),Math.cos(wall.yaw));
+   }else splashAt(x,y,z,p.big?7:3);
+   stains.push(stain);splat(x,y,z,p.big);
+   const sq=block(Math.floor(x/tile),Math.floor(z/tile));
+   if(sq.statue&&y>.5&&!scored.has('st'+sq.key)&&Math.hypot(x-sq.statue[0],z-sq.statue[1])<1.9+extra){scored.add('st'+sq.key);award(40,'KULTURSKYMF',p,0,[sq.statue[0],6.4,sq.statue[1]]);}
+   return false;
+  }
+  return true;
+ });
+ if(elapsed>bannerUntil)$('feedback').classList.remove('on');
+ popups=popups.filter(p=>elapsed-p.t<1.1);bubbles=bubbles.filter(b=>elapsed-b.t<1.5);
  if(stains.length>650)stains.splice(0,stains.length-600);
  if(!wanted&&elapsed>=60){finish('Tiden är ute!','Du hann inte starta jakten.','Flyg igen →');}
 }

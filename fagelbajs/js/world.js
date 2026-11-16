@@ -66,7 +66,7 @@ function gather(dt=0){
   for(let k=0;k<8;k++)people.push(pedestrian(i,j,k,dt));
   // People who stay put: café guests, picnickers, the wedding party.
   for(const [n,f] of block(i,j).folk.entries())people.push({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,
-   yaw:hash(i,j,n+300)*tau,running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,bride:f.bride,umb:false});
+   yaw:hash(i,j,n+300)*tau,running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false});
  }
  if(runners.size>520){for(const [id,r] of runners)if(Math.hypot(r.x-bird.x,r.z-bird.z)>145)runners.delete(id);}
 }
@@ -109,14 +109,15 @@ function crashCar(c,parent){
  if(wrecks.has(c.id))return;
  Object.assign(c,{startX:c.x,startZ:c.z,startYaw:c.yaw,hitTime:elapsed,spin:hash(c.x,c.z,2)>.5?1:-1,
   pileTime:parent?parent.pileTime:elapsed,chain:parent?parent.chain+1:1});
- wrecks.set(c.id,c);tone(310,63,.26,'sawtooth',.038);
- if(parent){carsHit++;award(15*c.chain,'KEDJEKROCK ×'+c.chain+'!');}
+ wrecks.set(c.id,c);crunch();if(Math.hypot(c.x-bird.x,c.z-bird.z)<30)shake=Math.max(shake,.4);
+ if(parent){carsHit++;award(15*c.chain,'KEDJEKROCK ×'+c.chain,null,0,[c.x,2.5,c.z]);}
 }
-// The tank only trickles back by itself. Food on café tables, market stalls and picnic blankets fills it at once.
+// The tank only trickles back by itself, and faster before the chase begins.
+// Food on café tables, market stalls and picnic blankets fills it at once.
 function recharge(dt,pressed){
  if(!pressed||emptyTank){
   refillWait-=dt;
-  if(refillWait<=0){tank=Math.min(1,tank+dt*.085);if(tank>=.25)emptyTank=false;}
+  if(refillWait<=0){tank=Math.min(1,tank+dt*(wanted?.085:.2));if(tank>=.25)emptyTank=false;}
  }
 }
 function foodReady(f){return elapsed-(eaten.get(f.id)??-99)>25;}
@@ -128,8 +129,9 @@ function nearbyFood(){
 function updateFood(){
  for(const f of nearbyFood()){
   if(Math.hypot(f.x-bird.x,f.z-bird.z)<2.3&&Math.abs(f.y-bird.y)<2.6){
-   eaten.set(f.id,elapsed);tank=1;emptyTank=false;points+=5;foodEaten++;
-   announce('MUMS! Full tank +5');tone(520,880,.12);tone(880,1320,.12,'sine',.05,.1);
+   eaten.set(f.id,elapsed);tank=1;emptyTank=false;foodEaten++;
+   feedLine('MUMS – FULL TANK',5);addPoints(5);popups.push({x:f.x,y:f.y+1.2,z:f.z,text:'+5',t:elapsed});
+   tone(520,880,.12);tone(880,1320,.12,'sine',.05,.1);
   }
  }
 }
@@ -137,28 +139,67 @@ function updateFood(){
 function hurt(text,surface){
  if(shield>0||state!=='play')return;
  if(--feathers>0){
-  shield=1.5;bird.vy-=7;bird.speed=Math.max(10,bird.speed*.7);combo=0;comboTime=0;
-  announce(text+' −1 fjäder');tone(260,90,.25,'sawtooth',.06);
+  shield=1.5;bird.vy-=7;bird.speed=Math.max(10,bird.speed*.7);combo=0;comboTime=0;shake=1;
+  banner(text,feathers===1?'Sista fjädern – en smäll till och du störtar':feathers+' fjädrar kvar','hurt',1.9);tone(260,90,.25,'sawtooth',.06);
   const fl=$('flash');fl.classList.remove('on');void fl.offsetWidth;fl.classList.add('on');return;
  }
  startCrash(surface);
 }
-// From four stars a hawk hunts anything that flies above the rooftops. Dive to street level to shake it off.
+// From four stars a hawk circles overhead and attacks out of the sun. Its shadow is the warning:
+// it circles the spot you are aiming at, slides in over it, and then the hawk stoops.
+// A hard turn, a dive to street level or a building in between makes it miss.
 function updateHawk(dt){
  if(wanted<4){hawk=null;return;}
+ const L=sky.dir,b=bird,fierce=wanted>=5;
  if(!hawk){
-  hawk={x:bird.x-Math.sin(bird.angle)*80,y:bird.y+30,z:bird.z-Math.cos(bird.angle)*80,angle:bird.angle,rest:4,flap:0};
-  announce('HÖKEN KOMMER!');messageTime=1.8;tone(1500,800,.5,'sawtooth',.05);
+  hawk={x:b.x+L[0]*120,y:b.y+80,z:b.z+L[2]*120,vx:0,vy:0,vz:1,mode:'circle',t:fierce?5:7,orbit:0,flap:0,miss:99,tuck:0,dread:0,beat:0,size:2.3,bank:0,yaw:0};
+  banner('HÖKEN ÄR HÄR','Håll koll på skuggan – när den glider in över ditt sikte slår höken till','alert',4.2);screech();
  }
- const h=hawk;h.rest-=dt;h.hunting=h.rest<=0&&bird.y>15;h.flap+=dt*(h.hunting?10:5);
- let tx=bird.x,ty=bird.y+.3,tz=bird.z;
- if(!h.hunting){const a=elapsed*.45;tx+=Math.cos(a)*28;tz+=Math.sin(a)*28;ty=Math.max(50,bird.y+24);}
- if(Math.hypot(tx-h.x,tz-h.z)>150){h.x=tx-Math.sin(bird.angle)*110;h.z=tz-Math.cos(bird.angle)*110;}
- const turn=wrap(Math.atan2(tx-h.x,tz-h.z)-h.angle+Math.PI,tau)-Math.PI;
- h.bank=clamp(turn*2,-1,1);h.angle+=clamp(turn,-dt*1.2,dt*1.2);
- const speed=h.hunting?19+2.5*(wanted-4):17;
- h.x+=Math.sin(h.angle)*speed*dt;h.z+=Math.cos(h.angle)*speed*dt;h.y+=clamp(ty-h.y,-dt*15,dt*9);
- if(h.hunting&&Math.hypot(h.x-bird.x,h.y-bird.y,h.z-bird.z)<1.6&&shield<=0){
-  h.rest=5;hurt('HÖKEN!',{n:[0,1,0],depth:0,cause:'Höken tog dig.'});
+ const h=hawk,ox=h.x,oy=h.y,oz=h.z,ease=rate=>1-Math.exp(-dt*rate);
+ const steer=(tx,ty,tz,rate)=>{ // turn the velocity towards a direction by at most `rate` radians per second
+  const speed=Math.hypot(h.vx,h.vy,h.vz)||1,ux=h.vx/speed,uy=h.vy/speed,uz=h.vz/speed;
+  const cos=clamp(ux*tx+uy*ty+uz*tz,-1,1),f=Math.min(1,rate*dt/Math.max(1e-4,Math.acos(cos)));
+  const nx=mix(ux,tx,f),ny=mix(uy,ty,f),nz=mix(uz,tz,f),l=Math.hypot(nx,ny,nz)||1;
+  h.vx=nx/l*speed;h.vy=ny/l*speed;h.vz=nz/l*speed;return cos;
+ };
+ const leave=()=>{h.mode='climb';h.t=2.4;};
+ h.t-=dt;
+ if(h.mode==='circle'||h.mode==='lock'){
+  const lock=h.mode==='lock',p=payload(),aim=at(p,Math.max(0,flightTime(p,0)));
+  const k=lock?clamp(h.t/1.6,0,1):1,r=(15+4*Math.sin(h.orbit*.37))*k*k;
+  h.orbit+=dt*(lock?1.7:.75);
+  // Stand between the sun and the ground point where the shadow should fall.
+  const gx=aim[0]+Math.cos(h.orbit)*r,gz=aim[2]+Math.sin(h.orbit)*r,alt=clamp(b.y+26,40,104),s=alt/L[1],f=ease(lock?4.5:1.6);
+  h.x+=(gx+L[0]*s-h.x)*f;h.y+=(alt-h.y)*f;h.z+=(gz+L[2]*s-h.z)*f;
+  const g=ease(6);h.vx=mix(h.vx,(h.x-ox)/dt,g);h.vy=mix(h.vy,(h.y-oy)/dt,g);h.vz=mix(h.vz,(h.z-oz)/dt,g);
+  h.tuck=mix(h.tuck,0,ease(4));h.size=mix(h.size,lock?3.4:2.3,ease(2.2));h.dread=mix(h.dread,lock?1-.55*k:.14,ease(5));h.flap+=dt*3.4;
+  if(!lock&&h.t<=0&&b.y>15){h.mode='lock';h.t=1.6;screech();}
+  else if(lock&&b.y<13){h.mode='circle';h.t=3;}
+  else if(lock&&h.t<=0){
+   // Commit to an intercept point. From here it can only bend its line a little.
+   const speed=fierce?50:44,T=Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z)/speed,v=forwardSpeed();
+   const tx=b.x+Math.sin(b.angle)*v*T-h.x,ty=b.y+b.vy*T*.5-h.y,tz=b.z+Math.cos(b.angle)*v*T-h.z,l=Math.hypot(tx,ty,tz)||1;
+   h.vx=tx/l*speed;h.vy=ty/l*speed;h.vz=tz/l*speed;h.mode='stoop';h.t=4.5;h.miss=99;whoosh();
+  }
+ }else if(h.mode==='stoop'){
+  const speed=Math.hypot(h.vx,h.vy,h.vz),d=Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z),T=d/speed,v=forwardSpeed();
+  const tx=b.x+Math.sin(b.angle)*v*T-h.x,ty=b.y+b.vy*T*.5-h.y,tz=b.z+Math.cos(b.angle)*v*T-h.z,l=Math.hypot(tx,ty,tz)||1;
+  // In the last half second it is committed: a bird that is turning hard when it arrives slips past.
+  const cos=steer(tx/l,ty/l,tz/l,T<(fierce?.4:.55)?0:fierce?.3:.22);
+  h.x+=h.vx*dt;h.y+=h.vy*dt;h.z+=h.vz*dt;h.tuck=mix(h.tuck,1,ease(6));h.dread=1;h.size=mix(h.size,2.6,ease(3));h.miss=Math.min(h.miss,d);
+  if(d<1.9&&shield<=0){hurt('HÖKEN SLOG TILL',{n:[h.vx/speed,h.vy/speed,h.vz/speed],depth:0,cause:'Höken tog dig.'});leave();}
+  else if((cos<0&&d>3)||h.y<14||h.t<=0||solid(h.x,h.y,h.z)){
+   if(h.miss<9&&state==='play'){addPoints(30);feedLine('HÖKEN MISSADE',30);popups.push({x:b.x,y:b.y+1.2,z:b.z,text:'+30',t:elapsed,gold:true});whoosh();}
+   leave();
+  }
+ }else{ // climb away, then start circling again
+  const flat=Math.hypot(h.vx,h.vz)||1;steer(h.vx/flat*.72,.69,h.vz/flat*.72,2.6);
+  const speed=Math.hypot(h.vx,h.vy,h.vz),slow=Math.max(24,speed*Math.exp(-dt*1.3))/speed;
+  h.vx*=slow;h.vy*=slow;h.vz*=slow;h.x+=h.vx*dt;h.y+=h.vy*dt;h.z+=h.vz*dt;
+  h.tuck=mix(h.tuck,0,ease(3));h.dread=mix(h.dread,0,ease(2));h.size=mix(h.size,2.3,ease(2));h.flap+=dt*8;
+  if(h.t<=0){h.mode='circle';h.t=fierce?4:6;}
  }
+ const yaw=Math.atan2(h.vx,h.vz),turn=wrap(yaw-h.yaw+Math.PI,tau)-Math.PI;
+ h.bank=mix(h.bank,clamp(turn/dt*.5,-1,1),ease(4));h.yaw=yaw;
+ h.beat-=dt;if(h.dread>.3&&h.beat<=0){heartbeat(h.dread);h.beat=mix(1,.36,h.dread);}
 }

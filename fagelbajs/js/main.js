@@ -3,7 +3,7 @@
 function syncPitch(){
  const short=reversePitch?'↑ stiger':'↓ stiger';
  $('pitch-guide').textContent=reversePitch?'↑/W stig · ↓/S sjunk':'↓/S stig · ↑/W sjunk';
- for(const id of ['invert','invert-menu']){
+ for(const id of ['invert-menu']){
   const button=$(id);
   button.textContent='Byt höjdroder · '+short;
   button.setAttribute('aria-pressed',String(reversePitch));
@@ -50,7 +50,7 @@ for(const [id,code] of [['t-fire','Space'],['t-dive','ShiftLeft']]){
 let flights=0;try{flights=+localStorage.getItem('fagelbajs.flights')||0;}catch{}
 const tips=[
  [1,7,'A/D eller ←/→ svänger · S och W ändrar höjden','Dra spaken åt sidan för att svänga, upp och ner för höjden'],
- [7,13,'Håll Space för att bajsa – ringen visar var det landar','Håll BAJSA – ringen visar var det landar'],
+ [7,13,'Håll Space för att bajsa – ringen visar träffytan, och den växer med höjden','Håll BAJSA – ringen visar träffytan, och den växer med höjden'],
  [13,20,'Shift = störtdyk. Träffar i dyk och lågflyg ger dubbla poäng','Håll DYK för störtdyk. Träffar i dyk och lågflyg ger dubbla poäng'],
  [20,28,'Tanken tar slut! Sno mat vid de gula pilarna på torg och i parker','Tanken tar slut! Sno mat vid de gula pilarna på torg och i parker']
 ];
@@ -65,8 +65,9 @@ function fit(){
 }
 onresize=fit;fit();
 reset();gather();traffic();let prev=0;
+if(best)$('record').textContent='Ditt rekord: '+number(best)+' poäng · '+rankOf(best);
 function frame(now){
- const dt=Math.min(.05,(now-prev)/1000);prev=now;
+ const real=Math.min(.05,(now-prev)/1000),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
  if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu')wingPhase+=dt*3;

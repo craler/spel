@@ -12,7 +12,6 @@ function rgb(str){
   c=[0,8,4].map(n=>{const k=(n+h/30)%12;return (l/100-a*Math.max(-1,Math.min(k-3,9-k,1)))**2.2;});}
  colorCache.set(str,c);return c;
 }
-const SUN=(()=>{const v=[-.52,.6,.61],l=Math.hypot(...v);return v.map(n=>n/l);})();
 const LIGHT=`
 uniform vec3 uSun,uSunCol,uSkyCol,uGroundCol,uFogCol,uEye;uniform float uFogD;
 uniform highp sampler2DShadow uShadow;uniform mat4 uLight;
@@ -23,7 +22,7 @@ float shadow(vec3 wp,vec3 n){
  vec4 lp=uLight*vec4(wp+n*.12,1.);vec3 c=lp.xyz*.5+.5;
  if(c.x<0.||c.x>1.||c.y<0.||c.y>1.||c.z>1.)return 1.;
  float s=0.,t=1./2048.;
- for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++)s+=texture(uShadow,vec3(c.xy+vec2(x,y)*t,c.z-.0009));
+ for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++)s+=texture(uShadow,vec3(c.xy+vec2(x,y)*t,c.z-.0006));
  return s/9.;
 }
 vec3 fogged(vec3 c,vec3 wp){float d=length((uEye-wp)*vec3(1.,.35,1.))*uFogD; // haze thickens with ground distance, not altitude
@@ -41,7 +40,7 @@ const VS=`#version 300 es
 layout(location=0) in vec3 aPos;layout(location=1) in vec3 aNor;layout(location=2) in vec4 aCol;layout(location=3) in vec2 aAux;
 layout(location=4) in vec4 iPos;layout(location=5) in vec3 iScale;layout(location=6) in vec4 iCol;layout(location=7) in vec4 iAnim;
 uniform mat4 uVP;
-out vec3 vW,vN,vL,vS;out vec4 vC;out float vSeed;
+out vec3 vW,vN,vL,vS;out vec4 vC;flat out float vSeed;
 vec3 rotX(vec3 p,float a){float s=sin(a),c=cos(a);return vec3(p.x,p.y*c-p.z*s,p.y*s+p.z*c);}
 void main(){
  vec3 p=aPos*iScale,n=aNor;float part=aAux.x;
@@ -60,7 +59,7 @@ void main(){
 }`;
 const FS=`#version 300 es
 precision highp float;
-in vec3 vW,vN,vL,vS;in vec4 vC;in float vSeed;out vec4 o;
+in vec3 vW,vN,vL,vS;in vec4 vC;flat in float vSeed;out vec4 o;uniform float uGlow;
 ${LIGHT}
 vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec3 em){
  spec=0.;em=vec3(0);
@@ -80,7 +79,7 @@ vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec
   vec2 d=min(f-lo,hi-f)*vec2(bay,3.1);
   if(min(d.x,d.y)<.08||(!shop&&abs(f.x-.5)*bay<.035))return vec3(.62,.6,.56);
   float r=h21(cell+seed*53.);spec=1.;
-  if(r>.72)em=vec3(1.,.66,.3)*(r-.5)*(shop?3.:2.)*(.7+.3*vnoise(vec2(u,y)*2.));
+  if(r>.72)em=vec3(1.,.66,.3)*(r-.5)*(shop?3.:2.)*(.7+.3*vnoise(vec2(u,y)*2.))*uGlow;
   return mix(vec3(.012,.018,.03),uSkyCol*.22,.5+.5*h21(cell.yx+seed));
  }
  return shop?wall*.72:wall;
@@ -93,7 +92,7 @@ void main(){
  o=vec4(tone(fogged(lit(alb,n,vW,spec)+em,vW)),1.);
 }`;
 const DEPTH_FS=`#version 300 es
-precision highp float;in vec3 vW,vN,vL,vS;in vec4 vC;in float vSeed;void main(){}`;
+precision highp float;in vec3 vW,vN,vL,vS;in vec4 vC;flat in float vSeed;void main(){}`;
 const GROUND_VS=`#version 300 es
 layout(location=0) in vec2 aPos;uniform mat4 uVP;uniform vec3 uCentre;out vec3 vW;
 void main(){vW=vec3(aPos.x*900.+uCentre.x,0.,aPos.y*900.+uCentre.z);gl_Position=uVP*vec4(vW,1.);}`;
@@ -228,18 +227,23 @@ function attribs(list,stride,divisor){
  for(const [loc,size,offset] of list){gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,stride*4,offset*4);gl.vertexAttribDivisor(loc,divisor);}
 }
 // Triangles rebuilt every frame (the bird, the hawk, the spray ribbon). Instance attributes stay at their constants.
-const dyn={data:new Float32Array(STRIDE*3*4096),n:0,vao:gl.createVertexArray(),vbo:gl.createBuffer(),
- tri(a,b,c,col){
-  if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
-  const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
-  let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
-  for(const p of [a,b,c]){this.data.set([p[0],p[1],p[2],nx,ny,nz,col[0],col[1],col[2],0,0,0],this.n++*STRIDE);}
- },
- fan(pts,col){for(let i=2;i<pts.length;i++)this.tri(pts[0],pts[i-1],pts[i],col);},
- upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.data.subarray(0,this.n*STRIDE),gl.DYNAMIC_DRAW);},
- draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.vertexAttrib4f(4,0,0,0,0);gl.vertexAttrib3f(5,1,1,1);gl.vertexAttrib4f(6,1,1,1,0);gl.vertexAttrib4f(7,0,0,0,0);gl.drawArrays(gl.TRIANGLES,0,this.n);}
-};
-gl.bindVertexArray(dyn.vao);gl.bindBuffer(gl.ARRAY_BUFFER,dyn.vbo);attribs([[0,3,0],[1,3,3],[2,4,6],[3,2,10]],STRIDE,0);gl.bindVertexArray(null);
+function triBatch(){
+ const b={data:new Float32Array(STRIDE*3*2048),n:0,vao:gl.createVertexArray(),vbo:gl.createBuffer(),
+  tri(a,b,c,col){
+   if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
+   const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+   let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
+   for(const p of [a,b,c]){this.data.set([p[0],p[1],p[2],nx,ny,nz,col[0],col[1],col[2],0,0,0],this.n++*STRIDE);}
+  },
+  fan(pts,col){for(let i=2;i<pts.length;i++)this.tri(pts[0],pts[i-1],pts[i],col);},
+  upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.data.subarray(0,this.n*STRIDE),gl.DYNAMIC_DRAW);},
+  draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.vertexAttrib4f(4,0,0,0,0);gl.vertexAttrib3f(5,1,1,1);gl.vertexAttrib4f(6,1,1,1,0);gl.vertexAttrib4f(7,0,0,0,0);gl.drawArrays(gl.TRIANGLES,0,this.n);}
+ };
+ gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.vbo);attribs([[0,3,0],[1,3,3],[2,4,6],[3,2,10]],STRIDE,0);gl.bindVertexArray(null);
+ return b;
+}
+// dyn is drawn normally; omen only casts a shadow (the hawk's oversized silhouette).
+const dyn=triBatch(), omen=triBatch();
 // Fullscreen / ground quad.
 const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,1,1,-1,-1,1,1,-1,1]),gl.STATIC_DRAW);attribs([[0,2,0]],2,0);gl.bindVertexArray(null);
@@ -253,10 +257,19 @@ const cityTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,cityTex);
 gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,CITY,CITY,0,gl.RED,gl.UNSIGNED_BYTE,cityType);
 for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.NEAREST],[gl.TEXTURE_MAG_FILTER,gl.NEAREST],[gl.TEXTURE_WRAP_S,gl.REPEAT],[gl.TEXTURE_WRAP_T,gl.REPEAT]])gl.texParameteri(gl.TEXTURE_2D,k,v);
 gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
-const sky={sun:[3.1,2.25,1.45],sky:[.3,.42,.66],ground:[.2,.17,.14],fog:[.78,.62,.48],zenith:[.14,.28,.62],fogD:.0058};
+// Times of day. Each flight gets the next one. The sun never drops below 30 degrees, so shadows stay readable.
+const skies=[
+ {name:'kvällssol',dir:[-.52,.6,.61],sun:[3.1,2.25,1.45],sky:[.3,.42,.66],ground:[.2,.17,.14],fog:[.78,.62,.48],zenith:[.14,.28,.62],fogD:.0058,glow:1},
+ {name:'middag',dir:[.35,.86,.36],sun:[2.9,2.7,2.4],sky:[.4,.52,.78],ground:[.22,.2,.17],fog:[.62,.71,.82],zenith:[.1,.27,.68],fogD:.0044,glow:.2},
+ {name:'morgon',dir:[.66,.52,-.54],sun:[2.5,2.15,1.9],sky:[.36,.44,.6],ground:[.17,.17,.18],fog:[.82,.77,.74],zenith:[.2,.36,.66],fogD:.0072,glow:.55},
+ {name:'skymning',dir:[-.7,.5,-.5],sun:[2.6,1.45,.9],sky:[.22,.26,.5],ground:[.13,.1,.12],fog:[.7,.44,.42],zenith:[.09,.13,.38],fogD:.006,glow:1.7},
+];
+for(const s of skies){const l=Math.hypot(...s.dir);s.dir=s.dir.map(v=>v/l);}
+let sky=skies[0];
+function setSky(n){sky=skies[n%skies.length];}
 const lightM=new Float32Array(16), viewM=new Float32Array(16);
 function lightMatrix(cx,cy,cz){
- const R=125,D=170,L=SUN,rl=Math.hypot(L[2],L[0]),r=[L[2]/rl,0,-L[0]/rl];
+ const R=125,D=260,L=sky.dir,rl=Math.hypot(L[2],L[0]),r=[L[2]/rl,0,-L[0]/rl];
  const u=[L[1]*r[2]-L[2]*r[1],L[2]*r[0]-L[0]*r[2],L[0]*r[1]-L[1]*r[0]];
  const texel=2*R/SHADOW,snap=(v)=>Math.round((cx*v[0]+cy*v[1]+cz*v[2])/texel)*texel;
  const sr=snap(r),su=snap(u),sl=cx*L[0]+cy*L[1]+cz*L[2];
@@ -270,7 +283,7 @@ function viewMatrix(){
 }
 function lightUniforms(prog){
  const u=prog.u;gl.useProgram(prog.p);
- gl.uniform3fv(u.uSun,SUN);gl.uniform3fv(u.uSunCol,sky.sun);gl.uniform3fv(u.uSkyCol,sky.sky);gl.uniform3fv(u.uGroundCol,sky.ground);
+ gl.uniform3fv(u.uSun,sky.dir);if(u.uGlow)gl.uniform1f(u.uGlow,sky.glow);gl.uniform3fv(u.uSunCol,sky.sun);gl.uniform3fv(u.uSkyCol,sky.sky);gl.uniform3fv(u.uGroundCol,sky.ground);
  gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD);
  if(u.uVP)gl.uniformMatrix4fv(u.uVP,false,viewM);
  if(u.uLight)gl.uniformMatrix4fv(u.uLight,false,lightM);
@@ -286,18 +299,22 @@ function drawFrame(casters,scene,decals){
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,glCanvas.width,glCanvas.height);gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,shadowTex);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,cityTex);
  // Sky
- gl.depthMask(false);lightUniforms(progSky);
+ gl.depthMask(false);gl.disable(gl.DEPTH_TEST);lightUniforms(progSky);
  const {s,c,cp,sp}=camera,u=progSky.u;
  gl.uniform3f(u.uR,c,0,-s);gl.uniform3f(u.uU,sp*s,cp,sp*c);gl.uniform3f(u.uF,cp*s,-sp,cp*c);gl.uniform3fv(u.uZenith,sky.zenith);
  gl.uniform2f(u.uK,width/(2*scale),height/(2*scale));gl.uniform1f(u.uTime,performance.now()/1000);
- gl.bindVertexArray(quadVao);gl.drawArrays(gl.TRIANGLES,0,6);gl.depthMask(true);
+ gl.bindVertexArray(quadVao);gl.drawArrays(gl.TRIANGLES,0,6);gl.depthMask(true);gl.enable(gl.DEPTH_TEST);
  // Ground
  lightUniforms(progGround);gl.uniform3f(progGround.u.uCentre,camera.x,0,camera.z);gl.uniform1i(progGround.u.uCity,1);
  gl.drawArrays(gl.TRIANGLES,0,6);
  // Meshes, then flat decals pulled slightly towards the camera.
  lightUniforms(progMesh);
- for(const m of scene)m.draw();
- gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);
+ for(const m of scene){
+  // Buildings hide their inside faces, so a camera that ends up inside one sees straight through it.
+  if(m.cull){gl.enable(gl.CULL_FACE);gl.cullFace(gl.FRONT);m.draw();gl.disable(gl.CULL_FACE);}else m.draw();
+ }
+ // Flat decals: pulled towards the camera, and not written to the depth buffer so they can overlap in order.
+ gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);gl.depthMask(false);
  for(const m of decals)m.draw();
- gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindVertexArray(null);
+ gl.depthMask(true);gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindVertexArray(null);
 }

@@ -33,18 +33,18 @@ function block(i,j){
   for(let n=0;n<4;n++){const a=n*tau/4+.6;b.benches.push([x+21+Math.cos(a)*7.4,z+21+Math.sin(a)*7.4,a+Math.PI/2]);}
   // Picnics on the lawn: the food sits low, so you have to skim the grass.
   for(let n=0;n<3;n++){const a=n*tau/3+R(40)*tau,fx=21+Math.cos(a)*3.8,fz=21+Math.sin(a)*3.8;food(fx,.75,fz);
-   b.folk.push({x:x+fx+1.2,z:z+fz+.5,c:colors[n+1],base:15,label:'PICKNICK!'});}
+   b.folk.push({x:x+fx+1.2,z:z+fz+.5,c:colors[n+1],base:15,label:'PICKNICK',shout:'MIN MACKA!'});}
  }else{
   b.statue=[x+21,z+21];b.blds.push([x+20.1,z+20.1,1.8,1.8,5.6,-1,0]); // the plinth is solid, drawn as a statue
   const spots=[[12,12],[30,12],[12,30],[30,30],[21,10.5],[21,31.5]];
   for(const [n,[sx,sz]] of spots.entries()){
    if(n<4){b.tables.push([x+sx,z+sz,Math.floor(R(60+n)*parasolPaint.length)]);food(sx,1.15,sz);
-    b.folk.push({x:x+sx+1.15,z:z+sz+.3,c:colors[(n+2)%colors.length],base:15,label:'FIKAPAUS!'},{x:x+sx-1.1,z:z+sz-.4,c:colors[(n+5)%colors.length],base:15,label:'FIKAPAUS!'});}
+    b.folk.push({x:x+sx+1.15,z:z+sz+.3,c:colors[(n+2)%colors.length],base:15,label:'FIKAPAUS',shout:'MIN LATTE!'},{x:x+sx-1.1,z:z+sz-.4,c:colors[(n+5)%colors.length],base:15,label:'FIKAPAUS',shout:'MIN BULLE!'});}
    else{b.stalls.push([x+sx,z+sz,Math.floor(R(66+n)*parasolPaint.length)]);food(sx,1.35,sz+(n===4?1.3:-1.3));}
   }
   if(R(61)<.5||(i===0&&j===1)){ // a wedding party in front of the statue
-   b.folk.push({x:x+20.3,z:z+16.2,c:'#f4f1ea',base:60,label:'BRÖLLOPSKAOS!',bride:true},{x:x+21.6,z:z+16.2,c:'#1d2026',base:60,label:'BRÖLLOPSKAOS!'});
-   for(let n=0;n<5;n++)b.folk.push({x:x+18.4+n*1.3,z:z+13.6-.5*(n%2),c:colors[(n*3)%colors.length],base:15,label:'GÄSTEN!'});
+   b.folk.push({x:x+20.3,z:z+16.2,c:'#f4f1ea',base:60,label:'BRÖLLOPSKAOS',shout:'MIN KLÄNNING!',bride:true},{x:x+21.6,z:z+16.2,c:'#1d2026',base:60,label:'BRÖLLOPSKAOS',shout:'MIN KOSTYM!'});
+   for(let n=0;n<5;n++)b.folk.push({x:x+18.4+n*1.3,z:z+13.6-.5*(n%2),c:colors[(n*3)%colors.length],base:15,label:'BRÖLLOPSGÄST'});
   }
  }
  for(const [lx,lz] of [[5.5,5.5],[36.5,5.5],[5.5,36.5],[36.5,36.5]])b.lamps.push([x+lx,z+lz]);
