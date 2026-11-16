@@ -13,7 +13,7 @@ function rgb(str){
  colorCache.set(str,c);return c;
 }
 const LIGHT=`
-uniform vec3 uSun,uSunCol,uSkyCol,uGroundCol,uFogCol,uEye;uniform float uFogD;
+uniform vec3 uSun,uSunCol,uSkyCol,uGroundCol,uFogCol,uEye;uniform float uFogD,uTime;
 uniform highp sampler2DShadow uShadow;uniform mat4 uLight;
 float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
@@ -28,13 +28,15 @@ float shadow(vec3 wp,vec3 n){
 vec3 fogged(vec3 c,vec3 wp){float d=length((uEye-wp)*vec3(1.,.35,1.))*uFogD; // haze thickens with ground distance, not altitude
  return mix(c,uFogCol,1.-exp(-d*d));}
 vec3 lit(vec3 alb,vec3 n,vec3 wp,float spec){
- float sh=shadow(wp,n),d=max(dot(n,uSun),0.)*sh;
+ float sh=shadow(wp,n);
+ sh*=mix(1.,.5,smoothstep(.52,.74,vnoise(wp.xz*.011+uTime*.012))); // drifting cloud shadows
+ float d=max(dot(n,uSun),0.)*sh;
  vec3 c=alb*(mix(uGroundCol,uSkyCol,n.y*.5+.5)+uSunCol*d);
  vec3 h=normalize(normalize(uEye-wp)+uSun);
- c+=uSunCol*spec*pow(max(dot(n,h),0.),60.)*sh;
+ c+=uSunCol*spec*pow(max(dot(n,h),1e-4),60.)*sh;
  return c;
 }
-vec3 tone(vec3 c){c=1.-exp(-c*1.25);return pow(c,vec3(1./2.2));}
+vec3 tone(vec3 c){c=1.-exp(-max(c,0.)*1.25);return pow(max(c,vec3(1e-5)),vec3(1./2.2));} // pow(0,y) is undefined on some GPUs and showed up as black
 `;
 const VS=`#version 300 es
 layout(location=0) in vec3 aPos;layout(location=1) in vec3 aNor;layout(location=2) in vec4 aCol;layout(location=3) in vec2 aAux;
@@ -99,7 +101,7 @@ const DEPTH_FS=`#version 300 es
 precision highp float;in vec3 vW,vN,vL,vS;in vec4 vC;flat in float vSeed;void main(){}`;
 const GROUND_VS=`#version 300 es
 layout(location=0) in vec2 aPos;uniform mat4 uVP;uniform vec3 uCentre;out vec3 vW;
-void main(){vW=vec3(aPos.x*900.+uCentre.x,0.,aPos.y*900.+uCentre.z);gl_Position=uVP*vec4(vW,1.);}`;
+void main(){vW=vec3(aPos.x*1700.+uCentre.x,0.,aPos.y*1700.+uCentre.z);gl_Position=uVP*vec4(vW,1.);}`;
 const GROUND_FS=`#version 300 es
 precision highp float;
 in vec3 vW;out vec4 o;uniform sampler2D uCity;
@@ -143,16 +145,17 @@ const SKY_VS=`#version 300 es
 layout(location=0) in vec2 aPos;out vec2 vP;void main(){vP=aPos;gl_Position=vec4(aPos,1.,1.);}`;
 const SKY_FS=`#version 300 es
 precision highp float;
-in vec2 vP;out vec4 o;uniform vec3 uR,uU,uF,uZenith;uniform vec2 uK;uniform float uTime;
+in vec2 vP;out vec4 o;uniform vec3 uR,uU,uF,uZenith;uniform vec2 uK;
 ${LIGHT}
 float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<4;i++){s+=a*vnoise(p);p=p*2.03+17.;a*=.5;}return s;}
 void main(){
  vec3 d=normalize(uF+uR*vP.x*uK.x+uU*(vP.y-.14)*uK.y);
- float t=clamp(d.y,0.,1.),s=max(dot(d,uSun),0.);
+ float t=clamp(d.y,1e-4,1.),s=max(dot(d,uSun),1e-4);
  vec3 c=mix(uFogCol,uZenith,pow(t,.55));
  c+=uSunCol*(.1*pow(s,6.)+.25*pow(s,60.)+6.*smoothstep(.9992,.9997,s));
  if(d.y>.015){
-  float n=fbm(d.xz/(d.y+.12)*1.25+uTime*.006),cl=smoothstep(.47,.74,n)*smoothstep(.015,.16,d.y);
+  float n=fbm(d.xz/(d.y+.12)*1.25+uTime*.006),cl=smoothstep(.4,.68,n)*smoothstep(.015,.16,d.y);
+  cl=max(cl,.65*smoothstep(.5,.72,fbm(d.xz/(d.y+.2)*3.1-uTime*.004+9.))*smoothstep(.04,.3,d.y)); // a higher, finer layer
   c=mix(c,mix(uFogCol*1.15,vec3(1.5,1.3,1.12),.35+.65*pow(s,3.))*(1.1-.45*smoothstep(.6,.85,n)),cl*.9);
  }
  o=vec4(tone(c),1.);
@@ -281,7 +284,7 @@ function lightMatrix(cx,cy,cz){
 }
 // View-projection that matches the 2D helpers cameraPoint() and screen() exactly.
 function viewMatrix(){
- const {x,y,z,s,c,cp,sp}=camera,kx=2*scale/width,ky=2*scale/height,near=.4,far=1200,A=(far+near)/(far-near),B=-2*far*near/(far-near);
+ const {x,y,z,s,c,cp,sp}=camera,kx=2*scale/width,ky=2*scale/height,near=.4,far=2600,A=(far+near)/(far-near),B=-2*far*near/(far-near);
  const f=[cp*s,-sp,cp*c],rows=[[kx*c,0,-kx*s,0],[ky*sp*s+.14*f[0],ky*cp+.14*f[1],ky*sp*c+.14*f[2],0],[A*f[0],A*f[1],A*f[2],B],[f[0],f[1],f[2],0]];
  for(let r=0;r<4;r++){const [a,b,d,k]=rows[r];viewM[r]=a;viewM[4+r]=b;viewM[8+r]=d;viewM[12+r]=k-(a*x+b*y+d*z);}
 }
@@ -292,6 +295,7 @@ function lightUniforms(prog){
  if(u.uVP)gl.uniformMatrix4fv(u.uVP,false,viewM);
  if(u.uLight)gl.uniformMatrix4fv(u.uLight,false,lightM);
  if(u.uShadow)gl.uniform1i(u.uShadow,0);
+ if(u.uTime)gl.uniform1f(u.uTime,performance.now()/1000);
 }
 // Draws one frame. casters and scene are lists of Mesh (or dyn) objects that have been uploaded.
 function drawFrame(casters,scene,decals){

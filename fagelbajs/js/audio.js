@@ -69,8 +69,11 @@ function sprayVoice(on){
  const n=sprayNodes,t=sound.currentTime;
  if(on&&!n.on){tone(360,95,.1,'sine',.17);burst({type:'bandpass',from:950,to:280,q:2.2,gain:.22,dur:.1});} // the opening "plopp"
  n.on=on;
- n.og.gain.setTargetAtTime(on?.15:0,t,on?.012:.045);n.ng.gain.setTargetAtTime(on?.08:0,t,on?.02:.06);
+ // The level jumps about from frame to frame, which is what makes it splutter instead of drone.
+ n.og.gain.setTargetAtTime(on?.05+.17*Math.random():0,t,on?.012:.045);n.ng.gain.setTargetAtTime(on?.05+.07*Math.random():0,t,on?.02:.06);
  if(on){
+  if(Math.random()<.35)tone(260+520*Math.random(),110,.035+.03*Math.random(),'sine',.05); // bubbles
+  if(Math.random()<.1)burst({type:'bandpass',from:500,to:1500,q:4,gain:.12,dur:.06});     // squelches
   n.osc.frequency.setTargetAtTime(50+42*Math.random()+14*Math.sin(t*31),t,.018);
   n.lp.frequency.setTargetAtTime(300+640*Math.random(),t,.03);
   n.bp.frequency.setTargetAtTime(900+1900*Math.random(),t,.035);
@@ -127,9 +130,30 @@ function yelp(){
  g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(.2,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.26);
  osc.connect(bp);bp.connect(g);g.connect(master);osc.start(t);osc.stop(t+.3);
 }
+// A car alarm cycles through its patterns: rising whoops, a two-tone, then fast falling chirps.
 function carAlarm(distance){
- const vol=.06*clamp(1.2-distance/60,.15,1);
- for(let i=0;i<10;i++)tone(i%2?740:985,i%2?741:986,.17,'square',vol,i*.22);
+ if(!master||muted)return;
+ const vol=.08*clamp(1.2-distance/60,.15,1),osc=sound.createOscillator(),lp=sound.createBiquadFilter(),g=sound.createGain(),f=osc.frequency;
+ let at=sound.currentTime;const t0=at;
+ osc.type='square';lp.type='lowpass';lp.frequency.value=2800;
+ for(let i=0;i<8;i++){f.setValueAtTime(650,at);f.linearRampToValueAtTime(1500,at+.23);at+=.25;}
+ for(let i=0;i<8;i++){f.setValueAtTime(i%2?820:1240,at);at+=.19;}
+ for(let i=0;i<14;i++){f.setValueAtTime(1550,at);f.linearRampToValueAtTime(720,at+.09);at+=.1;}
+ g.gain.setValueAtTime(vol,t0);g.gain.setValueAtTime(vol,at-.3);g.gain.linearRampToValueAtTime(0,at);
+ osc.connect(lp);lp.connect(g);g.connect(master);osc.start(t0);osc.stop(at);
+}
+// The dive: a thin whistle that climbs and swells with speed while the wings are tucked.
+let whistleNodes=null;
+function whistle(level){
+ if(!master)return;
+ if(!whistleNodes){
+  const a=sound.createOscillator(),b=sound.createOscillator(),g=sound.createGain(),bg=sound.createGain();
+  a.type='sine';b.type='triangle';g.gain.value=0;bg.gain.value=.25;a.connect(g);b.connect(bg);bg.connect(g);g.connect(master);a.start();b.start();
+  whistleNodes={a,b,g};
+ }
+ const t=sound.currentTime,f=480+1700*level;
+ whistleNodes.a.frequency.setTargetAtTime(f,t,.07);whistleNodes.b.frequency.setTargetAtTime(f*1.503,t,.07);
+ whistleNodes.g.gain.setTargetAtTime(.13*level*level,t,.06);
 }
 // The city itself: a low hum that fades with altitude and the odd car horn somewhere below.
 function ambience(playing,dt){

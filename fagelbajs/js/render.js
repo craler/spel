@@ -24,9 +24,10 @@ function setCamera(dt){
  rig.yaw=a;rig.pitch=mix(rig.pitch,desiredPitch,blend);rig.rise=mix(rig.rise,rise,blend);rig.ahead=mix(rig.ahead,focusAhead,blend);
  camera={x:bird.x+s*(rig.ahead-back)+c*shoulder,y:bird.y+rig.rise,z:bird.z+c*(rig.ahead-back)-s*shoulder,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch)};
  const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1);
- const shake=.013*rush*Math.sin(elapsed*33)+.006*rush*Math.sin(elapsed*48);
- camera.x+=c*shake;camera.z-=s*shake;camera.y+=.009*rush*Math.sin(elapsed*39);
- scale=Math.min(width*.88,height*(above?.85:.97))*(1-.085*bird.fold-.064*rush);
+ // The faster the dive, the harder the picture trembles and the wider the view.
+ const tremble=(.02+.1*rush*rush)*rush;
+ camera.x+=c*tremble*Math.sin(elapsed*33)+tremble*.5*Math.sin(elapsed*61);camera.z-=s*tremble*Math.sin(elapsed*33);camera.y+=tremble*.8*Math.sin(elapsed*47);
+ scale=Math.min(width*.88,height*(above?.85:.97))*(1-.085*bird.fold-.1*rush);
  if(shake>.01){const k=shake*.3;camera.x+=k*Math.sin(elapsed*71);camera.y+=k*.6*Math.sin(elapsed*97+1);camera.z+=k*Math.cos(elapsed*83);shake*=Math.exp(-dt*7);}
 }
 function cameraPoint([x,y,z]){
@@ -66,12 +67,22 @@ function flightPitch(){
 function renderBird(){
  const b=bird,fl=b.fold*(crash?Math.exp(-crash.age*2):1),bank=b.bank*.62+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
+ const bob=-.03*Math.sin(wingPhase)*b.effort; // the body rides up on each downstroke
  function world([x,y,z]){
-  const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
+  y+=bob;const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
   const offset=[bx*cy+bz*sy,by*cp+z*sp,-bx*sy+bz*cy];
   return [b.x+offset[0],b.y+offset[1],b.z+offset[2]];
  }
- const face=(pts,color)=>poly(pts.map(world),color,1);
+ // The head turns on the neck: into a turn, down at the target while spraying, and in small glances of its own.
+ const hy=crash?0:b.lookYaw,hp=crash?0:b.lookPitch;
+ function head([x,y,z]){
+  const w=clamp((z-.2)/.07,0,1);if(!w)return [x,y,z];
+  const a=hy*w,e=hp*w,py=y-.2,pz=z-.2,x1=x*Math.cos(a)+pz*Math.sin(a),z1=-x*Math.sin(a)+pz*Math.cos(a);
+  return [x1,py*Math.cos(e)+z1*Math.sin(e)+.2,z1*Math.cos(e)-py*Math.sin(e)+.2];
+ }
+ const face=(pts,color)=>poly(pts.map(p=>world(head(p))),color,1),plain=(pts,color)=>poly(pts.map(world),color,1);
+ // Every flight feather flutters by itself in the airstream, harder the faster the bird goes.
+ const wind=clamp(Math.hypot(forwardSpeed(),b.vy)/30,.3,1.7)*(1+2*fl),flutter=(i,rate)=>wind*Math.sin(elapsed*rate+i*2.1);
  for(const patch of plumage)face(patch.pts,patch.color);
  // Wedge bill, pale cere, and lateral amber eyes.
  for(const side of [-1,1]){
@@ -86,10 +97,10 @@ function renderBird(){
  const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl;
  for(let k=-3;k<=3;k++){
   const t=k/3,root=[t*.055,.051,-.33],tx=t*spread,tz=-.73+.09*t*t;
-  const end=[tx,.037-.029*t*t,tz],w=.042;
+  const end=[tx,.037-.029*t*t+.014*flutter(k,23+k),tz],w=.042;
   const mid=[mix(root[0],tx,.66),.049-.024*t*t,mix(root[2],tz,.66)];
-  face([root,[mid[0]-w,mid[1],mid[2]],[tx-w*.62,end[1],tz],end,[tx+w*.62,end[1],tz],[mid[0]+w,mid[1],mid[2]]],'#687695');
-  face([[mid[0]-w,mid[1]+.002,mid[2]],[mid[0]+w,mid[1]+.002,mid[2]],[tx+w*.65,end[1]+.002,tz+.02],[tx-w*.65,end[1]+.002,tz+.02]],'#424a67');
+  plain([root,[mid[0]-w,mid[1],mid[2]],[tx-w*.62,end[1],tz],end,[tx+w*.62,end[1],tz],[mid[0]+w,mid[1],mid[2]]],'#687695');
+  plain([[mid[0]-w,mid[1]+.002,mid[2]],[mid[0]+w,mid[1]+.002,mid[2]],[tx+w*.65,end[1]+.002,tz+.02],[tx-w*.65,end[1]+.002,tz+.02]],'#424a67');
  }
  // The hand lags the arm on the downstroke. Sweeping both joints aft folds the wing.
  const amplitude=.15+.93*b.effort;
@@ -106,16 +117,18 @@ function renderBird(){
     .101+upper*Math.sin(elbowAngle)+(outer-flexible)*Math.sin(tipAngle)+flexible*Math.sin(joint?.tip??tipAngle)+y,
     .095+chord+.14*Math.sin(u*Math.PI)-.27*u*u-.59*u*fl];
   }
-  const patch=(pts,color)=>face(pts.map(v=>wing(...v)),color);
+  const patch=(pts,color)=>plain(pts.map(v=>wing(...v)),color);
   // Rounded secondary feathers broaden the trailing edge near the body.
   for(let i=0;i<6;i++){
    const u=.047+i*.074;
-   patch([[u-.034,.065],[u+.064,.063],[u+.093,-.204],[u+.053,-.31],[u+.016,-.323],[u-.02,-.278]],i===3||i===5?'#485675':i%2?'#899abd':'#afbad1');
+   const f=.028*flutter(i+side,17+2.7*i);
+   patch([[u-.034,.065],[u+.064,.063],[u+.093,-.204,f*.6],[u+.053,-.31,f],[u+.016,-.323,f],[u-.02,-.278,f*.8]],i===3||i===5?'#485675':i%2?'#899abd':'#afbad1');
   }
   // Staggered primaries end in distinct pointed tips.
   for(let i=0;i<6;i++){
    const u=.35+i*.067,tip=.59+i*.091,sweep=-.275+i*.038;
-   patch([[u,.06],[u+.11,.044],[tip+.012,sweep+.043],[tip,sweep],[tip-.047,sweep-.016],[u-.035,-.105]],i%2?'#455072':'#596a8f');
+   const f=.04*flutter(i-side,21+3.3*i)+.03*beat*(i-2.5)/2.5; // tips also splay with the beat
+   patch([[u,.06],[u+.11,.044],[tip+.012,sweep+.043,f],[tip,sweep,f*1.2],[tip-.047,sweep-.016,f],[u-.035,-.105]],i%2?'#455072':'#596a8f');
   }
   patch([[0,.12],[.22,.143],[.44,.098],[.72,.031],[.85,-.019],[.60,-.106],[.32,-.159],[.08,-.165],[0,-.134]],'#aebdd9');
   patch([[.04,.116,.009],[.22,.129,.009],[.42,.086,.009],[.29,.039,.009],[.08,.048,.009]],'#c8d5e6');
@@ -485,9 +498,9 @@ function render(dt=1/60){
   const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-12)/36,0,1);
   if(rush>.15){
    ctx.save();ctx.translate(width/2,height*.43);ctx.strokeStyle='#fff';ctx.lineCap='round';const reach=Math.hypot(width,height)/2;
-   for(let i=0;i<22;i++){
-    const a=i*tau/22+hash(i,4,1),f=(elapsed*2.6+hash(i,2,5))%1,r0=reach*(.5+.45*f),r1=r0+reach*.12*rush;
-    ctx.globalAlpha=.34*rush*(1-f);ctx.lineWidth=1.5+2*hash(i,6,3);ctx.beginPath();ctx.moveTo(Math.cos(a)*r0,Math.sin(a)*r0);ctx.lineTo(Math.cos(a)*r1,Math.sin(a)*r1);ctx.stroke();
+   for(let i=0;i<36;i++){
+    const a=i*tau/36+hash(i,4,1),f=(elapsed*(2.6+2*rush)+hash(i,2,5))%1,r0=reach*(.42+.5*f),r1=r0+reach*.2*rush;
+    ctx.globalAlpha=.5*rush*(1-f);ctx.lineWidth=1.5+2*hash(i,6,3);ctx.beginPath();ctx.moveTo(Math.cos(a)*r0,Math.sin(a)*r0);ctx.lineTo(Math.cos(a)*r1,Math.sin(a)*r1);ctx.stroke();
    }
    ctx.restore();
   }
@@ -512,7 +525,7 @@ function render(dt=1/60){
  $('chip').classList.toggle('warn',stall);
  // Sound and mood that follow the frame.
  windLevel();
- if(sound){sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);}
+ if(sound){whistle(playing?bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-14)/38,0,1):0);sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);}
  const fear=playing&&hawk?hawk.dread*(.8+.2*Math.sin(elapsed*9)):0,veil=$('dread');
  if(Math.abs(fear-(+veil.style.opacity||0))>.01)veil.style.opacity=fear.toFixed(2);
 }

@@ -148,7 +148,7 @@ function reset(){
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
- bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
+ bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9,nextFlap:2,burst:0,lookYaw:0,lookPitch:0,glance:0,nextGlance:1,snare:0};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }
 // body is HTML built from the game's own strings and numbers.
 function panel(heading,body,action){$('title').textContent=heading;$('brief').innerHTML=body;$('record').textContent='';$('feats').textContent='';$('go').textContent=action;$('overlay').hidden=false;document.body.classList.add('menu');$('go').focus();}
@@ -209,7 +209,14 @@ function simulate(dt){
  const acceleration=dive?-40-b.vy*.19:(wantedVy-b.vy)*2.7;
  b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
- b.effort=mix(b.effort,dive?0:pitch>0?1:pitch<0?0:.28,1-Math.exp(-6*dt));
+ // Gliding is mostly still wings, broken now and then by a short burst of flapping. Climbing is hard work.
+ b.nextFlap-=dt;b.burst=Math.max(0,b.burst-dt);
+ if(b.nextFlap<=0){b.burst=.4+.55*Math.random();b.nextFlap=1.8+4*Math.random();}
+ const effort=dive?0:pitch>0?1:pitch<0?0:b.burst>0?.8:.1;
+ b.effort=mix(b.effort,effort,1-Math.exp(-(effort>b.effort?9:4)*dt));
+ b.nextGlance-=dt;if(b.nextGlance<=0){b.glance=Math.random()<.35?0:(Math.random()-.5)*1.3;b.nextGlance=.7+2.6*Math.random();}
+ b.lookYaw=mix(b.lookYaw,clamp(b.bank*.55+b.glance,-.9,.9),1-Math.exp(-dt*7));
+ b.lookPitch=mix(b.lookPitch,held('Space')?-.45:-.06+.1*Math.sin(elapsed*1.3),1-Math.exp(-dt*6));
  b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65+(14-b.speed)*(dive?.18:.55)-Math.max(0,b.vy)*.19)*dt,10,58);
  b.x+=Math.sin(b.angle)*forwardSpeed()*dt;b.z+=Math.cos(b.angle)*forwardSpeed()*dt;
  trafficFactor=mix(trafficFactor,1+.61*wanted,1-Math.exp(-dt*1.5));trafficClock+=dt*trafficFactor;traffic();
@@ -219,8 +226,8 @@ function simulate(dt){
  if(solid(b.x,b.y,b.z,1.15)&&Math.hypot(forwardSpeed(),b.vy)>12)b.skim+=dt;
  else{if(b.skim>.12&&elapsed-b.lastSkim>2){b.lastSkim=elapsed;feedLine('NÄRA ÖGAT',10);addPoints(10);tone(900,1300,.07,'triangle',.04);}b.skim=0;}
  const wingCycle=Math.floor(wingPhase/tau);
- elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+23*b.effort);
- if(pitch>0&&!dive&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
+ elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort);
+ if(b.effort>.5&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
  gather(dt);updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateFood();if(state!=='play')return;
  drops=drops.filter(p=>{
