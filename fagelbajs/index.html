@@ -341,7 +341,12 @@ onkeydown=e=>{if(state!=='play'){if(e.code==='Escape'&&state==='pause')togglePau
  if(['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','Escape'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='Escape')togglePause();}};
 onkeyup=e=>keys.delete(e.code);
 // Convert the stored dive speed into horizontal travel as the nose tips down.
-function forwardSpeed(){return bird.speed*(1-.89*bird.steep)*Math.cos(bird.climb*1.31);}
+function forwardSpeed(){
+ // As the dive develops, the speed gained from falling goes mostly downwards.
+ const tuckDive=bird.fold*clamp(-bird.vy/25,0,1);
+ const horizontalFraction=1-Math.max(.925*bird.steep,.94*tuckDive);
+ return bird.speed*horizontalFraction*Math.cos(bird.climb*1.31);
+}
 function payload(){return {x:bird.x-.45*Math.sin(bird.angle),z:bird.z-.45*Math.cos(bird.angle),y:bird.y-.22,vx:Math.sin(bird.angle)*forwardSpeed(),vz:Math.cos(bird.angle)*forwardSpeed(),vy:bird.vy-6};}
 function at(p,t){return [p.x+p.vx*t,p.y+p.vy*t-gravity*t*t/2,p.z+p.vz*t];}
 function flightTime(p,level){
@@ -403,14 +408,14 @@ function simulate(dt){
  b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*10));b.bank=mix(b.bank,steer,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold);
  // Ramp into the dive. A short tap makes a small range adjustment.
  const desiredSteep=pitch<0?1:0;
- b.steep+=clamp(desiredSteep-b.steep,-dt*(pitch>0?2.4:1.45),dt*.92);
- const diveCurve=b.steep*b.steep*(3-2*b.steep);
+ b.steep+=clamp(desiredSteep-b.steep,-dt*(pitch>0?2.4:1.45),dt*1.1);
+ const diveCurve=b.steep*(.62+.38*b.steep);
  const upLimit=clamp((82-b.y)/9,0,1);
  const targetClimb=pitch>0&&!dive?1:0;
  b.climb=mix(b.climb,targetClimb,1-Math.exp(-dt*(targetClimb?.92:2.7)));
  const stallSoftness=clamp((b.climb-.87)/.13,0,1);
- const wantedVy=19*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-36*diveCurve+b.flare*.82;
- const acceleration=dive?-36-b.vy*.19:(wantedVy-b.vy)*2.7;
+ const wantedVy=19*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82;
+ const acceleration=dive?-40-b.vy*.19:(wantedVy-b.vy)*2.7;
  b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
  b.effort=mix(b.effort,dive?0:pitch>0?1:pitch<0?0:.28,1-Math.exp(-6*dt));
@@ -639,7 +644,9 @@ function bodyMesh(){
 const plumage=bodyMesh();
 function flightPitch(){
  // At low airspeed the beak can still point up even as lift fades.
- return Math.max(Math.atan2(bird.vy,forwardSpeed())*(.82+.16*bird.steep),
+ const pathAngle=Math.atan2(bird.vy,forwardSpeed());
+ if(pathAngle<0)return pathAngle;
+ return Math.max(pathAngle*.82,
   bird.climb>.01?1.33*bird.climb:-Math.PI/2);
 }
 function renderBird(){
