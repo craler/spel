@@ -15,13 +15,21 @@ body.crashed canvas{animation:lose-color 2.5s ease-in-out both}
 #crash-banner:not([hidden]){animation:reveal-word .85s ease-out both}
 @keyframes reveal-word{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 body.crashed .guide,body.crashed .tools,body.crashed #feedback{visibility:hidden}
+
+#meter{position:fixed;left:50%;top:14px;transform:translateX(-50%);width:clamp(240px,35vw,480px);height:38px;border:3px solid #332840;border-radius:30px;background:#524461;box-shadow:0 3px #332840;overflow:hidden}
+#meter-fill{height:100%;background:linear-gradient(90deg,#f4a644,#ffe363);transition:width .18s ease-out;width:0}
+#meter-label{position:absolute;inset:0;display:grid;place-items:center;color:white;font-weight:900;text-shadow:0 1px 3px #211327,0 -1px 2px #211327}
+.tools{top:auto;bottom:76px}.guide{display:block;text-align:center}
+@media(max-width:960px){#hud{top:66px;font-size:13px}.tools{bottom:82px}#meter{width:min(80vw,420px)}}
 </style>
 <canvas id="world" aria-label="Flygspel med tangentbordsstyrning"></canvas>
 <div id="hud"><strong id="hits">0 träffar</strong><span id="time">60 s</span><span class="badge" id="mode">Glidflykt</span><span id="speed"></span></div>
+<div id="meter" role="progressbar" aria-label="Kaosmätare" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="meter-fill"></div><span id="meter-label">KAOS · 0 / 100</span></div>
 <div class="tools"><button id="camera">Vy: bakom</button><button id="invert" class="pitch-switch">Höjdroder</button><button id="audio">Ljud på</button><button id="pause">Paus</button></div>
 <div id="feedback"></div><div class="guide">A/D eller ←/→ sväng · <span id="pitch-guide">↓/S stig · ↑/W sjunk</span> · Shift dyk · håll Space för stråle · C byt vy</div>
 <div id="crash-banner" hidden>wasted</div>
-<div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">En duva, en stad och 60 sekunder. Sikta med korset och håll Space för en stråle. Grönt betyder träffläge. Akta hustaken!</p><button id="go" autofocus>Ta sats och flyg →</button><button id="invert-menu" class="pitch-switch">Höjdroder</button><a href="../">Till Spelhörnan</a></section></div>
+<div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">Fyll kaosmätaren på 60 sekunder. En fotgängare ger 10 poäng, en bil 25. Sikta och håll Space!</p><button id="go" autofocus>Ta sats och flyg →</button><button id="invert-menu" class="pitch-switch">Höjdroder</button><a href="../">Till Spelhörnan</a></section></div>
+<script src="./effects.js"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id), canvas=$('world'), ctx=canvas.getContext('2d');
@@ -54,16 +62,127 @@ function tone(from,to,duration,type='sine',gain=.08,delay=0){
  osc.connect(vol);vol.connect(sound.destination);osc.start(t);osc.stop(t+duration);
 }
 let rig=null,crash=null;
+let bank=null,bankLoading=false,lastWing=0,wind=null,master=null,crashVoice=null,lastPuff=-2;
+function setupAudio(){
+ if(!sound)return;
+ if(!master){
+  master=sound.createGain();master.gain.value=muted?0:.85;master.connect(sound.destination);
+  const noise=sound.createBuffer(1,sound.sampleRate*2,sound.sampleRate),data=noise.getChannelData(0);
+  for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+  const source=sound.createBufferSource(),filter=sound.createBiquadFilter(),gain=sound.createGain();
+  source.buffer=noise;source.loop=true;filter.type='bandpass';filter.Q.value=.7;gain.gain.value=0;
+  source.connect(filter);filter.connect(gain);gain.connect(master);source.start();wind={gain,filter};
+ }
+ if(!bank&&!bankLoading&&typeof sampleMP3==='string'){
+  bankLoading=true;
+  const bytes=Uint8Array.from(atob(sampleMP3),ch=>ch.charCodeAt(0));
+  sound.decodeAudioData(bytes.buffer).then(b=>{bank=b;}).catch(()=>{}).finally(()=>{bankLoading=false;});
+ }
+}
+function voice(index,volume,rate=1){
+ if(!bank||muted)return null;
+ const source=sound.createBufferSource(),gain=sound.createGain(),[offset,duration]=sampleCuts[index];
+ source.buffer=bank;source.playbackRate.value=rate;gain.gain.value=volume;source.connect(gain);gain.connect(master);
+ source.start(0,offset,duration);return source;
+}
+function wingBeat(){
+ if(!bank)return;
+ const next=lastWing?1+((lastWing-1+1+Math.floor(Math.random()*7))%8):1+Math.floor(Math.random()*8);
+ lastWing=next;voice(next,.43,.94+.12*Math.random());
+}
+function windLevel(){
+ if(!wind)return;
+ const v=state==='play'?bird.fold*clamp((Math.hypot(bird.vy,forwardSpeed())-8)/45,0,1):0;
+ wind.gain.gain.setTargetAtTime(v*.31,sound.currentTime,.1);
+ wind.filter.frequency.setTargetAtTime(280+v*1900,sound.currentTime,.13);
+}
+function puff(){
+ if(!sound||muted||elapsed-lastPuff<.14)return;lastPuff=elapsed;
+ const t=sound.currentTime,osc=sound.createOscillator(),f=sound.createBiquadFilter(),g=sound.createGain();
+ osc.type='sawtooth';osc.frequency.setValueAtTime(80+Math.random()*28,t);osc.frequency.exponentialRampToValueAtTime(34,t+.15);
+ f.type='lowpass';f.frequency.value=390;g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.13,t+.018);g.gain.exponentialRampToValueAtTime(.001,t+.17);
+ osc.connect(f);f.connect(g);g.connect(master);osc.start(t);osc.stop(t+.18);
+}
+const goal=100, fallen=new Map(), wrecks=new Map();
+let points=0,cars=[],sprayCount=0;
+const carPaint=['#ff715f','#37b9ca','#ffd950','#7ea3f5','#e682c2'];
+function traffic(){
+ cars=[];
+ // Each car owns a persistent lane and identity as the visible blocks scroll.
+ for(const across of [false,true]){
+  const sidePos=across?bird.z:bird.x,alongPos=across?bird.x:bird.z;
+  for(let lane=Math.round(sidePos/tile)-2;lane<=Math.round(sidePos/tile)+2;lane++){
+   const direction=lane%2===0?1:-1,speed=direction*(4+hash(lane,8,+across)*2.4);
+   const offset=hash(lane,21,+across)*54+speed*elapsed,spacing=53;
+   const first=Math.floor((alongPos-100-offset)/spacing);
+   for(let n=first;n<=first+4;n++){
+    const id='car:'+across+','+lane+','+n;if(wrecks.has(id))continue;
+    const along=n*spacing+offset,side=lane*tile+direction*1.45;
+    cars.push({id,x:across?along:side,z:across?side:along,yaw:(across?Math.PI/2:0)+(direction<0?Math.PI:0),
+     speed:Math.abs(speed),color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
+   }
+  }
+ }
+ for(const c of wrecks.values()){
+  const t=clamp((elapsed-c.hitTime)/.65,0,1),travel=c.speed*.33*(1-(1-t)**2);
+  const yaw=c.startYaw+c.spin*t;c.yaw=yaw;
+  c.x=c.startX+travel*Math.sin(c.startYaw)+.85*t*c.spin*Math.cos(c.startYaw);
+  c.z=c.startZ+travel*Math.cos(c.startYaw)-.85*t*c.spin*Math.sin(c.startYaw);
+  if(Math.abs(c.x-bird.x)<110&&Math.abs(c.z-bird.z)<110)cars.push(c);
+ }
+}
+function carContact(c,x,y,z,r=0){
+ const sn=Math.sin(c.yaw),cs=Math.cos(c.yaw),dx=x-c.x,dz=z-c.z;
+ const side=dx*cs-dz*sn,along=dx*sn+dz*cs;
+ const depths=[.92+r-Math.abs(side),2.05+r-Math.abs(along),1.48+r-y];
+ const depth=Math.min(...depths);if(depth<0)return null;
+ const sign=Math.sign;
+ const n=depth===depths[2]?[0,1,0]:depth===depths[0]?[sign(side)*cs,0,-sign(side)*sn]:[sign(along)*sn,0,sign(along)*cs];
+ return {n,depth,car:true};
+}
+function crashCar(c){
+ if(wrecks.has(c.id))return;
+ Object.assign(c,{startX:c.x,startZ:c.z,startYaw:c.yaw,hitTime:elapsed,spin:hash(c.x,c.z,2)>.5?1:-1});
+ wrecks.set(c.id,c);tone(310,63,.26,'sawtooth',.038);
+}
+function award(amount,label){points+=amount;hits++;announce(label+' +'+amount);}
+function drawCar(c){
+ const sn=Math.sin(c.yaw),cs=Math.cos(c.yaw);
+ const world=(x,y,z)=>[c.x+x*cs+z*sn,y,c.z-x*sn+z*cs];
+ function body(w,z1,z2,low,high,color,roof,taper){
+  const corners=(y,width,back,front)=>[world(-width,y,back),world(width,y,back),world(width,y,front),world(-width,y,front)];
+  const base=corners(low,w,z1,z2),top=corners(high,w*taper,z1+.13,z2-.16);
+  for(let i=0;i<4;i++){const j=(i+1)%4;poly([base[i],base[j],top[j],top[i]],color);}
+  poly(top,roof);
+ }
+ body(.91,-2,2,.29,.91,c.color,c.color,.97);
+ body(.76,-1.08,.96,.92,1.48,'#46607b',c.color,.84);
+ for(const side of [-1,1])for(const axle of [-1.28,1.23]){
+  const wheel=Array.from({length:8},(_,i)=>world(side*.93,.38+.33*Math.sin(tau*i/8),axle+.33*Math.cos(tau*i/8)));
+  poly(wheel,'#323449');
+ }
+ for(const side of [-1,1]){
+  const lamp=side*.62;poly([world(lamp-.14,.57,1.99),world(lamp+.14,.57,1.99),world(lamp+.14,.77,1.99),world(lamp-.14,.77,1.99)],'#ffefac');
+ }
+ if(wrecks.has(c.id)){
+  disc(c.x,1.5,c.z,.46,'#fffbee');
+  for(let i=0;i<3;i++){const t=((elapsed-c.hitTime)*.85+i/3)%1;
+   const [x,y,z]=world(.18*Math.sin(t*5),1+t*2,1.5);
+   poly([[x-.24,y,z],[x,y+.36,z],[x+.32,y,z],[x,y-.22,z]],'#baa4ae');}
+ }
+}
 function reset(){
+ points=0;sprayCount=0;lastPuff=-2;fallen.clear();wrecks.clear();cars=[];
+ if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
  bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,flare:0,effort:0};elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();messageTime=0;$('feedback').textContent='';
 }
 function panel(heading,body,action){$('title').textContent=heading;$('brief').textContent=body;$('go').textContent=action;$('overlay').hidden=false;$('go').focus();}
 function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','Duvan väntar där du lämnade den.','Fortsätt flyga →');}else if(state==='pause')start();}
-function start(){if(state!=='pause')reset();state='play';$('overlay').hidden=true;$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});}catch{}}
+function start(){if(state!=='pause')reset();state='play';$('overlay').hidden=true;$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
 function view(){if(crash)return;above=!above;rig=null;$('camera').textContent=above?'Vy: ovanifrån':'Vy: bakom';}
 $('go').onclick=start;$('pause').onclick=togglePause;$('camera').onclick=view;
-$('audio').onclick=()=>{muted=!muted;$('audio').textContent=muted?'Ljud av':'Ljud på';};
+$('audio').onclick=()=>{muted=!muted;if(master)master.gain.setTargetAtTime(muted?0:.85,sound.currentTime,.035);$('audio').textContent=muted?'Ljud av':'Ljud på';};
 onblur=()=>{keys.clear();if(state==='play')togglePause();};
 onkeydown=e=>{if(state!=='play'){if(e.code==='Escape'&&state==='pause')togglePause();return;}
  if(['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','Escape'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='Escape')togglePause();}};
@@ -109,8 +228,9 @@ function landingTime(p){
 }
 function drop(){
  if(cooldown>0)return;
- const p=payload();p.end=landingTime(p);p.age=0;drops.push(p);cooldown=.06;
- if(drops.length%4===1)tone(225,85,.09,'triangle',.025);
+ const p=payload(),n=++sprayCount,lateral=.46*Math.sin(n*.73)+.22*Math.sin(n*2.11);
+ p.vx+=Math.cos(bird.angle)*lateral;p.vz-=Math.sin(bird.angle)*lateral;p.vy+=.32*Math.sin(n*1.4);
+ p.end=landingTime(p);p.age=0;p.seed=n;drops.push(p);cooldown=.042;puff();
 }
 function announce(text){$('feedback').textContent=text;messageTime=.95;}
 function hash(i,j,k){const n=Math.sin(i*127.1+j*311.7+k*74.7)*43758.5453;return n-Math.floor(n);}
@@ -119,7 +239,7 @@ function gather(){
  for(let i=ix-2;i<=ix+2;i++)for(let j=iz-2;j<=iz+2;j++)for(let k=0;k<8;k++){
  const cross=k%3===0,phase=hash(i,j,k)*tau,side=k<4?3.4:-3.4,lane=(k%4-1.5)*9;
  const baseX=i*tile+(cross?lane:side),baseZ=j*tile+(cross?side:lane);
- const step=3*Math.sin(elapsed*.52+phase);
+ const when=fallen.get(i+','+j+','+k)??elapsed;const step=3*Math.sin(when*.52+phase);
  people.push({x:baseX+(cross?step:0),z:baseZ+(cross?0:step),baseX,baseZ,cross,walkPhase:phase,
   id:i+','+j+','+k,c:colors[Math.floor(hash(i,j,k+8)*colors.length)],phase:k*1.8+i+j});}
 
@@ -141,16 +261,26 @@ function simulate(dt){
  b.effort=mix(b.effort,dive?0:pitch>0?1:pitch<0?0:.28,1-Math.exp(-6*dt));
  b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65+(14-b.speed)*(dive?.18:.55)-Math.max(0,b.vy)*.19)*dt,10,58);
  b.x+=Math.sin(b.angle)*forwardSpeed()*dt;b.z+=Math.cos(b.angle)*forwardSpeed()*dt;
+ traffic();
  if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
+ if(b.y<1.77){const vehicle=cars.find(c=>carContact(c,b.x,b.y,b.z,.28));if(vehicle){const surface=carContact(vehicle,b.x,b.y,b.z,.28);crashCar(vehicle);startCrash(surface);return;}}
+ const wingCycle=Math.floor(wingPhase/tau);
  elapsed+=dt;cooldown-=dt;wingPhase+=dt*(1.4+23*b.effort);
+ if(pitch>0&&!dive&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
  gather();
  drops=drops.filter(p=>{const prev=p.age;p.age+=dt;const ht=flightTime(p,1.8),end=p.end;
  if(ht>=0&&ht<=end&&prev<=ht&&p.age>=ht){const [x,,z]=at(p,ht);const victim=people.find(h=>!scored.has(h.id)&&Math.hypot(h.x-x,h.z-z)<1.65);
- if(victim){stains.push({x,y:1.9,z,t:elapsed,person:true});scored.add(victim.id);hits++;announce(['SPLATT!','MITT I PRICK!','FULLTRÄFF!'][(hits-1)%3]);tone(430,750,.15);tone(690,980,.14,'sine',.05,.09);return false;}}
+ if(victim){stains.push({x,y:1.9,z,t:elapsed,person:true});scored.add(victim.id);fallen.set(victim.id,elapsed);award(10,'SPLATT!');tone(430,750,.15);tone(690,980,.14,'sine',.05,.09);return false;}}
+ const carTime=flightTime(p,1.48);
+ if(carTime>=0&&carTime<=end&&prev<=carTime&&p.age>=carTime){
+  const [x,,z]=at(p,carTime),vehicle=cars.find(c=>carContact(c,x,1.47,z));
+  if(vehicle){if(!wrecks.has(vehicle.id)){crashCar(vehicle);award(25,'PLÅTSMÄLL!');}return false;}
+ }
  if(p.age>=end){const [x,y,z]=at(p,end);stains.push({x,y,z,t:elapsed});tone(88,42,.08,'triangle',.032);return false;}return true;});
  if((messageTime-=dt)<=0)$('feedback').textContent='';
- if(elapsed>=60){state='end';keys.clear();panel('Tiden är ute!',hits+' träffar på 60 sekunder. Ett varv till?','Flyg igen →');}
+ if(points>=goal){state='end';keys.clear();panel('Fullt kaos!',points+' poäng på '+Math.ceil(elapsed)+' sekunder.','Flyg igen →');}
+ else if(elapsed>=60){state='end';keys.clear();panel('Tiden är ute!',points+' poäng på 60 sekunder. Ett varv till?','Flyg igen →');}
 }
 // Resolve the nearest contact plane for the tumbling body, including roof edges.
 function contact(radius){
@@ -170,24 +300,24 @@ function bounce(surface,first){
  bird.x+=n[0]*(depth+.001);bird.y+=n[1]*(depth+.001);bird.z+=n[2]*(depth+.001);
  const incoming=v.reduce((sum,value,i)=>sum+value*n[i],0);
  if(incoming>=0)return;
- const rebound=Math.abs(incoming)*(first?.48:.31);
- for(let i=0;i<3;i++)v[i]=(v[i]-incoming*n[i])*.78+rebound*n[i];
- if(first && !surface.ground && n[1]===0)v[1]+=Math.min(4,-incoming*.22);
+ const rebound=(Math.abs(incoming)>2?Math.abs(incoming)*(first?.17:.08):0);
+ for(let i=0;i<3;i++)v[i]=(v[i]-incoming*n[i])*(first?.49:.64)+rebound*n[i];
+ if(first && !surface.ground && n[1]===0)v[1]+=Math.min(1.2,-incoming*.06);
  if(!first){crash.spin*=.69;crash.rollSpeed*=.74;}
 }
-function startCrash(){
- const b=bird,surface=contact(.28);
+function startCrash(surface=contact(.28)){
+ const b=bird;
  if(!surface)return;
  const speed=forwardSpeed(),force=Math.hypot(speed,b.vy),side=b.bank<0?-1:1;
  const amplitude=.15+.93*b.effort;
  const arm=(.24+amplitude*Math.sin(wingPhase))*(1-b.fold);
  const wrist=(-.16+amplitude*.92*Math.sin(wingPhase-.65))*(1-b.fold);
- crash={age:0,ground:surface.ground,origin:[b.x,b.y,b.z],follow:[b.x,b.y,b.z],
+ crash={age:0,ground:surface.ground,vehicle:surface.car,origin:[b.x,b.y,b.z],follow:[b.x,b.y,b.z],
   velocity:[Math.sin(b.angle)*speed,b.vy,Math.cos(b.angle)*speed],
   spin:clamp(force*.20,2,11)*(surface.n[1]?1:-1),rollSpeed:side*clamp(force*.14,1.2,7),
   pitch:0,roll:0,wings:[-1,1].map(dir=>({arm,wrist,va:dir*side*force*.13,vw:-dir*side*force*.1}))};
  if(!rig)setCamera(1/60);
- bounce(surface,true);state='crash';keys.clear();tone(155,35,.34,'triangle');document.body.classList.add('crashed');
+ bounce(surface,true);state='crash';keys.clear();crashVoice=voice(0,.8);if(!crashVoice)tone(155,35,.34,'triangle');document.body.classList.add('crashed');
 }
 function advanceCrash(dt){
  const c=crash;
@@ -198,7 +328,7 @@ function advanceCrash(dt){
   const v=c.velocity;
   v[1]-=gravity*step;
   bird.x+=v[0]*step;bird.y+=v[1]*step;bird.z+=v[2]*step;
-  const surface=contact(.19);
+  const surface=contact(.19) || (bird.y<1.7&&cars.map(c=>carContact(c,bird.x,bird.y,bird.z,.19)).find(Boolean));
   if(surface)bounce(surface,false);
   c.pitch+=c.spin*step;c.roll+=c.rollSpeed*step;
   c.spin*=Math.exp(-.5*step);c.rollSpeed*=Math.exp(-.55*step);
@@ -216,7 +346,7 @@ function advanceCrash(dt){
  if(c.age>.9)$('crash-banner').hidden=false;
  if(c.age>=3.7){
   state='end';$('crash-banner').hidden=true;
-  panel('wasted',(c.ground?'Marken vann.':'Huset vann.')+' '+hits+' träffar.','Ta ny sats →');
+  panel('wasted',(c.vehicle?'Bilen vann.':c.ground?'Marken vann.':'Huset vann.')+' '+points+' poäng.','Ta ny sats →');
  }
 }
 function crashFeathers(){
@@ -286,6 +416,14 @@ function person(h){
  const {x,z}=h,hit=scored.has(h.id),wobble=.23*Math.sin(elapsed*5+h.phase),wave=hit?.65:0;
  const origin=cameraPoint([x,1,z]);if(origin[2]<1||origin[2]>110)return;
  const [sx,sy]=screen(origin),unit=scale/origin[2];if(sx< -unit||sx>width+unit||sy< -unit*3||sy>height+unit*3)return;
+ if(hit){
+  const t=clamp((elapsed-fallen.get(h.id))/.43,0,1),angle=t*t*Math.PI*.49,dir=Math.cos(h.phase)<0?-1:1;
+  const joint=(v,side=0)=>[x+dir*Math.sin(angle)*v,.12+Math.cos(angle)*v,z+side];
+  const limb=(a,b,color,w)=>{const from=point(a),to=point(b);if(!from||!to)return;
+   ctx.strokeStyle=color;ctx.lineWidth=Math.max(1,unit*w);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(...from);ctx.lineTo(...to);ctx.stroke();};
+  for(const sign of [-1,1]){limb(joint(.82),joint(.08,sign*.23),'#35435c',.2);limb(joint(1.28),joint(1,sign*.54),'#cf926b',.17);}
+  limb(joint(.77),joint(1.36),h.c,.65);sprite(...joint(1.73),.32,'#e7a985');sprite(...joint(1.86),.23,'#fffcec');return;
+ }
  // Billboard limbs keep the tiny silhouettes readable from above.
  const [gx,gy]=point([x,.02,z])||[sx,sy], [hx,hy]=point([x,1.85,z])||[sx,sy];
  ctx.fillStyle='#42535455';ctx.beginPath();ctx.ellipse(gx+unit*.18,gy,unit*.52,unit*.18,0,0,tau);ctx.fill();
@@ -432,6 +570,7 @@ function render(dt=1/60){
   }
  }
  }
+ for(const vehicle of cars){const d=cameraPoint([vehicle.x,1,vehicle.z])[2];if(d>-.5&&d<116)drawCar(vehicle);}
  for(const s of stains){
   if(s.person||Math.hypot(s.x-bird.x,s.z-bird.z)>100)continue;
   disc(s.x,s.y+.055,s.z,1.04,'#71517f',s.y>.2?1:-1);
@@ -455,6 +594,10 @@ function render(dt=1/60){
    return Math.hypot(h.baseX+(h.cross?step:0)-hx,h.baseZ+(h.cross?0:step)-hz)<1.65;
   });
  }
+ if(!target){
+  const t=flightTime(p,1.48);
+  if(t>=0&&t<=tt){const [x,,z]=at(p,t);target=cars.find(c=>!wrecks.has(c.id)&&carContact(c,x-Math.sin(c.yaw)*c.speed*t,1.47,z-Math.cos(c.yaw)*c.speed*t));}
+ }
  // Move dashes down the arc, with a fixed pixel size even far above the street.
  for(let i=0;i<12;i++){
   const t=tt*(i+(elapsed*4%1))/12,pos=point(at(p,t));
@@ -466,13 +609,17 @@ function render(dt=1/60){
   if(prior && prior.age-d.age<.095){
    const from=point(at(prior,prior.age)),to=point(pos);
    if(from&&to){
-    const depth=Math.max(1,cameraPoint(pos)[2]),diameter=clamp(.5*scale/depth,1,32);
+    const depth=Math.max(1,cameraPoint(pos)[2]),diameter=clamp(.084*scale/depth,.85,9);
     ctx.lineCap='round';ctx.beginPath();ctx.moveTo(...from);ctx.lineTo(...to);
-    ctx.lineWidth=diameter+1;ctx.strokeStyle='#ad92b0';ctx.stroke();ctx.lineWidth=diameter;ctx.strokeStyle='#fffdf7';ctx.stroke();
+    ctx.lineWidth=diameter+.65;ctx.strokeStyle='#b0a2c1';ctx.stroke();ctx.lineWidth=diameter;ctx.strokeStyle='#fffdf7';ctx.stroke();
    }
   }
   prior=d;
-  sprite(...tail,.26,'#efe6fd');sprite(...pos,.38,'#987f9a');sprite(...pos,.32,'#fffefa');sprite(pos[0]+.16,pos[1]+.12,pos[2],.16,'#ffffff');
+  if(d.seed%3===0){
+   const spread=Math.min(.42,d.age*.32),sign=d.seed%2?1:-1;
+   sprite(pos[0]+Math.cos(d.seed)*spread,pos[1]+.09,pos[2]+sign*spread,.036,'#fffdf5',1.65);
+  }
+  sprite(...pos,.044,'#fffef8',1.3);
  }
  for(const hit of stains.slice(-18)){const age=elapsed-hit.t;if(age>.45)continue;
   for(let k=0;k<6;k++){const a=k*tau/6,r=.4+age*4;sprite(hit.x+r*Math.cos(a),hit.y+.18+5*age-9*age*age,hit.z+r*Math.sin(a),.16*(1-age), '#fff');}
@@ -490,11 +637,15 @@ function render(dt=1/60){
  if(drops.length || (stains.length && elapsed-stains.at(-1).t<1.2)) impactView(aim);
  }
  renderBird();if(crash)crashFeathers();
+ const meter=$('meter');if(meter.getAttribute('aria-valuenow')!==String(Math.min(goal,points))){
+  meter.setAttribute('aria-valuenow',String(Math.min(goal,points)));$('meter-fill').style.width=Math.min(100,100*points/goal)+'%';
+ }
+ hud('meter-label','KAOS · '+points+' / '+goal);windLevel();
  hud('speed',Math.round(Math.hypot(forwardSpeed(),bird.vy)*3.6)+' km/h · '+Math.round(bird.y)+' m');
  hud('hits',hits+(hits===1?' träff':' träffar'));hud('time',Math.max(0,Math.ceil(60-elapsed))+' s');
  hud('mode',bird.fold>.5?'Dyk!':bird.flare>2?'Uppvind':'Glidflykt');
 }
-reset();gather();let prev=0;
+reset();gather();traffic();let prev=0;
 function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}else if(state==='crash')advanceCrash(dt);else if(state==='menu')wingPhase+=dt*3;render(dt);requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
 </script></html>
