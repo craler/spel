@@ -5,12 +5,15 @@
 *{box-sizing:border-box}body{margin:0;background:#a9dbdf;color:#162b3c;font:600 16px/1.4 system-ui,sans-serif}canvas{display:block;width:100vw;height:100dvh}button{cursor:pointer;font:inherit;color:inherit}button:focus-visible,a:focus-visible{outline:4px solid #fa633b;outline-offset:3px}
 #hud,.guide,.tools{position:fixed;display:flex;align-items:center;gap:14px;background:#fff8e8f2;border:2px solid #243746;border-radius:14px;padding:9px 16px;box-shadow:0 3px #243746}#hud{left:16px;top:16px}.tools{right:16px;top:16px;padding:4px;gap:3px}.tools button{border:0;background:transparent;padding:6px 10px;border-radius:8px}.tools button:hover{background:#f2dfb4}.guide{bottom:16px;left:50%;transform:translateX(-50%);font-size:13px;white-space:nowrap}.badge{color:#993b27}#feedback{position:fixed;top:19%;width:100%;text-align:center;color:#fff;font-size:clamp(24px,5vw,58px);font-weight:1000;text-shadow:0 3px #233646,-2px 0 #233646,2px 0 #233646;pointer-events:none}
 #overlay{position:fixed;inset:0;background:#17303b40;display:grid;align-content:center;padding:5vw;pointer-events:auto}#overlay[hidden]{display:none}.panel{width:min(365px,100%);background:#fff8e8;border:3px solid #223443;border-radius:22px;padding:26px;box-shadow:6px 7px #223443}h1{font-size:clamp(40px,5vw,64px);line-height:.98;letter-spacing:-.065em;margin:8px 0 14px}.panel p{margin:12px 0 20px}.panel button{width:100%;background:#ffce4d;border:2px solid;border-radius:10px;padding:12px;font-weight:850;box-shadow:0 3px #223443}.panel a{color:#375563;font-size:13px;display:inline-block;margin-top:18px}.panel small{color:#9c3a24} @media(max-width:720px){.guide{white-space:normal;width:94%;text-align:center;justify-content:center}.tools{top:auto;bottom:76px}#hud{gap:9px}}
+
+.panel .pitch-switch{background:transparent;box-shadow:none;border:0;text-decoration:underline;font-size:14px;margin-top:8px;padding:6px}
+@media(max-width:900px){.tools{top:auto;bottom:64px}.tools button{font-size:13px}}
 </style>
 <canvas id="world" aria-label="Flygspel med tangentbordsstyrning"></canvas>
 <div id="hud"><strong id="hits">0 träffar</strong><span id="time">60 s</span><span class="badge" id="mode">Glidflykt</span><span id="speed"></span></div>
-<div class="tools"><button id="camera">Vy: bakom</button><button id="audio">Ljud på</button><button id="pause">Paus</button></div>
-<div id="feedback"></div><div class="guide">A/D eller ←/→ sväng · ↓/S stig · ↑/W sjunk · Shift dyk · håll Space för stråle · C byt vy</div>
-<div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">En duva, en stad och 60 sekunder. Dra neråt för att stiga och håll Space för att spruta. Akta hustaken!</p><button id="go" autofocus>Ta sats och flyg →</button><a href="../">Till Spelhörnan</a></section></div>
+<div class="tools"><button id="camera">Vy: bakom</button><button id="invert" class="pitch-switch">Höjdroder</button><button id="audio">Ljud på</button><button id="pause">Paus</button></div>
+<div id="feedback"></div><div class="guide">A/D eller ←/→ sväng · <span id="pitch-guide">↓/S stig · ↑/W sjunk</span> · Shift dyk · håll Space för stråle · C byt vy</div>
+<div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">En duva, en stad och 60 sekunder. Sikta med korset och håll Space för en stråle. Grönt betyder träffläge. Akta hustaken!</p><button id="go" autofocus>Ta sats och flyg →</button><button id="invert-menu" class="pitch-switch">Höjdroder</button><a href="../">Till Spelhörnan</a></section></div>
 <script>
 'use strict';
 const $=id=>document.getElementById(id), canvas=$('world'), ctx=canvas.getContext('2d');
@@ -18,6 +21,23 @@ const clamp=(v,a,b)=>Math.min(b,Math.max(a,v)), mix=(a,b,t)=>a+(b-a)*t, tau=2*Ma
 const keys=new Set(), gravity=16, tile=42, colors=['#f76950','#357db0','#f6bb3d','#3e938b','#9763ac'];
 let state='menu', bird, elapsed=0, hits=0, drops=[], stains=[], scored=new Set(), cooldown=0, clock=0, messageTime=0;
 let above=false, muted=false, sound, people=[], camera={}, faces=[], wingPhase=0, width,height,scale;
+let reversePitch=false;
+try { reversePitch=localStorage.getItem('fagelbajs.upClimbs')==='yes'; } catch {}
+function syncPitch(){
+ const short=reversePitch?'↑ stiger':'↓ stiger';
+ $('pitch-guide').textContent=reversePitch?'↑/W stig · ↓/S sjunk':'↓/S stig · ↑/W sjunk';
+ for(const id of ['invert','invert-menu']){
+  const button=$(id);
+  button.textContent='Byt höjdroder · '+short;
+  button.setAttribute('aria-pressed',String(reversePitch));
+  button.onclick=()=>{
+   reversePitch=!reversePitch;syncPitch();
+   try{localStorage.setItem('fagelbajs.upClimbs',reversePitch?'yes':'no');}catch{}
+   if(state==='play')button.blur();
+  };
+ }
+}
+syncPitch();
 function tone(from,to,duration,type='sine',gain=.08,delay=0){
  if(!sound||muted)return;
  const t=sound.currentTime+delay, osc=sound.createOscillator(), vol=sound.createGain();
@@ -40,7 +60,10 @@ onkeydown=e=>{if(state!=='play'){if(e.code==='Escape'&&state==='pause')togglePau
 onkeyup=e=>keys.delete(e.code);
 function payload(){return {x:bird.x-.45*Math.sin(bird.angle),z:bird.z-.45*Math.cos(bird.angle),y:bird.y-.22,vx:Math.sin(bird.angle)*bird.speed,vz:Math.cos(bird.angle)*bird.speed,vy:bird.vy-6};}
 function at(p,t){return [p.x+p.vx*t,p.y+p.vy*t-gravity*t*t/2,p.z+p.vz*t];}
-function flightTime(p,level){return (p.vy+Math.sqrt(Math.max(0,p.vy*p.vy+2*gravity*(p.y-level))))/gravity;}
+function flightTime(p,level){
+ const discriminant=p.vy*p.vy+2*gravity*(p.y-level);
+ return discriminant<0?-1:(p.vy+Math.sqrt(discriminant))/gravity;
+}
 const facades=[
  ['#ffdf64','#fa887d','#dc5285'],['#ffe4a8','#47d6bf','#139b9e'],
  ['#ff9ca7','#ad83dc','#8058af'],['#adffda','#ffb84e','#ed7450']
@@ -76,13 +99,16 @@ function hash(i,j,k){const n=Math.sin(i*127.1+j*311.7+k*74.7)*43758.5453;return 
 function gather(){
  people=[];const ix=Math.round(bird.x/tile),iz=Math.round(bird.z/tile);
  for(let i=ix-2;i<=ix+2;i++)for(let j=iz-2;j<=iz+2;j++)for(let k=0;k<8;k++){
- let x=i*tile+(k<4?3.4:-3.4),z=j*tile+(k%4-1.5)*9+3*Math.sin(elapsed*.52+hash(i,j,k)*tau);
- if(k%3===0)[x,z]=[i*tile+z-j*tile,j*tile+x-i*tile];
- people.push({x,z,id:i+','+j+','+k,c:colors[Math.floor(hash(i,j,k+8)*colors.length)],phase:k*1.8+i+j});}
+ const cross=k%3===0,phase=hash(i,j,k)*tau,side=k<4?3.4:-3.4,lane=(k%4-1.5)*9;
+ const baseX=i*tile+(cross?lane:side),baseZ=j*tile+(cross?side:lane);
+ const step=3*Math.sin(elapsed*.52+phase);
+ people.push({x:baseX+(cross?step:0),z:baseZ+(cross?0:step),baseX,baseZ,cross,walkPhase:phase,
+  id:i+','+j+','+k,c:colors[Math.floor(hash(i,j,k+8)*colors.length)],phase:k*1.8+i+j});}
+
 }
 function simulate(dt){
  const b=bird,held=(...codes)=>codes.some(c=>keys.has(c)),dive=held('ShiftLeft','ShiftRight');
- const steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp');
+ const steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
  if(!dive&&b.fold>.65&&b.wasDiving){b.flare=Math.max(0,b.speed-14)*.95;tone(200,430,.2,'sine',.035);}
  b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*10));b.bank=mix(b.bank,steer,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold);
  const upLimit=clamp((82-b.y)/9,0,1);
@@ -95,11 +121,11 @@ function simulate(dt){
  b.x+=Math.sin(b.angle)*b.speed*dt;b.z+=Math.cos(b.angle)*b.speed*dt;
  if(solid(b.x,b.y,b.z,.28)){state='end';keys.clear();tone(135,38,.32,'triangle');
  panel('Krasch!',(b.y<.3?'Duvan träffade marken.':'Duvan flög in i ett hus.')+' '+hits+' träffar.','Ta ny sats →');return;}
- elapsed+=dt;cooldown-=dt;wingPhase+=dt*(1.4+12*b.effort);
+ elapsed+=dt;cooldown-=dt;wingPhase+=dt*(1.4+23*b.effort);
  if(held('Space'))drop();
  gather();
  drops=drops.filter(p=>{const prev=p.age;p.age+=dt;const ht=flightTime(p,1.8),end=p.end;
- if(ht<=end&&prev<=ht&&p.age>=ht){const [x,,z]=at(p,ht);const victim=people.find(h=>!scored.has(h.id)&&Math.hypot(h.x-x,h.z-z)<1.65);
+ if(ht>=0&&ht<=end&&prev<=ht&&p.age>=ht){const [x,,z]=at(p,ht);const victim=people.find(h=>!scored.has(h.id)&&Math.hypot(h.x-x,h.z-z)<1.65);
  if(victim){stains.push({x,y:1.9,z,t:elapsed,person:true});scored.add(victim.id);hits++;announce(['SPLATT!','MITT I PRICK!','FULLTRÄFF!'][(hits-1)%3]);tone(430,750,.15);tone(690,980,.14,'sine',.05,.09);return false;}}
  if(p.age>=end){const [x,y,z]=at(p,end);stains.push({x,y,z,t:elapsed});tone(88,42,.08,'triangle',.032);return false;}return true;});
  if((messageTime-=dt)<=0)$('feedback').textContent='';
@@ -107,10 +133,20 @@ function simulate(dt){
 }
 function fit(){width=innerWidth;height=innerHeight;const density=Math.min(devicePixelRatio||1,1.4);canvas.width=Math.round(width*density);canvas.height=Math.round(height*density);ctx.setTransform(density,0,0,density,0,0);}
 onresize=fit;fit();
-function setCamera(){
- const a=bird.angle,s=Math.sin(a),c=Math.cos(a),pitch=above?1.45:.39+bird.fold*.29,back=above?4:6.2;
- camera={x:bird.x-s*back,y:bird.y+(above?22:3.3),z:bird.z-c*back,s,c,cp:Math.cos(pitch),sp:Math.sin(pitch)};
- scale=Math.min(width*.92,height*(above?.92:1.03))*(1-.08*bird.fold);
+function setCamera(aim){
+ const a=bird.angle,s=Math.sin(a),c=Math.cos(a);
+ const forward=(aim[0]-bird.x)*s+(aim[2]-bird.z)*c;
+ const fall=bird.y-aim[1];
+ // Fit the pigeon and the projected impact together, also from high altitude.
+ const back=above?0:6.8;
+ const rise=above?Math.max(14,1.3*forward-fall*.5):3.8;
+ const toBird=Math.atan2(rise,back);
+ const toAim=Math.atan2(rise+fall,Math.max(.35,back+forward));
+ const pitch=above?Math.PI/2:mix(toBird,toAim,.52);
+ const shoulder=above?0:1.05;
+ const focusAhead=above?forward*rise/(2*rise+fall):0;
+ camera={x:bird.x+s*(focusAhead-back)+c*shoulder,y:bird.y+rise,z:bird.z+c*(focusAhead-back)-s*shoulder,s,c,cp:Math.cos(pitch),sp:Math.sin(pitch)};
+ scale=Math.min(width*.88,height*(above?.85:.97))*(1-.08*bird.fold);
 }
 function cameraPoint([x,y,z]){
  const c=camera,dx=x-c.x,dy=y-c.y,dz=z-c.z,f=dx*c.s+dz*c.c;
@@ -152,22 +188,99 @@ function person(h){
  for(const sign of [-1,1]){limb(sx+sign*.15*unit,sy,gx+sign*(.2+wobble)*unit,gy,'#30435a',.18);limb(sx+sign*.22*unit,sy-.15*unit,sx+sign*(.48+wave*.4)*unit,sy+(.24-wave)*unit,'#ae7259',.16);}
  sprite(x,1.18,z,.41,h.c,1.22);sprite(x,1.84,z,.32,'#ebad81');ctx.fillStyle=hit?'#fffbee':'#453d46';ctx.beginPath();ctx.ellipse(hx,hy-.11*unit,unit*(hit?.36:.3),unit*.21,0,0,tau);ctx.fill();
 }
+// Connected cross-sections from rump to forehead. Units are local bird metres.
+const pigeonSections=[
+ [-.49,.018,.045,.046],[-.38,.024,.133,.092],[-.21,.046,.175,.144],
+ [0,.073,.187,.174],[.14,.115,.162,.172],[.208,.197,.127,.142],
+ [.25,.27,.126,.126],[.335,.292,.129,.12],[.412,.285,.084,.083],[.444,.278,.032,.043]
+];
+function bodyMesh(){
+ const rings=pigeonSections.map(([z,y,w,h])=>Array.from({length:12},(_,i)=>{
+  const a=i*tau/12;return [w*Math.cos(a),y+h*Math.sin(a),z];
+ }));
+ const faces=[];
+ for(let n=1;n<rings.length;n++)for(let i=0;i<12;i++){
+  const j=(i+1)%12,light=Math.sin((i+.5)*tau/12)*.7-Math.cos((i+.5)*tau/12)*.3;
+  const neck=n===5||n===6;
+  const hue=neck?(light>.25?169:266):n>=7?232:222;
+  const l=(neck?45:n>=7?47:63)+light*(neck?20:16);
+  faces.push({pts:[rings[n-1][i],rings[n-1][j],rings[n][j],rings[n][i]],color:'hsl('+hue+' '+(neck?43:20)+'% '+l+'%)'});
+ }
+ return faces;
+}
+const plumage=bodyMesh();
 function renderBird(){
- const b=bird,s=Math.sin(b.angle),c=Math.cos(b.angle),bank=b.bank*.62,pitch=Math.atan2(b.vy,b.speed)*.82,fold=b.fold;
- function world([x,y,z]){x*=.38;y*=.38;z*=.38;const bx=x*Math.cos(bank)+y*Math.sin(bank),by=y*Math.cos(bank)-x*Math.sin(bank);
- const bz=z*Math.cos(pitch)-by*Math.sin(pitch),yy=by*Math.cos(pitch)+z*Math.sin(pitch);
- return [b.x+bx*c+bz*s,b.y+yy,b.z-bx*s+bz*c];}
- function shape(pts,col){poly(pts.map(world),col);}
- const flap=(.17+(.08+.75*b.effort)*Math.sin(wingPhase))*(1-fold)*clamp(1-b.flare/9,0,1),span=mix(2.5,.65,fold);
- for(const side of [-1,1]){const root=[side*.16,.06,.45],elbow=[side*span*.54,.17+flap*.53,.45-fold*.58],tip=[side*span,flap-.06,-.29-fold*.94],rear=[side*span*.6,flap*.45,-.64-fold*.5];
- shape([root,elbow,tip,rear,[side*.22,0,-.61]],'#9aaac1');shape([elbow,tip,rear],'#566780');shape([[side*span*.65,.14+flap*.57,.2-fold*.65],[side*span*.76,.11+flap*.68,.12-fold*.71],[side*span*.65,flap*.48,-.56-fold*.55],[side*span*.55,flap*.43,-.59-fold*.48]],'#394960');}
- shape([[-.21,0,-.48],[.21,0,-.48],[.45,-.11,-1.36],[-.45,-.11,-1.36]],'#475872');paint();
- // Draw the nape first and the nearer back last for the chase view.
- shape([[-.15,.42,.97],[.15,.42,.97],[0,.37,1.36]],'#ffba56');paint();
- sprite(...world([0,.54,.86]),.135,'#6169a2');
- sprite(...world([0,.29,.48]),.15,'#39afa9');
- sprite(...world([0,.05,-.16]),.20,'#aebae0',1.07);
-
+ const b=bird,fl=b.fold,bank=b.bank*.62,pitch=Math.atan2(b.vy,b.speed)*.82;
+ const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
+ function world([x,y,z]){
+  const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
+  return [b.x+bx*cy+bz*sy,b.y+by*cp+z*sp,b.z-bx*sy+bz*cy];
+ }
+ const face=(pts,color)=>poly(pts.map(world),color,1);
+ for(const patch of plumage)face(patch.pts,patch.color);
+ // Wedge bill, pale cere, and lateral amber eyes.
+ for(const side of [-1,1]){
+  face([[0,.316,.411],[side*.052,.264,.406],[0,.245,.565]],'#58445a');
+  face([[0,.316,.411],[side*.044,.279,.444],[0,.271,.49]],'#eee2d6');
+  const eye=(radius,color,offset)=>{
+   const pts=Array.from({length:8},(_,i)=>[side*(.123+offset),.308+radius*Math.sin(i*tau/8),.348+radius*Math.cos(i*tau/8)]);
+   face(pts,color);
+  };eye(.024,'#ffbf56',0);eye(.012,'#362c49',.0015);
+ }
+ // Separate overlapping tail feathers with a dark terminal band and pale tips.
+ const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl;
+ for(let k=-3;k<=3;k++){
+  const t=k/3,root=[t*.055,.051,-.33],tx=t*spread,tz=-.73+.09*t*t;
+  const end=[tx,.037-.029*t*t,tz],w=.042;
+  const mid=[mix(root[0],tx,.66),.049-.024*t*t,mix(root[2],tz,.66)];
+  face([root,[mid[0]-w,mid[1],mid[2]],[tx-w*.62,end[1],tz],end,[tx+w*.62,end[1],tz],[mid[0]+w,mid[1],mid[2]]],'#687695');
+  face([[mid[0]-w,mid[1]+.002,mid[2]],[mid[0]+w,mid[1]+.002,mid[2]],[tx+w*.65,end[1]+.002,tz+.02],[tx-w*.65,end[1]+.002,tz+.02]],'#424a67');
+ }
+ // The hand lags the arm on the downstroke. Sweeping both joints aft folds the wing.
+ const amplitude=.15+.93*b.effort;
+ const beat=Math.sin(wingPhase),arm=(.24+amplitude*beat)*(1-fl);
+ const wrist=(-.16+amplitude*.92*Math.sin(wingPhase-.65))*(1-fl);
+ for(const side of [-1,1]){
+  function wing(u,chord,y=0){
+   const upper=Math.min(.43,u),outer=Math.max(0,u-.43);
+   const reach=upper*Math.cos(arm)+outer*Math.cos(wrist);
+   return [side*(.089+reach*(1-.82*fl)),
+    .101+upper*Math.sin(arm)+outer*Math.sin(wrist)+y,
+    .095+chord+.14*Math.sin(u*Math.PI)-.27*u*u-.59*u*fl];
+  }
+  const patch=(pts,color)=>face(pts.map(v=>wing(...v)),color);
+  // Rounded secondary feathers broaden the trailing edge near the body.
+  for(let i=0;i<6;i++){
+   const u=.047+i*.074;
+   patch([[u-.034,.065],[u+.064,.063],[u+.093,-.204],[u+.053,-.31],[u+.016,-.323],[u-.02,-.278]],i===3||i===5?'#485675':i%2?'#899abd':'#afbad1');
+  }
+  // Staggered primaries end in distinct pointed tips.
+  for(let i=0;i<6;i++){
+   const u=.35+i*.067,tip=.59+i*.091,sweep=-.275+i*.038;
+   patch([[u,.06],[u+.11,.044],[tip+.012,sweep+.043],[tip,sweep],[tip-.047,sweep-.016],[u-.035,-.105]],i%2?'#455072':'#596a8f');
+  }
+  patch([[0,.12],[.22,.143],[.44,.098],[.72,.031],[.85,-.019],[.60,-.106],[.32,-.159],[.08,-.165],[0,-.134]],'#aebdd9');
+  patch([[.04,.116,.009],[.22,.129,.009],[.42,.086,.009],[.29,.039,.009],[.08,.048,.009]],'#c8d5e6');
+  for(const u of [.32,.46])patch([[u+.018,.056,.012],[u+.065,.044,.012],[u-.009,-.177,.012],[u-.069,-.20,.012]],'#485779');
+ }
+ paint();
+}
+function drawSight([x,y],target){
+ ctx.save();ctx.translate(x,y);
+ const r=target?12:15;
+ ctx.beginPath();
+ for(let i=0;i<4;i++){
+  const a=i*Math.PI/2;
+  ctx.moveTo(Math.cos(a)*(r-4),Math.sin(a)*(r-4));
+  ctx.lineTo(Math.cos(a)*(r+6),Math.sin(a)*(r+6));
+  ctx.moveTo(r*Math.cos(a+.28),r*Math.sin(a+.28));ctx.arc(0,0,r,a+.28,a+1.29);
+ }
+ ctx.lineCap='round';
+ ctx.lineWidth=5;ctx.strokeStyle='#362144';ctx.stroke();
+ ctx.lineWidth=2.5;ctx.strokeStyle=target?'#6dff85':'#ffed70';ctx.stroke();
+ ctx.fillStyle='#38283d';ctx.fillRect(-2.5,-2.5,5,5);ctx.fillStyle='#fff';ctx.fillRect(-1,-1,2,2);
+ if(target){ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillStyle='#293c36';ctx.fillRect(-36,-38,72,16);ctx.fillStyle='#99ffac';ctx.fillText('TRÄFFLÄGE',0,-26);}
+ ctx.restore();
 }
 function impactView(aim){
  const last=stains.at(-1),focus=last&&elapsed-last.t<1?[last.x,last.y,last.z]:aim;
@@ -185,8 +298,9 @@ function impactView(aim){
  ctx.strokeStyle='#ffdf38';ctx.lineWidth=2;ctx.beginPath();ctx.arc(px(aim[0]),pz(aim[2]),6,0,tau);ctx.stroke();ctx.restore();
 }
 function render(){
- setCamera();const sky=ctx.createLinearGradient(0,0,0,height*.55);sky.addColorStop(0,'#ff87a4');sky.addColorStop(1,'#ffd16a');ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
- const horizon=height*.43-scale*camera.sp/camera.cp;
+ const p=payload(),tt=landingTime(p),aim=at(p,tt);
+ setCamera(aim);const sky=ctx.createLinearGradient(0,0,0,height*.55);sky.addColorStop(0,'#ff87a4');sky.addColorStop(1,'#ffd16a');ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
+ const horizon=above?-height:height*.43-scale*camera.sp/camera.cp;
  ctx.fillStyle='#ee929a';for(let i=-1;i<22;i++){const x=(i-(bird.angle*3%1))*width/19,h=(.028+.056*hash(i,2,3))*height;ctx.fillRect(x,horizon-h,width/15,h+2);}
  ctx.fillStyle='#996caa';ctx.fillRect(0,Math.max(0,horizon),width,height);
  const ix=Math.round(bird.x/tile),iz=Math.round(bird.z/tile);
@@ -220,10 +334,21 @@ function render(){
   if(d>1 && d<110)faces.push({person:h,d,layer:0});
  }
  paint();
- const p=payload(),tt=landingTime(p),aim=at(p,tt);
- for(let i=1;i<=16;i++){const t=tt*i/16;sprite(...at(p,t),.067,i%2?'#fffce7':'#434e54');}
- const ring=point(aim);if(ring){const radius=clamp(1.5*scale/Math.max(1,cameraPoint(aim)[2]),8,65);
- ctx.strokeStyle='#443c36';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(...ring,radius,radius*(above?.91:.43),0,0,tau);ctx.stroke();ctx.lineWidth=2;ctx.strokeStyle='#ffda58';ctx.stroke();}
+ const headTime=flightTime(p,1.8);
+ let target=null;
+ if(headTime>=0 && headTime<=tt){
+  const [hx,,hz]=at(p,headTime);
+  target=people.find(h=>{
+   if(scored.has(h.id)||Math.abs(h.x-hx)>8||Math.abs(h.z-hz)>8)return false;
+   const step=3*Math.sin((elapsed+headTime)*.52+h.walkPhase);
+   return Math.hypot(h.baseX+(h.cross?step:0)-hx,h.baseZ+(h.cross?0:step)-hz)<1.65;
+  });
+ }
+ // Move dashes down the arc, with a fixed pixel size even far above the street.
+ for(let i=0;i<12;i++){
+  const t=tt*(i+(elapsed*4%1))/12,pos=point(at(p,t));
+  if(pos){ctx.fillStyle='#473454';ctx.beginPath();ctx.arc(...pos,2.8,0,tau);ctx.fill();ctx.fillStyle='#fffaf0';ctx.beginPath();ctx.arc(...pos,1.6,0,tau);ctx.fill();}
+ }
  let prior=null;
  for(const d of drops){
   const pos=at(d,d.age),tail=at(d,Math.max(0,d.age-.055));
@@ -240,6 +365,16 @@ function render(){
  }
  for(const hit of stains.slice(-18)){const age=elapsed-hit.t;if(age>.45)continue;
   for(let k=0;k<6;k++){const a=k*tau/6,r=.4+age*4;sprite(hit.x+r*Math.cos(a),hit.y+.18+5*age-9*age*age,hit.z+r*Math.sin(a),.16*(1-age), '#fff');}
+ }
+ const ring=point(target?at(p,headTime):aim);
+ if(ring)drawSight(ring,target);
+ const last=stains.at(-1);
+ if(last && elapsed-last.t<.7){
+  const hitPoint=point([last.x,last.y+.12,last.z]);
+  if(hitPoint){
+   const age=elapsed-last.t;ctx.save();ctx.globalAlpha=1-age/.7;
+   ctx.strokeStyle='#472b4b';ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(...hitPoint,12+age*24,7+age*12,0,0,tau);ctx.stroke();ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.stroke();ctx.restore();
+  }
  }
  if(drops.length || (stains.length && elapsed-stains.at(-1).t<1.2)) impactView(aim);
  renderBird();
