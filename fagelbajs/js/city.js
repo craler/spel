@@ -2,7 +2,7 @@
 // City layout. Every 42 m tile is one block: roads on the tile lines, a sidewalk ring, then the block itself.
 // Block types: 0 houses, 1 park, 2 square. The type table repeats every 64 blocks and is also sent to the ground shader.
 const CITY=64, cityType=new Uint8Array(CITY*CITY);
-for(let j=0;j<CITY;j++)for(let i=0;i<CITY;i++){const h=hash(i,j,41);cityType[i+j*CITY]=h<.13?1:h<.27?2:0;}
+for(let j=0;j<CITY;j++)for(let i=0;i<CITY;i++){const h=hash(i,j,41);cityType[i+j*CITY]=(i&15)===5?3:h<.13?1:h<.27?2:0;} // every sixteenth column of blocks is a canal
 const setType=(i,j,t)=>{cityType[(i&63)+(j&63)*CITY]=t;};
 // The first thing the player sees: a park on the left, a square ahead on the right.
 setType(0,0,0);setType(-1,0,1);setType(0,1,2);setType(-1,1,0);setType(0,-1,0);setType(-1,-1,0);
@@ -14,18 +14,22 @@ const blockCache=new Map();
 function block(i,j){
  const key=i+','+j;let b=blockCache.get(key);if(b)return b;
  const x=i*tile,z=j*tile,type=blockType(i,j),R=n=>hash(i,j,n);
- b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],food:[],folk:[],parked:[],statue:null};
+ b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],food:[],folk:[],parked:[],statue:null,cleaner:null};
  // Heights follow whole 3.1 m storeys so the window rows line up with the roof.
  const storeys=(n,lo,hi)=>3.1*(lo+Math.floor(R(n)*(hi-lo+1)))+.8;
  const add=(a,c,w,d,h,n)=>b.blds.push([x+a,z+c,w,d,h,Math.floor(R(n)*wallPaint.length),R(n+1)]);
  const food=(fx,fy,fz)=>b.food.push({id:key+':'+b.food.length,x:x+fx,y:fy,z:z+fz});
  if(type===0){
-  const v=Math.floor(R(5)*4);
+  const v=Math.floor(R(5)*6);
   if(v===0){add(10,10,11,10,storeys(3,1,8),30);add(24,22,9,12,storeys(6,2,12),32);
    b.trees.push([x+28,z+14,1+R(9)*.4,R(10)],[x+14,z+28,1.1+R(11)*.4,R(12)]);}
   else if(v===1){add(9,9,24,8,storeys(3,2,7),30);add(9,25,24,8,storeys(6,2,9),32);}
   else if(v===2){add(11,11,20,20,storeys(3,5,12),30);}
+  else if(v===4){add(9,9,24,24,storeys(3,1,2),30);add(15,15,12,12,storeys(6,7,12),32);} // a tower on a podium
+  else if(v===5){add(9,9,15,24,storeys(3,3,6),30);add(26,13,7,16,storeys(6,6,11),32);}
   else{add(9,9,10,10,storeys(3,1,6),30);add(23,9,10,10,storeys(6,2,9),32);add(9,23,10,10,storeys(7,2,10),34);add(23,23,10,10,storeys(8,1,5),36);}
+  const tall=b.blds.find(q=>q[4]>18&&q[1]-z<12);
+  if(tall&&R(160)<.6)b.cleaner=[tall[0]+tall[2]/2,tall[1]-.75,tall[4],R(161)*9];
   if(R(13)<.55)for(let n=0;n<4;n++){ // street trees along two sides
    b.trees.push([x+11+n*6.8,z+5.9,.62+R(14+n)*.2,R(18+n)],[x+5.9,z+11+n*6.8,.62+R(22+n)*.2,R(26+n)]);}
  }else if(type===1){
@@ -35,7 +39,7 @@ function block(i,j){
   // Picnics on the lawn: the food sits low, so you have to skim the grass.
   for(let n=0;n<3;n++){const a=n*tau/3+R(40)*tau,fx=21+Math.cos(a)*3.8,fz=21+Math.sin(a)*3.8;food(fx,.75,fz);
    b.folk.push({x:x+fx+1.2,z:z+fz+.5,c:colors[n+1],base:15,label:'PICKNICK',shout:'MIN MACKA!'});}
- }else{
+ }else if(type===2){
   b.statue=[x+21,z+21];b.blds.push([x+20.1,z+20.1,1.8,1.8,5.6,-1,0]); // the plinth is solid, drawn as a statue
   const spots=[[12,12],[30,12],[12,30],[30,30],[21,10.5],[21,31.5]];
   for(const [n,[sx,sz]] of spots.entries()){

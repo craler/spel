@@ -68,6 +68,13 @@ vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec
  if(n.y>.5){vec2 e=min(lp.xz,size.xz-lp.xz);
   return min(e.x,e.y)<.32?base*.5:vec3(.17,.17,.18)*(.8+.4*vnoise(lp.xz*1.7+seed*40.));}
  bool sideX=abs(n.x)>.5;float u=sideX?lp.z:lp.x,w=sideX?size.z:size.x,y=lp.y;
+ if(fract(seed*17.)<.2){ // glass curtain wall
+  vec2 g=vec2(fract(u/1.7),fract(y/3.1));spec=1.;
+  if(g.x<.05||g.y<.07){spec=0.;return vec3(.2,.21,.22);}
+  float r=h21(vec2(floor(u/1.7)+floor(n.x*3.+n.z*7.+.25)*17.,floor(y/3.1))+seed*53.);
+  if(r>.8)em=vec3(1.,.72,.4)*(r-.6)*1.5*uGlow;
+  return mix(vec3(.02,.05,.07),uSkyCol*.35,.35+.5*r);
+ }
  float bay=2.3+fract(seed*7.)*.9,cnt=max(1.,floor((w-.9)/bay)),m=(w-cnt*bay)*.5;
  float fu=(u-m)/bay,fy=y/3.1;vec2 f=vec2(fract(fu),fract(fy));
  vec2 cell=vec2(floor(fu)+floor(n.x*3.+n.z*7.+.25)*17.,floor(fy));
@@ -130,6 +137,9 @@ void main(){
    if(e<.2)c=vec3(.4,.4,.38);
   }else if(type<.5){
    c=mix(grass,gravel*.8,smoothstep(.45,.6,vnoise(p*.22+7.)));
+  }else if(type>2.5){ // canal: stone quay, then moving water
+   float wave=vnoise(p*.9+vec2(uTime*.35,uTime*.2))+.5*vnoise(p*2.7-uTime*.5);
+   c=e<3.6?vec3(.2,.19,.18):vec3(.012,.05,.065)*(.7+.5*wave)+uSkyCol*.05;spec=e<3.6?0.:.5+.5*wave;
   }else if(type<1.5){
    vec2 r=q-21.;c=grass*1.15;
    if(min(abs(r.x-r.y),abs(r.x+r.y))<1.5||abs(length(r)-7.4)<1.||e<4.2)c=gravel;

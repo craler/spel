@@ -113,9 +113,9 @@ function renderBird(){
    const upper=Math.min(.43,u),outer=Math.max(0,u-.43);
    const flexible=joint?Math.max(0,outer-.22):0;
    const reach=upper*Math.cos(elbowAngle)+(outer-flexible)*Math.cos(tipAngle)+flexible*Math.cos(joint?.tip??tipAngle);
-   return [side*(.089+reach*(1-.82*fl)),
+   return [side*(.089+reach*(1-.93*fl)),
     .101+upper*Math.sin(elbowAngle)+(outer-flexible)*Math.sin(tipAngle)+flexible*Math.sin(joint?.tip??tipAngle)+y,
-    .095+chord+.14*Math.sin(u*Math.PI)-.27*u*u-.59*u*fl];
+    .095+chord+.14*Math.sin(u*Math.PI)-.27*u*u-.78*u*fl];
   }
   const patch=(pts,color)=>plain(pts.map(v=>wing(...v)),color);
   // Rounded secondary feathers broaden the trailing edge near the body.
@@ -200,6 +200,14 @@ const M={
  people:[['#dba27e','#33271f','#2b323d',0],['#8a5a3c','#1d1612','#3a4a66',1],['#f0c4a4','#b9853e','#4a4038',1],['#c68a5e','#2a2019','#5c5f66',0],['#e6b08c','#7a3b1e','#2f3d55',0]].map(([skin,hair,pants,long])=>personMesh(rgb(skin),rgb(hair),rgb(pants),long)),
  umbrella:new Mesh().tube(0,2.02,2.42,0,.85,.03,WHITE,1,0,0,10,false).tube(.2,1.15,2.4,.1,.014,.014,rgb('#22252a'),0,0,0,5).build(),
  car:carMesh('sedan'),hatch:carMesh('hatch'),cab:carMesh('cab'),
+ bus:(()=>{const m=new Mesh(),glass=rgb('#17212d'),tyre=rgb('#141518'),hub=rgb('#aeb3b8');
+  m.loft([[-5.2,.45,3,1.2,1.15],[5,.45,3,1.2,1.15],[5.2,.55,2.3,1.15,1.1]],WHITE,1);
+  m.box(-1.22,1.55,-4.8,1.22,2.55,4.5,glass).box(-1.05,1.5,5.0,1.05,2.6,5.22,glass).box(-1.21,.45,-5.21,1.21,.75,5.21,rgb('#1c1d21'));
+  for(const sx of [-1,1]){for(const z of [-3.4,3.3])m.wheel(sx*1.15,.5,z,.5,.3,sx,tyre,hub);m.box(sx*.8-.2,.8,5.2,sx*.8+.2,1,5.24,rgb('#fff2c4'));m.box(sx*.8-.2,.8,-5.24,sx*.8+.2,1.05,-5.2,rgb('#b3201c'));}
+  return m.build();})(),
+ box:new Mesh().box(0,0,0,1,1,1,WHITE,1).build(),
+ big:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,14,8).build(),
+ boat:new Mesh().loft([[-1.7,.02,.5,.2,.4],[-.9,0,.52,.55,.78],[.9,0,.52,.55,.78],[1.8,.12,.58,.08,.16]],WHITE,1).box(-.6,.3,-.2,.6,.36,.1,[.6,.6,.6],1).build(),
  tank:(()=>{const m=new Mesh(),track=[.22,.22,.2],steel=[.5,.5,.48];
   m.loft([[-3.3,.6,1.15,1.45,1.3],[-3,.5,1.55,1.55,1.4],[2.3,.5,1.55,1.55,1.4],[3.3,.65,1.1,1.45,1.3]],WHITE,1);
   for(const sd of [-1,1]){m.box(sd*1.55-.38,0,-3.35,sd*1.55+.38,.95,3.35,track,0,0,0,.9);for(let i=0;i<5;i++)m.wheel(sd*1.95,.48,-2.5+i*1.25,.44,.12,sd,track,steel);}
@@ -275,7 +283,7 @@ function splatMesh(upright){
 }
 M.cube.cull=true;
 const statics=[M.cube,M.tree,M.lamp,M.table,M.stall,M.bench,M.statue];
-const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.tank,M.turret,M.ball,M.food];
+const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.boat,M.ball,M.food];
 const decals=[M.splat,M.splatWall,M.drip,M.disc];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 let staticKey='';
@@ -300,7 +308,7 @@ function buildStatics(){
  }
  for(const m of statics)m.upload();
 }
-const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#5e6b30'), amber=rgb('#ffb020'), rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
+const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#5e6b30'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
  for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
@@ -321,11 +329,12 @@ function buildMoving(){
   if(h.bride&&!down)M.ball.add(h.x,h.y+.55,h.z,0,.42,.55,.42,splatCol);
  }
  for(const c of cars){
-  (c.cab?M.cab:c.hatch?M.hatch:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
+  (c.bus?M.bus:c.cab?M.cab:c.hatch?M.hatch:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
+  if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol);
   const alarm=alarms.get(c.id);
   if(alarm!==undefined){ // hit while parked: a white cap on the roof and, for a while, flashing indicators
    M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol);
-   if(elapsed-alarm<6&&(elapsed*3.3)%1<.5)for(const sx of [-1,1])for(const sz of [-1,1]){
+   if(elapsed-alarm<9&&(elapsed-alarm)%.9<.5)for(const sx of [-1,1])for(const sz of [-1,1]){
     const lx=sx*.8,lz=sz*1.95,sn=Math.sin(c.yaw),cs=Math.cos(c.yaw);M.ball.add(c.x+lx*cs+lz*sn,.72,c.z-lx*sn+lz*cs,0,.14,.1,.14,amber,2);}
   }
   if(wrecks.has(c.id)){
@@ -348,6 +357,19 @@ function buildMoving(){
   if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.ball.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol);}
  }
  if(bird.snare>0)drawNet(bird.x,bird.y+.25,bird.z,1,true);
+ // Star targets with their props: window cleaners on a lift, rowing boats on the canal, hot-air balloons.
+ for(let i=Math.floor(bird.x/tile)-3;i<=Math.floor(bird.x/tile)+3;i++)for(let j=Math.floor(bird.z/tile)-3;j<=Math.floor(bird.z/tile)+3;j++){
+  const b=block(i,j);
+  if(b.cleaner){const [cx,cz,top,s]=b.cleaner,y=2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s));M.box.add(cx-1.3,y-.14,cz-.5,0,2.6,.14,1.1,rgb('#8a8d90'));
+   for(const sx of [-1.25,1.25])ribbon([cx+sx,y,cz+.5],[cx+sx,top,cz+.6],.025);}
+  if(b.type===3){const q=boatAt(b);M.boat.add(q.x,.04,q.z,q.yaw,1,1,1,rgb('#8a5a34'));}
+ }
+ for(const q of balloons()){
+  M.big.add(q.x,q.y+7,q.z,q.hue*9,5.5,6.4,5.5,rgb(balloonPaint[Math.floor(q.hue*40)%balloonPaint.length]));
+  M.big.add(q.x,q.y+1.2,q.z,0,1.5,2.6,1.5,rgb('#e9e4d6'));M.box.add(q.x-.8,q.y-.7,q.z-.8,0,1.6,1.3,1.6,rgb('#7a5a34'));
+  for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]])ribbon([q.x+sx*.75,q.y+.6,q.z+sz*.75],[q.x+sx*2.6,q.y+3.2,q.z+sz*2.6],.03);
+  if(scored.has(q.id))M.ball.add(q.x,q.y+13.2,q.z,0,3,.5,3,splatCol);
+ }
  for(const t of tanks){
   const alive=t.hp>0,paint=alive?olive:charred;
   M.tank.add(t.x,0,t.z,t.yaw,1,1,1,paint);M.turret.add(t.x,0,t.z,alive?t.turret:t.turret+.5,1,1,1,paint);
@@ -512,7 +534,7 @@ function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt),playing=state==='play';
  if(!crash||!rig)setCamera(dt);
  buildStatics();buildMoving();
- drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.tank,M.turret,dyn,omen],[...statics,...moving,dyn],decals);
+ drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.boat,dyn,omen],[...statics,...moving,dyn],decals);
  ctx.clearRect(0,0,width,height);
  if(!crash&&state!=='menu'){
   drawThreats();
@@ -528,8 +550,9 @@ function render(dt=1/60){
   if(tank<.3&&!foodInView){const f=nearestFood();if(f)groundArrow([f.x,f.y,f.z],'MAT');}
   // Gold stars mark the targets that are worth going out of your way for.
   const star=(x,y,z)=>{const far=Math.hypot(x-bird.x,z-bird.z);if(far>150)return;const m=point([x,y,z]);if(m)text('★',m[0],m[1],14+7*clamp(1-far/90,0,1),'#ffd24a');};
-  for(const h of people)if(h.base>=60&&!scored.has(h.id))star(h.x,h.y+2.9,h.z);
-  for(const c of cars)if(c.cab&&!wrecks.has(c.id))star(c.x,2.7,c.z);
+  for(const h of people)if((h.star||h.base>=60)&&!scored.has(h.id))star(h.x,h.y+2.9,h.z);
+  for(const c of cars)if((c.cab||c.bus)&&!wrecks.has(c.id))star(c.x,c.bus?4.2:2.7,c.z);
+  for(const q of balloons())if(!scored.has(q.id))star(q.x,q.y+15,q.z);
   for(let i=Math.floor(bird.x/tile)-3;i<=Math.floor(bird.x/tile)+3;i++)for(let j=Math.floor(bird.z/tile)-3;j<=Math.floor(bird.z/tile)+3;j++){
    const b=block(i,j);if(b.statue&&!scored.has('st'+b.key))star(b.statue[0],6.7,b.statue[1]);
   }
@@ -574,7 +597,7 @@ function render(dt=1/60){
  hud('meter-label',wanted===maxWanted?'MAXKAOS':'KAOS '+number(points)+' / '+number(hi));
  hud('stars','★'.repeat(wanted)+'☆'.repeat(maxWanted-wanted));hud('points',number(points));
  const level=Math.round(tank*100)+'%',bar=$('tank-fill');if(bar.style.width!==level)bar.style.width=level;
- $('reserve').classList.toggle('low',tank<.3||emptyTank);hud('tank-label',emptyTank?'TOMT – HITTA MAT':'BAJS');
+ $('reserve').classList.toggle('low',tank<.3||emptyTank);hud('tank-label',emptyTank?'SLUT PÅ BAJS':'BAJS');
  for(const [i,el] of [...$('feathers').children].entries())el.classList.toggle('lost',i>=feathers);
  if(wanted){hud('time',Math.floor(elapsed/60)+':'+String(Math.floor(elapsed%60)).padStart(2,'0'));hud('time-label','JAKT PÅGÅR');}
  else{hud('time',String(Math.max(0,Math.ceil(60-elapsed))));hud('time-label','SEKUNDER KVAR');}
@@ -584,7 +607,12 @@ function render(dt=1/60){
  $('chip').classList.toggle('warn',stall);
  // Sound and mood that follow the frame.
  windLevel();
- if(sound){whistle(playing?bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-14)/38,0,1):0);sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);}
+ if(sound){whistle(playing?bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-14)/38,0,1):0);sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);
+  // The nearest ringing car alarm: horn on, horn off, quieter and duller with distance.
+  let horn=0;
+  if(playing)for(const c of cars){const since=elapsed-(alarms.get(c.id)??-99);
+   if(since<9&&since%.9<.5){const near=clamp(1-Math.hypot(c.x-bird.x,bird.y,c.z-bird.z)/120,0,1);horn=Math.max(horn,.2*near*near*near);}}
+  alarmHorn(horn);}
  const fear=playing&&hawk?hawk.dread*(.8+.2*Math.sin(elapsed*9)):0,veil=$('dread');
  if(Math.abs(fear-(+veil.style.opacity||0))>.01)veil.style.opacity=fear.toFixed(2);
 }

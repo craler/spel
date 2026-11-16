@@ -49,7 +49,7 @@ const armSpeed=17, missiles=['tomato','banana','egg','cabbage','shoe'];
 function snare(time){
  if(shield>0||state!=='play')return;
  bird.snare=time;shield=time+.9;shake=.7;combo=0;comboTime=0;
- banner('INSNÄRJD','Nätet drar dig nedåt – håll upp nosen tills du är loss','hurt',time);burst({from:1400,to:200,gain:.4,dur:.25});
+ banner('INSNÄRJD','Håll upp nosen','hurt',time);burst({from:1400,to:200,gain:.4,dur:.25});
 }
 function updateThreats(dt){
  if(wanted){
@@ -105,7 +105,8 @@ function updateMist(dt){
 function carContact(c,x,y,z,r=0){
  const sn=Math.sin(c.yaw),cs=Math.cos(c.yaw),dx=x-c.x,dz=z-c.z;
  const side=dx*cs-dz*sn,along=dx*sn+dz*cs;
- const depths=[.92+r-Math.abs(side),2.05+r-Math.abs(along),1.48+r-y];
+ const [wide,long,high]=c.bus?[1.25,5.2,3]:[.92,2.05,1.48];
+ const depths=[wide+r-Math.abs(side),long+r-Math.abs(along),high+r-y];
  const depth=Math.min(...depths);if(depth<0)return null;
  const sign=Math.sign;
  const n=depth===depths[2]?[0,1,0]:depth===depths[0]?[sign(side)*cs,0,-sign(side)*sn]:[sign(along)*sn,0,sign(along)*cs];
@@ -136,13 +137,13 @@ function checkFeats(){
   feedLine('BEDRIFT: '+name.toUpperCase());tone(660,990,.12,'triangle',.06);tone(990,1320,.18,'triangle',.06,.11);
  }
 }
-function featList(){
- return '<details class="feats"><summary>Bedrifter '+done.size+' / '+feats.length+'</summary><ul>'+
+function featList(open){
+ return '<details class="feats"'+(open?' open':'')+'><summary>Bedrifter '+done.size+' / '+feats.length+'</summary><ul>'+
   feats.map(([id,name,text])=>'<li class="'+(done.has(id)?'done':'')+'"><b>'+name+'</b> '+text+'</li>').join('')+'</ul></details>';
 }
 // ---- Feedback: banner for big moments, a score feed by the sight, numbers and speech bubbles in the world.
 let popups=[],feed=[],bubbles=[],splash=[],marker=-9,markerGold=false,bannerUntil=0,lastDrop=-9,lastBubble=-9;
-const wantedNote=['','Nu kastar de frukt – väj undan','De klättrar upp på taken efter dig','Paraplyerna åker fram','En hök har fått syn på dig','Stridsvagnarna rullar in – akta näten'];
+const wantedNote=['','De kastar frukt','De klättrar upp på taken','Paraplyer och nät','Höken kommer','Stridsvagnar'];
 const shouts=['USCH!','ÄSCH!','MEN VA?!','MIN FRISYR!','FY BUBBLAN!','NEEEJ!','MITT I NYLLET!','BLÄ!','DUVJÄKEL!','INTE IGEN!'];
 function banner(title,sub='',kind='',time=2.2){
  const el=$('feedback'),big=document.createElement('strong');el.className=kind;el.textContent='';big.textContent=title;el.append(big);
@@ -152,7 +153,7 @@ function banner(title,sub='',kind='',time=2.2){
 function feedLine(label,amount=0,tags=''){feed.unshift({label:label.replace(/!+$/,''),amount,tags,t:elapsed});if(feed.length>5)feed.length=5;}
 function bubble(x,y,z,text){if(elapsed-lastBubble<.2)return;lastBubble=elapsed;bubbles.push({x,y,z,text,t:elapsed});if(bubbles.length>8)bubbles.shift();}
 // The spray fans out on the way down, so the area it can hit grows with the fall.
-function hitRadius(fall){return clamp(1.65+(fall-10)*.0325,1.65,3.6);}
+function hitRadius(fall){return clamp(1.4+(fall-6)*.075,1.4,6.5);}
 function splashAt(x,y,z,n,nx=0,nz=0){
  for(let k=0;k<n;k++){const a=Math.random()*tau,s=1.2+2.6*Math.random();
   splash.push({x,y:y+.05,z,vx:Math.cos(a)*s+nx*2.5,vy:1.5+3*Math.random(),vz:Math.sin(a)*s+nz*2.5,age:0,life:.35+.3*Math.random()});}
@@ -179,9 +180,10 @@ function addPoints(n){
 function award(base,label,p,targetY=0,pos){
  // Risk pays: releasing low or in a dive doubles the hit, quick successive hits build a combo.
  let mult=1;const tags=[];
- if(p){if(p.dive){mult*=2;tags.push('STÖRTDYK ×2');}if(p.alt-targetY<14){mult*=2;tags.push('LÅGFLYG ×2');}}
+ // From high up the spray covers a wide area, so those hits are only worth half.
+ if(p){if(p.dive){mult*=2;tags.push('STÖRTDYK ×2');}if(p.alt-targetY<14){mult*=2;tags.push('LÅGFLYG ×2');}else if(p.alt-targetY>38){mult*=.5;tags.push('HÖG HÖJD ×½');}}
  combo=comboTime>0?combo+1:1;comboTime=2.6;bestCombo=Math.max(bestCombo,combo);
- const amount=Math.round(base*mult*(1+.25*Math.min(8,combo-1)));
+ const amount=Math.max(1,Math.round(base*mult*(1+.25*Math.min(8,combo-1))));
  hits++;feedLine(label,amount,tags.join(' · '));
  if(pos)popups.push({x:pos[0],y:pos[1],z:pos[2],text:'+'+amount,t:elapsed,gold:mult>1});
  marker=elapsed;markerGold=mult>1;hitTick(base>=25||mult>1,1+.035*Math.min(10,combo-1));
@@ -196,7 +198,7 @@ function reset(){
  bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9,nextFlap:2,burst:0,lookYaw:0,lookPitch:0,glance:0,nextGlance:1,snare:0};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }
 // body is HTML built from the game's own strings and numbers.
-function panel(heading,body,action){$('title').textContent=heading;$('brief').innerHTML=body;$('record').textContent='';$('feats').textContent='';$('go').textContent=action;$('overlay').hidden=false;document.body.classList.add('menu');$('go').focus();}
+function panel(heading,body,action){$('title').textContent=heading;$('brief').innerHTML=body;$('brief').hidden=false;$('view').hidden=true;$('go').textContent=action;$('overlay').hidden=false;document.body.classList.add('menu');$('go').focus();}
 function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','<p class="cause">Duvan väntar där du lämnade den.</p>','Fortsätt flyga →');}else if(state==='pause')start();}
 function start(){if(state!=='pause'){if($('save'))saveScore($('name').value); // starting again without pressing Spara still keeps the score
  reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;document.body.classList.remove('menu');$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
@@ -234,7 +236,7 @@ function drop(){
  }
  p.big=big;p.r=big?.19:.055+.05*hash(n,2,6);p.dark=n%4===0;
  p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.5;
- if(tank<1/60-1e-8){emptyTank=true;banner('TANKEN ÄR TOM','Sno mat vid de gula pilarna','hurt',2);}
+ if(tank<1/60-1e-8){emptyTank=true;banner('SLUT PÅ BAJS','Ät vid de gula pilarna','hurt',2);}
  for(let k=0;k<2;k++){const a=(n*2+k)*2.39996,drift=.65+hash(n,k,1)*1.5;
   mist.push({x:p.x,y:p.y,z:p.z,vx:p.vx+Math.cos(a)*drift,vy:p.vy*.85+Math.sin(a),vz:p.vz+Math.sin(a)*drift,age:0,life:.65+hash(k,n,3)*.8});}
 }
@@ -243,8 +245,9 @@ function simulate(dt){
  let steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
  // Caught in a net: barely any steering, no climbing, and the weight of it pulls the bird down. Holding the nose up shortens it.
  if(b.snare>0){b.snare-=dt*(pitch>0?1.6:1);steer*=.3;pitch=Math.min(pitch,0);b.vy-=13*dt;b.speed=Math.max(9,b.speed-9*dt);}
- if(!dive&&b.fold>.65&&b.wasDiving){b.flare=Math.max(0,b.speed-14)*.95;tone(200,430,.2,'sine',.035);}
- b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*10));b.bank=mix(b.bank,steer,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold);
+ if(!dive&&b.fold>.65&&b.wasDiving)tone(200,430,.25,'sine',.03);
+ // The wings fold and open over a moment, not instantly.
+ b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*(dive?4.5:3)));b.bank=mix(b.bank,steer,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold);
  // Ramp into the dive. A short tap makes a small range adjustment.
  const desiredSteep=pitch<0?1:0;
  b.steep+=clamp(desiredSteep-b.steep,-dt*(pitch>0?2.4:1.45),dt*1.1);
@@ -254,7 +257,9 @@ function simulate(dt){
  b.climb=mix(b.climb,targetClimb,1-Math.exp(-dt*(targetClimb?.92:2.7)));
  const stallSoftness=clamp((b.climb-.87)/.13,0,1);
  const wantedVy=19*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82;
- const acceleration=dive?-40-b.vy*.19:(wantedVy-b.vy)*2.7;
+ // Tucked, the bird simply falls: gravity builds the speed up against air drag, towards about 50 m/s.
+ // Opening the wings turns that fall into level flight in a smooth pull-out.
+ const acceleration=dive?-27*b.fold-.53*b.vy:(wantedVy-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
  b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
  // Gliding is mostly still wings, broken now and then by a short burst of flapping. Climbing is hard work.
@@ -265,12 +270,17 @@ function simulate(dt){
  b.nextGlance-=dt;if(b.nextGlance<=0){b.glance=Math.random()<.35?0:(Math.random()-.5)*1.3;b.nextGlance=.7+2.6*Math.random();}
  b.lookYaw=mix(b.lookYaw,clamp(b.bank*.55+b.glance,-.9,.9),1-Math.exp(-dt*7));
  b.lookPitch=mix(b.lookPitch,held('Space')?-.45:-.06+.1*Math.sin(elapsed*1.3),1-Math.exp(-dt*6));
- b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65+(14-b.speed)*(dive?.18:.55)-Math.max(0,b.vy)*.19)*dt,10,58);
+ // Speed won in a dive carries into the glide and bleeds off slowly; climbing spends it faster.
+ b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65+(14-b.speed)*(dive?.18:b.speed>14?.13:.55)-Math.max(0,b.vy)*.45)*dt,10,58);
  b.x+=Math.sin(b.angle)*forwardSpeed()*dt;b.z+=Math.cos(b.angle)*forwardSpeed()*dt;
  trafficFactor=mix(trafficFactor,1+.61*wanted,1-Math.exp(-dt*1.5));trafficClock+=dt*trafficFactor;traffic();
  if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
  if(b.y<3){const tank=tanks.find(t=>tankContact(t,b.x,b.y,b.z,.28));if(tank){startCrash({n:[0,1,0],depth:0,vehicle:true,cause:'Stridsvagnen vann.'});return;}}
- if(b.y<1.77){const vehicle=cars.find(c=>carContact(c,b.x,b.y,b.z,.28));if(vehicle){const surface=carContact(vehicle,b.x,b.y,b.z,.28);crashCar(vehicle);startCrash(surface);return;}}
+ for(const q of balloons()){ // hot-air balloons are solid
+  const d=Math.hypot(b.x-q.x,b.y-q.y-7,b.z-q.z);
+  if(d<5.8||(Math.abs(b.x-q.x)<1.1&&Math.abs(b.z-q.z)<1.1&&b.y>q.y-.9&&b.y<q.y+1)){startCrash({n:[(b.x-q.x)/d,(b.y-q.y-7)/d,(b.z-q.z)/d],depth:0,cause:'Luftballongen vann.'});return;}
+ }
+ if(b.y<3.3){const vehicle=cars.find(c=>carContact(c,b.x,b.y,b.z,.28));if(vehicle){const surface=carContact(vehicle,b.x,b.y,b.z,.28);crashCar(vehicle);startCrash(surface);return;}}
  // Skimming a wall, a roof edge or the ground at speed without touching pays a little.
  if(solid(b.x,b.y,b.z,1.15)&&Math.hypot(forwardSpeed(),b.vy)>12)b.skim+=dt;
  else{if(b.skim>.12&&elapsed-b.lastSkim>2){b.lastSkim=elapsed;feedLine('NÄRA ÖGAT',10);addPoints(10);tone(900,1300,.07,'triangle',.04);}b.skim=0;}
@@ -279,9 +289,14 @@ function simulate(dt){
  if(b.effort>.5&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
  gather(dt);updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateTanks(dt);updateFood();if(state!=='play')return;
+ const floating=balloons();
  drops=drops.filter(p=>{
   const prev=p.age;p.age+=dt;const end=p.end;
   const [x0,y0,z0]=at(p,prev),[x1,y1,z1]=at(p,Math.min(end,p.age));
+  for(const q of floating)if(Math.hypot(x1-q.x,y1-q.y-7,z1-q.z)<5.7){
+   if(!scored.has(q.id)){scored.add(q.id);award(80,'LUFTBALLONGEN',p,q.y+12,[q.x,q.y+14,q.z]);bubble(q.x,q.y+1.6,q.z,'VI SJUNKER!');splat(x1,y1,z1,true);}
+   return false;
+  }
   if(y1<y0){
    const victim=people.find(h=>{
     const head=h.y+1.8;if(head>y0||head<y1||scored.has(h.id))return false;
@@ -312,10 +327,10 @@ function simulate(dt){
    const [x,,z]=at(p,carTime),vehicle=cars.find(c=>carContact(c,x,1.47,z,extra));
    if(vehicle){
     if(vehicle.parked){ // a parked car cannot crash, but its alarm goes off
-     if(!alarms.has(vehicle.id)){alarms.set(vehicle.id,elapsed);run.alarms++;award(5,'BILLARM',p,0,[vehicle.x,2.5,vehicle.z]);carAlarm(Math.hypot(vehicle.x-bird.x,vehicle.z-bird.z));}
+     if(!alarms.has(vehicle.id)){alarms.set(vehicle.id,elapsed);run.alarms++;award(5,'BILLARM',p,0,[vehicle.x,2.5,vehicle.z]);}
     }else if(!wrecks.has(vehicle.id)){
-     crashCar(vehicle);carsHit++;award(vehicle.cab?50:25,vehicle.cab?'CABBEN':'PLÅTSMÄLL',p,0,[vehicle.x,2.5,vehicle.z]);
-     bubble(vehicle.x,2.3,vehicle.z,vehicle.cab?'MIN FRISYR!':'MIN LACK!');
+     crashCar(vehicle);carsHit++;award(vehicle.bus?40:vehicle.cab?50:25,vehicle.bus?'BUSSEN':vehicle.cab?'CABBEN':'PLÅTSMÄLL',p,0,[vehicle.x,vehicle.bus?4:2.5,vehicle.z]);
+     bubble(vehicle.x,vehicle.bus?3.8:2.3,vehicle.z,vehicle.bus?'ALLA AV!':vehicle.cab?'MIN FRISYR!':'MIN LACK!');
     }
     splashAt(vehicle.x,1.5,vehicle.z,4);splat(x,1.5,z);return false;
    }

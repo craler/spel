@@ -22,7 +22,7 @@ function walkToward(r,dest,step){
 }
 function pedestrian(i,j,k,dt){
  const id=i+','+j+','+k,phase=hash(i,j,k)*tau,perimeter=4*sidewalkLength,blds=block(i,j).type?[]:buildings(i,j);
- const home=k*perimeter/8+phase,walk=k%2?1.15:-.95;
+ const home=k*perimeter/8+phase,walk=(k%2?1.15:-.95)*(jogger(i,j,k)?3.6:1);
  const when=fallen.get(id)??elapsed;
  let route=home+walk*when,y=0,[x,z]=pavement(i,j,route),climbing=false,running=false;
  const side=Math.floor(wrap(route,perimeter)/sidewalkLength);
@@ -60,10 +60,28 @@ function pedestrian(i,j,k,dt){
 
 const brokeUmb=new Set(), eaten=new Map(), alarms=new Map();
 let hawk=null;
+// ---- High-value targets (gold stars): they move, which is what makes them worth more.
+function jogger(i,j,k){return k===7&&hash(i,j,91)<.4;}
+function boatAt(b){const s=elapsed*.22+b.i*1.7+b.j;return {x:b.x+21+4*Math.sin(s*.6),z:b.z+21+10*Math.sin(s),yaw:Math.cos(s)>0?0:Math.PI};}
+function balloons(){
+ const out=[],S=168,ci=Math.round(bird.x/S),cj=Math.round(bird.z/S);
+ for(let i=ci-1;i<=ci+1;i++)for(let j=cj-1;j<=cj+1;j++){
+  const h=hash(i,j,55);if(h<.45)continue;const s=h*40;
+  out.push({id:'bal'+i+','+j,hue:h,x:i*S+84+30*Math.sin(elapsed*.06+s),y:44+7*Math.sin(elapsed*.1+s),z:j*S+84+30*Math.cos(elapsed*.05+s)});
+ }
+ return out;
+}
 function gather(dt=0){
  people=[];const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile);
  for(let i=ix-2;i<=ix+2;i++)for(let j=iz-2;j<=iz+2;j++){
-  for(let k=0;k<8;k++)people.push(pedestrian(i,j,k,dt));
+  for(let k=0;k<8;k++){
+   const h=pedestrian(i,j,k,dt);
+   if(jogger(i,j,k)){h.base=30;h.label='JOGGAREN';h.shout='MITT VARVREKORD!';h.star=true;h.c='#d9f03a';h.running=!scored.has(h.id);}
+   people.push(h);
+  }
+  const b=block(i,j),extra=(id,x,y,z,yaw,c,base,label,shout)=>people.push({x,y,z,id,i,j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:i+j,fixed:true,base,label,shout,star:true,umb:false});
+  if(b.cleaner){const [cx,cz,top,s]=b.cleaner;extra('win'+i+','+j,cx,2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s)),cz,0,'#e87a1e',60,'FÖNSTERPUTSAREN','MIN HINK!');} // rides a lift up and down the facade
+  if(b.type===3){const q=boatAt(b);extra('boat'+i+','+j,q.x,.3,q.z,q.yaw,'#e8e4da',45,'BÅTTUREN','MAN ÖVER BORD!');}
   // People who stay put: café guests, picnickers, the wedding party.
   for(const [n,f] of block(i,j).folk.entries())people.push({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,
    yaw:hash(i,j,n+300)*tau,running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false});
@@ -83,7 +101,7 @@ function traffic(){
     const id='car:'+across+','+lane+','+n;if(wrecks.has(id))continue;
     const along=n*spacing+offset,side=lane*tile+direction*1.45;
     cars.push({id,across,lane,along,direction,x:across?along:side,z:across?side:along,yaw:(across?Math.PI/2:0)+(direction<0?Math.PI:0),
-     speed:Math.abs(speed)*trafficFactor,cab:hash(lane,n,7+across)<.16,hatch:hash(lane,n,3)<.45,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
+     speed:Math.abs(speed)*trafficFactor,bus:hash(lane,n,11)<.09,cab:hash(lane,n,11)>=.09&&hash(lane,n,7+across)<.16,hatch:hash(lane,n,3)<.45,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
    }
   }
  }
@@ -166,7 +184,7 @@ function updateFood(){
  for(const f of nearbyFood()){
   if(Math.hypot(f.x-bird.x,f.z-bird.z)<2.3&&Math.abs(f.y-bird.y)<2.6){
    eaten.set(f.id,elapsed);tank=1;emptyTank=false;foodEaten++;
-   feedLine('MUMS – FULL TANK',5);addPoints(5);popups.push({x:f.x,y:f.y+1.2,z:f.z,text:'+5',t:elapsed});
+   feedLine('MUMS',5);addPoints(5);popups.push({x:f.x,y:f.y+1.2,z:f.z,text:'+5',t:elapsed});
    tone(520,880,.12);tone(880,1320,.12,'sine',.05,.1);
   }
  }
@@ -176,7 +194,7 @@ function hurt(text,surface){
  if(shield>0||state!=='play')return;
  if(--feathers>0){
   shield=1.5;bird.vy-=7;bird.speed=Math.max(10,bird.speed*.7);combo=0;comboTime=0;shake=1;
-  banner(text,feathers===1?'Sista fjädern – en smäll till och du störtar':feathers+' fjädrar kvar','hurt',1.9);tone(260,90,.25,'sawtooth',.06);
+  banner(text,feathers===1?'Sista fjädern':feathers+' fjädrar kvar','hurt',1.9);tone(260,90,.25,'sawtooth',.06);
   const fl=$('flash');fl.classList.remove('on');void fl.offsetWidth;fl.classList.add('on');return;
  }
  startCrash(surface);
@@ -189,7 +207,7 @@ function updateHawk(dt){
  const L=sky.dir,b=bird,fierce=wanted>=5;
  if(!hawk){
   hawk={x:b.x+L[0]*120,y:b.y+80,z:b.z+L[2]*120,vx:0,vy:0,vz:1,mode:'circle',t:fierce?5:7,orbit:0,flap:0,miss:99,tuck:0,dread:0,beat:0,size:2.3,bank:0,yaw:0};
-  banner('HÖKEN ÄR HÄR','Håll koll på skuggan – när den glider in över ditt sikte slår höken till','alert',4.2);screech();
+  banner('HÖKEN','Sväng när skuggan når siktet','alert',3.6);screech();
  }
  const h=hawk,ox=h.x,oy=h.y,oz=h.z,ease=rate=>1-Math.exp(-dt*rate);
  const steer=(tx,ty,tz,rate)=>{ // turn the velocity towards a direction by at most `rate` radians per second
@@ -254,7 +272,7 @@ function updateTanks(dt){
   // Arrive at a crossing a couple of blocks ahead of the bird, so flying straight on does not shake them off.
   const tx=Math.round((bird.x+Math.sin(bird.angle)*105)/tile)*tile,tz=Math.round((bird.z+Math.cos(bird.angle)*105)/tile)*tile,sx=Math.sign(tx-bird.x)||1;
   tanks.push({x:tx,z:tz,ax:0,dir:-sx,yaw:-sx*Math.PI/2,turret:0,hp:14,cool:3,aim:0,dead:0,splats:[],id:Math.random()});
-  if(tankWait>-90)banner('STRIDSVAGNAR','De skjuter nät. Sväng när de siktar – och dränk dem i bajs','alert',3.6);
+  if(tankWait>-90)banner('STRIDSVAGNAR','Sväng när de siktar','alert',3.2);
   tankWait=9;
  }
  for(const t of tanks){

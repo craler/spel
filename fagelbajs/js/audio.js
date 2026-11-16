@@ -130,17 +130,17 @@ function yelp(){
  g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(.2,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.26);
  osc.connect(bp);bp.connect(g);g.connect(master);osc.start(t);osc.stop(t+.3);
 }
-// A car alarm cycles through its patterns: rising whoops, a two-tone, then fast falling chirps.
-function carAlarm(distance){
- if(!master||muted)return;
- const vol=.08*clamp(1.2-distance/60,.15,1),osc=sound.createOscillator(),lp=sound.createBiquadFilter(),g=sound.createGain(),f=osc.frequency;
- let at=sound.currentTime;const t0=at;
- osc.type='square';lp.type='lowpass';lp.frequency.value=2800;
- for(let i=0;i<8;i++){f.setValueAtTime(650,at);f.linearRampToValueAtTime(1500,at+.23);at+=.25;}
- for(let i=0;i<8;i++){f.setValueAtTime(i%2?820:1240,at);at+=.19;}
- for(let i=0;i<14;i++){f.setValueAtTime(1550,at);f.linearRampToValueAtTime(720,at+.09);at+=.1;}
- g.gain.setValueAtTime(vol,t0);g.gain.setValueAtTime(vol,at-.3);g.gain.linearRampToValueAtTime(0,at);
- osc.connect(lp);lp.connect(g);g.connect(master);osc.start(t0);osc.stop(at);
+// A car alarm: the horn going on and off. Its level follows the distance to the car, so it fades as you fly away.
+let hornNodes=null;
+function alarmHorn(level){
+ if(!master)return;
+ if(!hornNodes){
+  const g=sound.createGain(),lp=sound.createBiquadFilter();g.gain.value=0;lp.type='lowpass';lp.frequency.value=1700;lp.connect(g);g.connect(master);
+  for(const f of [415,523]){const o=sound.createOscillator();o.type='sawtooth';o.frequency.value=f;o.connect(lp);o.start();}
+  hornNodes={g,lp};
+ }
+ hornNodes.g.gain.setTargetAtTime(level,sound.currentTime,.012);
+ hornNodes.lp.frequency.setTargetAtTime(500+1400*Math.min(1,level*12),sound.currentTime,.05); // far away it is also duller
 }
 // The dive: a thin whistle that climbs and swells with speed while the wings are tucked.
 let whistleNodes=null;
