@@ -9,15 +9,18 @@
 .panel .pitch-switch{background:transparent;box-shadow:none;border:0;text-decoration:underline;font-size:14px;margin-top:8px;padding:6px}
 @media(max-width:900px){.tools{top:auto;bottom:64px}.tools button{font-size:13px}}
 
-#crash-banner{position:fixed;top:56%;left:0;right:0;text-align:center;background:#161213a6;color:#ff545d;font:bold clamp(38px,8vw,104px)/1.1 system-ui;letter-spacing:-.055em;text-shadow:0 3px #260e18;pointer-events:none}
-body.crashed canvas{filter:grayscale(1) contrast(1.13);transition:filter .38s}
+#crash-banner{position:fixed;top:43%;left:0;right:0;padding:.12em 0;text-align:center;background:#17131788;color:#d94352;font:1000 clamp(38px,8vw,104px)/1.1 system-ui;letter-spacing:-.055em;text-shadow:0 3px #260e18;pointer-events:none}
+body.crashed canvas{animation:lose-color 2.5s ease-in-out both}
+@keyframes lose-color{from{filter:grayscale(0) contrast(1)}to{filter:grayscale(1) contrast(1.1)}}
+#crash-banner:not([hidden]){animation:reveal-word .85s ease-out both}
+@keyframes reveal-word{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 body.crashed .guide,body.crashed .tools,body.crashed #feedback{visibility:hidden}
 </style>
 <canvas id="world" aria-label="Flygspel med tangentbordsstyrning"></canvas>
 <div id="hud"><strong id="hits">0 träffar</strong><span id="time">60 s</span><span class="badge" id="mode">Glidflykt</span><span id="speed"></span></div>
 <div class="tools"><button id="camera">Vy: bakom</button><button id="invert" class="pitch-switch">Höjdroder</button><button id="audio">Ljud på</button><button id="pause">Paus</button></div>
 <div id="feedback"></div><div class="guide">A/D eller ←/→ sväng · <span id="pitch-guide">↓/S stig · ↑/W sjunk</span> · Shift dyk · håll Space för stråle · C byt vy</div>
-<div id="crash-banner" hidden>WASTED</div>
+<div id="crash-banner" hidden>wasted</div>
 <div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">En duva, en stad och 60 sekunder. Sikta med korset och håll Space för en stråle. Grönt betyder träffläge. Akta hustaken!</p><button id="go" autofocus>Ta sats och flyg →</button><button id="invert-menu" class="pitch-switch">Höjdroder</button><a href="../">Till Spelhörnan</a></section></div>
 <script>
 'use strict';
@@ -126,9 +129,12 @@ function simulate(dt){
  const steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
  if(!dive&&b.fold>.65&&b.wasDiving){b.flare=Math.max(0,b.speed-14)*.95;tone(200,430,.2,'sine',.035);}
  b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*10));b.bank=mix(b.bank,steer,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold);
- b.steep=mix(b.steep,pitch<0?1:0,1-Math.exp(-dt*(pitch<0?3.9:2.8)));
+ // Ramp into the dive. A short tap makes a small range adjustment.
+ const desiredSteep=pitch<0?1:0;
+ b.steep+=clamp(desiredSteep-b.steep,-dt*(pitch>0?2.4:1.45),dt*.92);
+ const diveCurve=b.steep*b.steep*(3-2*b.steep);
  const upLimit=clamp((82-b.y)/9,0,1);
- const wantedVy=(pitch>0?19*upLimit:pitch*(19+17*b.steep))+b.flare*.82;
+ const wantedVy=(pitch>0?19*upLimit:-36*diveCurve)+b.flare*.82;
  const acceleration=dive?-36-b.vy*.19:(wantedVy-b.vy)*2.7;
  b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
@@ -146,34 +152,78 @@ function simulate(dt){
  if((messageTime-=dt)<=0)$('feedback').textContent='';
  if(elapsed>=60){state='end';keys.clear();panel('Tiden är ute!',hits+' träffar på 60 sekunder. Ett varv till?','Flyg igen →');}
 }
-function startCrash(){
+// Resolve the nearest contact plane for the tumbling body, including roof edges.
+function contact(radius){
  const b=bird;
- let normal=[0,1,0];
- const ground=b.y<=.28;
- if(!ground){
-  const block=buildings(Math.floor(b.x/tile),Math.floor(b.z/tile)).find(([x,z,w,d,h])=>
-   b.x>=x-.28&&b.x<=x+w+.28&&b.z>=z-.28&&b.z<=z+d+.28&&b.y<=h+.28);
-  if(block){
-   const [x,z,w,d,h]=block;
-   normal=[[Math.abs(b.y-h),[0,1,0]],[Math.abs(b.x-x),[-1,0,0]],[Math.abs(b.x-x-w),[1,0,0]],[Math.abs(b.z-z),[0,0,-1]],[Math.abs(b.z-z-d),[0,0,1]]].sort((a,b)=>a[0]-b[0])[0][1];
-  }
+ if(b.y<=radius)return {n:[0,1,0],depth:radius-b.y,ground:true};
+ for(const [x,z,w,d,h] of buildings(Math.floor(b.x/tile),Math.floor(b.z/tile))){
+  const distances=[b.x-x+radius,x+w+radius-b.x,b.z-z+radius,z+d+radius-b.z,h+radius-b.y];
+  const depth=Math.min(...distances);
+  if(depth<0)continue;
+  const normals=[[-1,0,0],[1,0,0],[0,0,-1],[0,0,1],[0,1,0]];
+  return {n:normals[distances.indexOf(depth)],depth,ground:false};
  }
- if(ground)b.y=.07;
- crash={age:0,normal,ground};state='crash';keys.clear();tone(155,35,.34,'triangle');document.body.classList.add('crashed');
+ return null;
+}
+function bounce(surface,first){
+ const {n,depth}=surface,v=crash.velocity;
+ bird.x+=n[0]*(depth+.001);bird.y+=n[1]*(depth+.001);bird.z+=n[2]*(depth+.001);
+ const incoming=v.reduce((sum,value,i)=>sum+value*n[i],0);
+ if(incoming>=0)return;
+ const rebound=Math.abs(incoming)*(first?.48:.31);
+ for(let i=0;i<3;i++)v[i]=(v[i]-incoming*n[i])*.78+rebound*n[i];
+ if(first && !surface.ground && n[1]===0)v[1]+=Math.min(4,-incoming*.22);
+ if(!first){crash.spin*=.69;crash.rollSpeed*=.74;}
+}
+function startCrash(){
+ const b=bird,surface=contact(.28);
+ if(!surface)return;
+ const speed=forwardSpeed(),force=Math.hypot(speed,b.vy),side=b.bank<0?-1:1;
+ const amplitude=.15+.93*b.effort;
+ const arm=(.24+amplitude*Math.sin(wingPhase))*(1-b.fold);
+ const wrist=(-.16+amplitude*.92*Math.sin(wingPhase-.65))*(1-b.fold);
+ crash={age:0,ground:surface.ground,origin:[b.x,b.y,b.z],follow:[b.x,b.y,b.z],
+  velocity:[Math.sin(b.angle)*speed,b.vy,Math.cos(b.angle)*speed],
+  spin:clamp(force*.20,2,11)*(surface.n[1]?1:-1),rollSpeed:side*clamp(force*.14,1.2,7),
+  pitch:0,roll:0,wings:[-1,1].map(dir=>({arm,wrist,va:dir*side*force*.13,vw:-dir*side*force*.1}))};
+ if(!rig)setCamera(1/60);
+ bounce(surface,true);state='crash';keys.clear();tone(155,35,.34,'triangle');document.body.classList.add('crashed');
 }
 function advanceCrash(dt){
- crash.age+=dt;
- if(crash.age>.24)$('crash-banner').hidden=false;
- if(crash.age>=1.85){
+ const c=crash;
+ c.age+=dt;
+ // Wall clock controls the titles; gravity and the loose joints use slowed time.
+ const step=dt*.30/3;
+ for(let sub=0;sub<3;sub++){
+  const v=c.velocity;
+  v[1]-=gravity*step;
+  bird.x+=v[0]*step;bird.y+=v[1]*step;bird.z+=v[2]*step;
+  const surface=contact(.19);
+  if(surface)bounce(surface,false);
+  c.pitch+=c.spin*step;c.roll+=c.rollSpeed*step;
+  c.spin*=Math.exp(-.5*step);c.rollSpeed*=Math.exp(-.55*step);
+  for(let i=0;i<2;i++){
+   const w=c.wings[i],side=i?1:-1;
+   const rest=-.5*Math.cos(c.pitch)*Math.cos(c.roll)-side*.6*Math.sin(c.roll);
+   w.va+=((rest-w.arm)*23-3*w.va)*step;w.arm=clamp(w.arm+w.va*step,-1.25,1.3);
+   w.vw+=((w.arm-.28-w.wrist)*17-2*w.vw)*step;w.wrist=clamp(w.wrist+w.vw*step,-1.45,1.35);
+  }
+ }
+ const pos=[bird.x,bird.y,bird.z],blend=1-Math.exp(-dt*9);
+ for(const [i,axis] of ['x','y','z'].entries()){
+  const move=(pos[i]-c.follow[i])*blend;c.follow[i]+=move;camera[axis]+=move;
+ }
+ if(c.age>.9)$('crash-banner').hidden=false;
+ if(c.age>=3.7){
   state='end';$('crash-banner').hidden=true;
-  panel('WASTED',(crash.ground?'Marken vann.':'Huset vann.')+' '+hits+' träffar.','Ta ny sats →');
+  panel('wasted',(c.ground?'Marken vann.':'Huset vann.')+' '+hits+' träffar.','Ta ny sats →');
  }
 }
 function crashFeathers(){
  const t=crash.age*.42;
  for(let i=0;i<12;i++){
   const a=tau*i/12,reach=t*(1.1+hash(i,1,1)*3);
-  const pos=point([bird.x+reach*Math.cos(a),bird.y+.2+Math.sin(Math.min(1,t)*Math.PI)*(.7+hash(i,2,2)),bird.z+reach*Math.sin(a)]);
+  const [x,y,z]=crash.origin;const pos=point([x+reach*Math.cos(a),y+.2+Math.sin(Math.min(1,t)*Math.PI)*(.7+hash(i,2,2)),z+reach*Math.sin(a)]);
   if(!pos)continue;
   ctx.save();ctx.translate(...pos);ctx.rotate(a+t*(i%2?4:-5));ctx.fillStyle=i%3?'#f7edf5':'#7382a2';
   ctx.beginPath();ctx.ellipse(0,0,3,7,0,0,tau);ctx.fill();ctx.restore();
@@ -265,16 +315,11 @@ function bodyMesh(){
 }
 const plumage=bodyMesh();
 function renderBird(){
- const b=bird,fl=b.fold,bank=b.bank*.62,pitch=Math.atan2(b.vy,forwardSpeed())*(.82+.16*b.steep);
+ const b=bird,fl=b.fold*(crash?Math.exp(-crash.age*2):1),bank=b.bank*.62+(crash?.roll??0),pitch=Math.atan2(b.vy,forwardSpeed())*(.82+.16*b.steep)+(crash?.pitch??0);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
  function world([x,y,z]){
   const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
   const offset=[bx*cy+bz*sy,by*cp+z*sp,-bx*sy+bz*cy];
-  if(crash){
-   const n=crash.normal,amount=1-Math.exp(-crash.age*17);
-   const along=offset[0]*n[0]+offset[1]*n[1]+offset[2]*n[2];
-   for(let i=0;i<3;i++)offset[i]=(1+.42*amount)*offset[i]-1.36*amount*along*n[i];
-  }
   return [b.x+offset[0],b.y+offset[1],b.z+offset[2]];
  }
  const face=(pts,color)=>poly(pts.map(world),color,1);
@@ -302,11 +347,13 @@ function renderBird(){
  const beat=Math.sin(wingPhase),arm=(.24+amplitude*beat)*(1-fl);
  const wrist=(-.16+amplitude*.92*Math.sin(wingPhase-.65))*(1-fl);
  for(const side of [-1,1]){
+  const joint=crash?.wings[side<0?0:1];
+  const elbowAngle=joint?.arm??arm,tipAngle=joint?.wrist??wrist;
   function wing(u,chord,y=0){
    const upper=Math.min(.43,u),outer=Math.max(0,u-.43);
-   const reach=upper*Math.cos(arm)+outer*Math.cos(wrist);
+   const reach=upper*Math.cos(elbowAngle)+outer*Math.cos(tipAngle);
    return [side*(.089+reach*(1-.82*fl)),
-    .101+upper*Math.sin(arm)+outer*Math.sin(wrist)+y,
+    .101+upper*Math.sin(elbowAngle)+outer*Math.sin(tipAngle)+y,
     .095+chord+.14*Math.sin(u*Math.PI)-.27*u*u-.59*u*fl];
   }
   const patch=(pts,color)=>face(pts.map(v=>wing(...v)),color);
@@ -430,7 +477,7 @@ function render(dt=1/60){
  for(const hit of stains.slice(-18)){const age=elapsed-hit.t;if(age>.45)continue;
   for(let k=0;k<6;k++){const a=k*tau/6,r=.4+age*4;sprite(hit.x+r*Math.cos(a),hit.y+.18+5*age-9*age*age,hit.z+r*Math.sin(a),.16*(1-age), '#fff');}
  }
- const ring=point(target?at(p,headTime):aim);
+ const ring=point(aim);
  if(ring)drawSight(ring,target);
  const last=stains.at(-1);
  if(last && elapsed-last.t<.7){
