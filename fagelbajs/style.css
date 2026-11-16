@@ -40,13 +40,13 @@ canvas{position:fixed;inset:0}#overlay2d{pointer-events:none}
 #reserve{background:#14181fd9;backdrop-filter:blur(6px)}#reserve.low{outline:2px solid #ffd24a;animation:pulse .7s infinite alternate}@keyframes pulse{to{outline-color:transparent}}
 .tools{background:#14181fd9;border:0;box-shadow:none;color:#fff;backdrop-filter:blur(6px);top:auto;bottom:16px;right:16px}.tools button:hover{background:#ffffff22}
 .panel .keys{font-size:12.5px;color:#5b6b76;margin:16px 0 0}
-#tip{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);max-width:92vw;padding:10px 18px;border-radius:999px;background:#14181fe6;color:#fff;font-size:15px;text-align:center;opacity:0;transition:opacity .4s;pointer-events:none}#tip.on{opacity:1}
+#tip{position:fixed;left:50%;top:96px;transform:translateX(-50%);max-width:92vw;padding:10px 18px;border-radius:999px;background:#14181fe6;color:#fff;font-size:15px;text-align:center;opacity:0;transition:opacity .4s;pointer-events:none}#tip.on{opacity:1}
 #touch{position:fixed;inset:0;pointer-events:none}#touch[hidden]{display:none}
 #stick{position:absolute;left:22px;bottom:26px;width:132px;height:132px;border-radius:50%;background:#14181f99;border:2px solid #ffffff66;pointer-events:auto;touch-action:none}
 #knob{position:absolute;left:36px;top:36px;width:60px;height:60px;border-radius:50%;background:#ffffffcc}
 #touch button{position:absolute;right:22px;width:96px;height:96px;border-radius:50%;border:2px solid #ffffff88;background:#14181f99;color:#fff;font-weight:900;pointer-events:auto;touch-action:none}
 #t-fire{bottom:26px}#t-dive{bottom:134px;right:96px!important;width:78px!important;height:78px!important}#touch button.held{background:#ffd24acc;color:#1b1b1b}
-body.touch .tools{top:104px;bottom:auto;right:10px;flex-direction:column}body.touch .tools button{font-size:12px;padding:5px 8px}
-body.touch #reserve{bottom:auto;top:100px;left:16px}body.touch #tip{bottom:176px}body.touch .panel .keys{display:none}
+body.touch .tools{top:60px;bottom:auto;right:10px}body.touch .tools button{font-size:12px;padding:5px 8px}body.touch #camera,body.touch #invert{display:none}
+body.touch #reserve{bottom:auto;top:100px;left:16px}body.touch .panel .keys{display:none}
 @media(max-width:1440px){#hud{top:16px}}
 @media(max-width:820px){#hud{top:64px;font-size:13px}#meter{width:min(88vw,560px)}#stars{top:50px;font-size:17px}}

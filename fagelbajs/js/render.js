@@ -257,7 +257,7 @@ function buildMoving(){
   if(o.windup>0)M.ball.add(o.x,o.y+.45,o.z,0,.2,.2,.2,rgb(o.kind));
   else M.ball.add(o.x,o.y,o.z,0,.3,.3,.3,rgb(o.kind),-1);
  }
- for(const m of mist){const a=1-m.age/m.life,r=.035+.05*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splat);}
+ for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splat);}
  // The spray: droplets joined by a thin ribbon that always faces the camera.
  let prior=null;
  for(const d of drops){
@@ -272,7 +272,7 @@ function buildMoving(){
  for(const s of stains){
   if(s.person||Math.abs(s.x-camera.x)>120||Math.abs(s.z-camera.z)>120)continue;
   const grow=Math.min(1,.45+(elapsed-s.t)*5);
-  M.disc.add(s.x,s.y+.04,s.z,s.x,.95*grow,1,.95*grow,splat);M.disc.add(s.x+.8,s.y+.04,s.z+.45,0,.36*grow,1,.36*grow,splat);
+  M.disc.add(s.x,s.y+.04,s.z,s.x,.62*grow,1,.5*grow,splat);M.disc.add(s.x+.55*Math.cos(s.z),s.y+.04,s.z+.5*Math.sin(s.x),0,.24*grow,1,.24*grow,splat);
  }
  for(let i=Math.floor(bird.x/tile)-2;i<=Math.floor(bird.x/tile)+2;i++)for(let j=Math.floor(bird.z/tile)-2;j<=Math.floor(bird.z/tile)+2;j++){
   const b=block(i,j);if(b.statue&&scored.has('st'+b.key))M.ball.add(b.statue[0],5.2,b.statue[1],0,.34,.2,.34,splat);

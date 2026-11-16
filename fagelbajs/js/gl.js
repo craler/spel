@@ -25,7 +25,8 @@ float shadow(vec3 wp,vec3 n){
  for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++)s+=texture(uShadow,vec3(c.xy+vec2(x,y)*t,c.z-.0009));
  return s/9.;
 }
-vec3 fogged(vec3 c,vec3 wp){float d=length(uEye-wp)*uFogD;return mix(c,uFogCol,1.-exp(-d*d));}
+vec3 fogged(vec3 c,vec3 wp){float d=length((uEye-wp)*vec3(1.,.35,1.))*uFogD; // haze thickens with ground distance, not altitude
+ return mix(c,uFogCol,1.-exp(-d*d));}
 vec3 lit(vec3 alb,vec3 n,vec3 wp,float spec){
  float sh=shadow(wp,n),d=max(dot(n,uSun),0.)*sh;
  vec3 c=alb*(mix(uGroundCol,uSkyCol,n.y*.5+.5)+uSunCol*d);
@@ -67,7 +68,7 @@ vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec
  bool sideX=abs(n.x)>.5;float u=sideX?lp.z:lp.x,w=sideX?size.z:size.x,y=lp.y;
  float bay=2.3+fract(seed*7.)*.9,cnt=max(1.,floor((w-.9)/bay)),m=(w-cnt*bay)*.5;
  float fu=(u-m)/bay,fy=y/3.1;vec2 f=vec2(fract(fu),fract(fy));
- vec2 cell=vec2(floor(fu)+floor(n.x*3.+n.z*7.)*17.,floor(fy));
+ vec2 cell=vec2(floor(fu)+floor(n.x*3.+n.z*7.+.25)*17.,floor(fy));
  vec3 wall=base*(.86+.28*vnoise(vec2(u,y)*.8+seed*91.));
  wall*=1.-.3*step(1.,fy)*smoothstep(.05,.0,f.y);
  if(y>size.y-.75)return base*.58;
@@ -251,7 +252,7 @@ const cityTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,cityTex);
 gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,CITY,CITY,0,gl.RED,gl.UNSIGNED_BYTE,cityType);
 for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.NEAREST],[gl.TEXTURE_MAG_FILTER,gl.NEAREST],[gl.TEXTURE_WRAP_S,gl.REPEAT],[gl.TEXTURE_WRAP_T,gl.REPEAT]])gl.texParameteri(gl.TEXTURE_2D,k,v);
 gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
-const sky={sun:[3.1,2.25,1.45],sky:[.3,.42,.66],ground:[.2,.17,.14],fog:[.72,.6,.5],zenith:[.16,.3,.62],fogD:.0072};
+const sky={sun:[3.1,2.25,1.45],sky:[.3,.42,.66],ground:[.2,.17,.14],fog:[.78,.62,.48],zenith:[.14,.28,.62],fogD:.0058};
 const lightM=new Float32Array(16), viewM=new Float32Array(16);
 function lightMatrix(cx,cy,cz){
  const R=125,D=170,L=SUN,rl=Math.hypot(L[2],L[0]),r=[L[2]/rl,0,-L[0]/rl];
