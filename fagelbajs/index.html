@@ -8,11 +8,16 @@
 
 .panel .pitch-switch{background:transparent;box-shadow:none;border:0;text-decoration:underline;font-size:14px;margin-top:8px;padding:6px}
 @media(max-width:900px){.tools{top:auto;bottom:64px}.tools button{font-size:13px}}
+
+#crash-banner{position:fixed;top:56%;left:0;right:0;text-align:center;background:#161213a6;color:#ff545d;font:bold clamp(38px,8vw,104px)/1.1 system-ui;letter-spacing:-.055em;text-shadow:0 3px #260e18;pointer-events:none}
+body.crashed canvas{filter:grayscale(1) contrast(1.13);transition:filter .38s}
+body.crashed .guide,body.crashed .tools,body.crashed #feedback{visibility:hidden}
 </style>
 <canvas id="world" aria-label="Flygspel med tangentbordsstyrning"></canvas>
 <div id="hud"><strong id="hits">0 träffar</strong><span id="time">60 s</span><span class="badge" id="mode">Glidflykt</span><span id="speed"></span></div>
 <div class="tools"><button id="camera">Vy: bakom</button><button id="invert" class="pitch-switch">Höjdroder</button><button id="audio">Ljud på</button><button id="pause">Paus</button></div>
 <div id="feedback"></div><div class="guide">A/D eller ←/→ sväng · <span id="pitch-guide">↓/S stig · ↑/W sjunk</span> · Shift dyk · håll Space för stråle · C byt vy</div>
+<div id="crash-banner" hidden>WASTED</div>
 <div id="overlay"><section class="panel"><small>SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1><p id="brief">En duva, en stad och 60 sekunder. Sikta med korset och håll Space för en stråle. Grönt betyder träffläge. Akta hustaken!</p><button id="go" autofocus>Ta sats och flyg →</button><button id="invert-menu" class="pitch-switch">Höjdroder</button><a href="../">Till Spelhörnan</a></section></div>
 <script>
 'use strict';
@@ -45,20 +50,24 @@ function tone(from,to,duration,type='sine',gain=.08,delay=0){
  vol.gain.setValueAtTime(.001,t);vol.gain.exponentialRampToValueAtTime(gain,t+.012);vol.gain.exponentialRampToValueAtTime(.001,t+duration);
  osc.connect(vol);vol.connect(sound.destination);osc.start(t);osc.stop(t+duration);
 }
+let rig=null,crash=null;
 function reset(){
- bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,flare:0,effort:0};elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();messageTime=0;$('feedback').textContent='';
+ rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
+ bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,flare:0,effort:0};elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();messageTime=0;$('feedback').textContent='';
 }
 function panel(heading,body,action){$('title').textContent=heading;$('brief').textContent=body;$('go').textContent=action;$('overlay').hidden=false;$('go').focus();}
 function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','Duvan väntar där du lämnade den.','Fortsätt flyga →');}else if(state==='pause')start();}
 function start(){if(state!=='pause')reset();state='play';$('overlay').hidden=true;$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});}catch{}}
-function view(){above=!above;$('camera').textContent=above?'Vy: ovanifrån':'Vy: bakom';}
+function view(){if(crash)return;above=!above;rig=null;$('camera').textContent=above?'Vy: ovanifrån':'Vy: bakom';}
 $('go').onclick=start;$('pause').onclick=togglePause;$('camera').onclick=view;
 $('audio').onclick=()=>{muted=!muted;$('audio').textContent=muted?'Ljud av':'Ljud på';};
 onblur=()=>{keys.clear();if(state==='play')togglePause();};
 onkeydown=e=>{if(state!=='play'){if(e.code==='Escape'&&state==='pause')togglePause();return;}
  if(['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','Escape'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='Escape')togglePause();}};
 onkeyup=e=>keys.delete(e.code);
-function payload(){return {x:bird.x-.45*Math.sin(bird.angle),z:bird.z-.45*Math.cos(bird.angle),y:bird.y-.22,vx:Math.sin(bird.angle)*bird.speed,vz:Math.cos(bird.angle)*bird.speed,vy:bird.vy-6};}
+// Convert the stored dive speed into horizontal travel as the nose tips down.
+function forwardSpeed(){return bird.speed*(1-.89*bird.steep);}
+function payload(){return {x:bird.x-.45*Math.sin(bird.angle),z:bird.z-.45*Math.cos(bird.angle),y:bird.y-.22,vx:Math.sin(bird.angle)*forwardSpeed(),vz:Math.cos(bird.angle)*forwardSpeed(),vy:bird.vy-6};}
 function at(p,t){return [p.x+p.vx*t,p.y+p.vy*t-gravity*t*t/2,p.z+p.vz*t];}
 function flightTime(p,level){
  const discriminant=p.vy*p.vy+2*gravity*(p.y-level);
@@ -68,10 +77,16 @@ const facades=[
  ['#ffdf64','#fa887d','#dc5285'],['#ffe4a8','#47d6bf','#139b9e'],
  ['#ff9ca7','#ad83dc','#8058af'],['#adffda','#ffb84e','#ed7450']
 ];
+// Aim prediction samples the same city blocks repeatedly between frames.
+const blockCache=new Map();
 function buildings(i,j){
+ const key=i+','+j,cached=blockCache.get(key);
+ if(cached)return cached;
  const x=i*tile,z=j*tile;
- return [[x+10,z+10,11,10,4+Math.floor(hash(i,j,3)*25)],
+ const blocks=[[x+10,z+10,11,10,4+Math.floor(hash(i,j,3)*25)],
          [x+24,z+22,9,12,6+Math.floor(hash(i,j,6)*37)]];
+ if(blockCache.size>=384)blockCache.delete(blockCache.keys().next().value);
+ blockCache.set(key,blocks);return blocks;
 }
 function solid(x,y,z,r=0){
  if(y<=r)return true;
@@ -111,16 +126,16 @@ function simulate(dt){
  const steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
  if(!dive&&b.fold>.65&&b.wasDiving){b.flare=Math.max(0,b.speed-14)*.95;tone(200,430,.2,'sine',.035);}
  b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*10));b.bank=mix(b.bank,steer,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold);
+ b.steep=mix(b.steep,pitch<0?1:0,1-Math.exp(-dt*(pitch<0?3.9:2.8)));
  const upLimit=clamp((82-b.y)/9,0,1);
- const wantedVy=(pitch>0?19*upLimit:pitch*19)+b.flare*.82;
+ const wantedVy=(pitch>0?19*upLimit:pitch*(19+17*b.steep))+b.flare*.82;
  const acceleration=dive?-36-b.vy*.19:(wantedVy-b.vy)*2.7;
  b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
  b.effort=mix(b.effort,dive?0:pitch>0?1:pitch<0?0:.28,1-Math.exp(-6*dt));
  b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65+(14-b.speed)*(dive?.18:.55)-Math.max(0,b.vy)*.19)*dt,10,58);
- b.x+=Math.sin(b.angle)*b.speed*dt;b.z+=Math.cos(b.angle)*b.speed*dt;
- if(solid(b.x,b.y,b.z,.28)){state='end';keys.clear();tone(135,38,.32,'triangle');
- panel('Krasch!',(b.y<.3?'Duvan träffade marken.':'Duvan flög in i ett hus.')+' '+hits+' träffar.','Ta ny sats →');return;}
+ b.x+=Math.sin(b.angle)*forwardSpeed()*dt;b.z+=Math.cos(b.angle)*forwardSpeed()*dt;
+ if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
  elapsed+=dt;cooldown-=dt;wingPhase+=dt*(1.4+23*b.effort);
  if(held('Space'))drop();
  gather();
@@ -131,10 +146,48 @@ function simulate(dt){
  if((messageTime-=dt)<=0)$('feedback').textContent='';
  if(elapsed>=60){state='end';keys.clear();panel('Tiden är ute!',hits+' träffar på 60 sekunder. Ett varv till?','Flyg igen →');}
 }
+function startCrash(){
+ const b=bird;
+ let normal=[0,1,0];
+ const ground=b.y<=.28;
+ if(!ground){
+  const block=buildings(Math.floor(b.x/tile),Math.floor(b.z/tile)).find(([x,z,w,d,h])=>
+   b.x>=x-.28&&b.x<=x+w+.28&&b.z>=z-.28&&b.z<=z+d+.28&&b.y<=h+.28);
+  if(block){
+   const [x,z,w,d,h]=block;
+   normal=[[Math.abs(b.y-h),[0,1,0]],[Math.abs(b.x-x),[-1,0,0]],[Math.abs(b.x-x-w),[1,0,0]],[Math.abs(b.z-z),[0,0,-1]],[Math.abs(b.z-z-d),[0,0,1]]].sort((a,b)=>a[0]-b[0])[0][1];
+  }
+ }
+ if(ground)b.y=.07;
+ crash={age:0,normal,ground};state='crash';keys.clear();tone(155,35,.34,'triangle');document.body.classList.add('crashed');
+}
+function advanceCrash(dt){
+ crash.age+=dt;
+ if(crash.age>.24)$('crash-banner').hidden=false;
+ if(crash.age>=1.85){
+  state='end';$('crash-banner').hidden=true;
+  panel('WASTED',(crash.ground?'Marken vann.':'Huset vann.')+' '+hits+' träffar.','Ta ny sats →');
+ }
+}
+function crashFeathers(){
+ const t=crash.age*.42;
+ for(let i=0;i<12;i++){
+  const a=tau*i/12,reach=t*(1.1+hash(i,1,1)*3);
+  const pos=point([bird.x+reach*Math.cos(a),bird.y+.2+Math.sin(Math.min(1,t)*Math.PI)*(.7+hash(i,2,2)),bird.z+reach*Math.sin(a)]);
+  if(!pos)continue;
+  ctx.save();ctx.translate(...pos);ctx.rotate(a+t*(i%2?4:-5));ctx.fillStyle=i%3?'#f7edf5':'#7382a2';
+  ctx.beginPath();ctx.ellipse(0,0,3,7,0,0,tau);ctx.fill();ctx.restore();
+ }
+}
 function fit(){width=innerWidth;height=innerHeight;const density=Math.min(devicePixelRatio||1,1.4);canvas.width=Math.round(width*density);canvas.height=Math.round(height*density);ctx.setTransform(density,0,0,density,0,0);}
 onresize=fit;fit();
-function setCamera(aim){
- const a=bird.angle,s=Math.sin(a),c=Math.cos(a);
+function setCamera(dt){
+ // A roof entering the reticle must not move the camera. Frame a virtual
+ // unobstructed trajectory, easing both look angle and overhead distance.
+ const p=payload(),aim=at(p,Math.max(0,flightTime(p,0)));
+ const blend=1-Math.exp(-dt*7);
+ const a=rig?mix(rig.yaw,bird.angle,1-Math.exp(-dt*11)):bird.angle;
+ const s=Math.sin(a),c=Math.cos(a);
  const forward=(aim[0]-bird.x)*s+(aim[2]-bird.z)*c;
  const fall=bird.y-aim[1];
  // Fit the pigeon and the projected impact together, also from high altitude.
@@ -142,10 +195,12 @@ function setCamera(aim){
  const rise=above?Math.max(14,1.3*forward-fall*.5):3.8;
  const toBird=Math.atan2(rise,back);
  const toAim=Math.atan2(rise+fall,Math.max(.35,back+forward));
- const pitch=above?Math.PI/2:mix(toBird,toAim,.52);
+ const desiredPitch=above?Math.PI/2:mix(toBird,toAim,.52);
  const shoulder=above?0:1.05;
  const focusAhead=above?forward*rise/(2*rise+fall):0;
- camera={x:bird.x+s*(focusAhead-back)+c*shoulder,y:bird.y+rise,z:bird.z+c*(focusAhead-back)-s*shoulder,s,c,cp:Math.cos(pitch),sp:Math.sin(pitch)};
+ if(!rig)rig={yaw:a,pitch:desiredPitch,rise,ahead:focusAhead};
+ rig.yaw=a;rig.pitch=mix(rig.pitch,desiredPitch,blend);rig.rise=mix(rig.rise,rise,blend);rig.ahead=mix(rig.ahead,focusAhead,blend);
+ camera={x:bird.x+s*(rig.ahead-back)+c*shoulder,y:bird.y+rig.rise,z:bird.z+c*(rig.ahead-back)-s*shoulder,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch)};
  scale=Math.min(width*.88,height*(above?.85:.97))*(1-.08*bird.fold);
 }
 function cameraPoint([x,y,z]){
@@ -210,11 +265,17 @@ function bodyMesh(){
 }
 const plumage=bodyMesh();
 function renderBird(){
- const b=bird,fl=b.fold,bank=b.bank*.62,pitch=Math.atan2(b.vy,b.speed)*.82;
+ const b=bird,fl=b.fold,bank=b.bank*.62,pitch=Math.atan2(b.vy,forwardSpeed())*(.82+.16*b.steep);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
  function world([x,y,z]){
   const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
-  return [b.x+bx*cy+bz*sy,b.y+by*cp+z*sp,b.z-bx*sy+bz*cy];
+  const offset=[bx*cy+bz*sy,by*cp+z*sp,-bx*sy+bz*cy];
+  if(crash){
+   const n=crash.normal,amount=1-Math.exp(-crash.age*17);
+   const along=offset[0]*n[0]+offset[1]*n[1]+offset[2]*n[2];
+   for(let i=0;i<3;i++)offset[i]=(1+.42*amount)*offset[i]-1.36*amount*along*n[i];
+  }
+  return [b.x+offset[0],b.y+offset[1],b.z+offset[2]];
  }
  const face=(pts,color)=>poly(pts.map(world),color,1);
  for(const patch of plumage)face(patch.pts,patch.color);
@@ -297,11 +358,12 @@ function impactView(aim){
  for(const h of stains)if(Math.abs(h.x-focus[0])<15 && Math.abs(h.z-focus[2])<15){dot(h.x,h.z,k*.86,'#fff');if(elapsed-h.t<.28){ctx.strokeStyle='#ffd844';ctx.lineWidth=2;ctx.beginPath();ctx.arc(px(h.x),pz(h.z),(1+8*(elapsed-h.t))*k,0,tau);ctx.stroke();}}
  ctx.strokeStyle='#ffdf38';ctx.lineWidth=2;ctx.beginPath();ctx.arc(px(aim[0]),pz(aim[2]),6,0,tau);ctx.stroke();ctx.restore();
 }
-function render(){
+function hud(id,value){const el=$(id);if(el.textContent!==value)el.textContent=value;}
+function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt);
- setCamera(aim);const sky=ctx.createLinearGradient(0,0,0,height*.55);sky.addColorStop(0,'#ff87a4');sky.addColorStop(1,'#ffd16a');ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
+ if(!crash || !rig)setCamera(dt);const sky=ctx.createLinearGradient(0,0,0,height*.55);sky.addColorStop(0,'#ff87a4');sky.addColorStop(1,'#ffd16a');ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
  const horizon=above?-height:height*.43-scale*camera.sp/camera.cp;
- ctx.fillStyle='#ee929a';for(let i=-1;i<22;i++){const x=(i-(bird.angle*3%1))*width/19,h=(.028+.056*hash(i,2,3))*height;ctx.fillRect(x,horizon-h,width/15,h+2);}
+ ctx.fillStyle='#ee929a';for(let i=-1;i<22;i++){const offset=rig.yaw*3,column=Math.floor(offset),x=(i-(offset-column))*width/19,h=(.028+.056*hash((i+column)%200,2,3))*height;ctx.fillRect(x,horizon-h,width/15,h+2);}
  ctx.fillStyle='#996caa';ctx.fillRect(0,Math.max(0,horizon),width,height);
  const ix=Math.round(bird.x/tile),iz=Math.round(bird.z/tile);
  for(let i=ix-3;i<=ix+3;i++)for(let j=iz-3;j<=iz+3;j++){
@@ -313,6 +375,7 @@ function render(){
   const palette=facades[Math.floor(hash(i,j,w)*4)];
   box(a,b,w,d,h,...palette);
   if(camera.y>h){for(let k=1;k<4;k++)flat(a+k*w/5,b+.35,.55,d-.7,'#fff2ba',h+.04,0);}
+  if(p[2]>108 || (camera.z>=b && camera.z<=b+d))continue;
   const frontZ=camera.z<b?b-.03:b+d+.03;
   for(let floor=2;floor<h-1;floor+=4.4){
    for(let k=0;k<3;k++){
@@ -334,6 +397,7 @@ function render(){
   if(d>1 && d<110)faces.push({person:h,d,layer:0});
  }
  paint();
+ if(!crash){
  const headTime=flightTime(p,1.8);
  let target=null;
  if(headTime>=0 && headTime<=tt){
@@ -377,10 +441,13 @@ function render(){
   }
  }
  if(drops.length || (stains.length && elapsed-stains.at(-1).t<1.2)) impactView(aim);
- renderBird();
- $('speed').textContent=Math.round(bird.speed*3.6)+' km/h · '+Math.round(bird.y)+' m';$('hits').textContent=hits+(hits===1?' träff':' träffar');$('time').textContent=Math.max(0,Math.ceil(60-elapsed))+' s';$('mode').textContent=bird.fold>.5?'Dyk!':bird.flare>2?'Uppvind':'Glidflykt';
+ }
+ renderBird();if(crash)crashFeathers();
+ hud('speed',Math.round(Math.hypot(forwardSpeed(),bird.vy)*3.6)+' km/h · '+Math.round(bird.y)+' m');
+ hud('hits',hits+(hits===1?' träff':' träffar'));hud('time',Math.max(0,Math.ceil(60-elapsed))+' s');
+ hud('mode',bird.fold>.5?'Dyk!':bird.flare>2?'Uppvind':'Glidflykt');
 }
 reset();gather();let prev=0;
-function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}else if(state==='menu')wingPhase+=dt*3;render();requestAnimationFrame(frame);}
+function frame(now){const dt=Math.min(.05,(now-prev)/1000);prev=now;if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}else if(state==='crash')advanceCrash(dt);else if(state==='menu')wingPhase+=dt*3;render(dt);requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
 </script></html>
