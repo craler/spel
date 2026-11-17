@@ -4,6 +4,13 @@
 const sampleCuts=[[0.0, 5.4], [5.45, 0.19], [5.69, 0.19], [5.93, 0.19], [6.17, 0.19], [6.41, 0.19], [6.65, 0.19], [6.89, 0.19], [7.13, 0.19]];
 let bank=null,bankLoading=false,lastWing=0,wind=null,master=null,crashVoice=null;
 let noiseBuf=null,sprayNodes=null,droneNodes=null,humNodes=null,lastSplat=0,lastYelp=0,nextHorn=6;
+const sfx={};let sfxAsked=false,pooping=null,cityNodes=null,lastLand=0;
+function play(name,volume=1,rate=1,loop=false){
+ if(!sfx[name]||!master||muted)return null;
+ const src=sound.createBufferSource(),gain=sound.createGain();
+ src.buffer=sfx[name];src.playbackRate.value=rate;src.loop=loop;gain.gain.value=volume;src.connect(gain);gain.connect(master);src.start();
+ return {src,gain};
+}
 function tone(from,to,duration,type='sine',gain=.08,delay=0){
  if(!sound||muted)return;
  const t=sound.currentTime+delay, osc=sound.createOscillator(), vol=sound.createGain();
@@ -21,6 +28,9 @@ function setupAudio(){
   source.buffer=noiseBuf;source.loop=true;filter.type='bandpass';filter.Q.value=.7;gain.gain.value=0;
   source.connect(filter);filter.connect(gain);gain.connect(master);source.start();wind={gain,filter};
  }
+ // Recorded effects: poop, splats, the hawk and the city. Until they have loaded (or if they fail to), the synthesised versions are used.
+ if(!sfxAsked){sfxAsked=true;for(const name of ['poop1','poop2','poop3','poop4','poop5','poop6','poop7','splat1','splat2','splat3','hawk1','hawk2','city'])
+  fetch('./audio/'+name+'.mp3').then(r=>r.arrayBuffer()).then(b=>sound.decodeAudioData(b)).then(b=>{sfx[name]=b;}).catch(()=>{});}
  if(!bank&&!bankLoading){
   bankLoading=true;
   fetch('./audio/samples.mp3').then(r=>r.arrayBuffer()).then(b=>sound.decodeAudioData(b)).then(b=>{bank=b;}).catch(()=>{}).finally(()=>{bankLoading=false;});
@@ -57,6 +67,15 @@ function burst({type='lowpass',from=2000,to=from,q=1,gain=.2,attack=.004,dur=.12
 // The spray itself: a raspberry (an unsteady low pulse) under a wet hiss, running for as long as it flows.
 function sprayVoice(on){
  if(!master)return;
+ if(sfx.poop1){ // recorded: one long squirt after another for as long as it flows, cut off quickly when it stops
+  if(on&&(!pooping||pooping.done)){
+   const name=!pooping?'poop'+(1+Math.floor(Math.random()*5)):'poop'+(1+Math.floor(Math.random()*4));
+   pooping=play(name,.75,.94+.14*Math.random());if(pooping)pooping.src.onended=()=>{if(pooping)pooping.done=true;};
+  }else if(!on&&pooping){
+   const t=sound.currentTime;pooping.gain.gain.setTargetAtTime(0,t,.035);pooping.src.stop(t+.2);pooping=null;
+  }
+  return;
+ }
  if(!sprayNodes){
   const osc=sound.createOscillator(),lp=sound.createBiquadFilter(),og=sound.createGain();
   const src=sound.createBufferSource(),bp=sound.createBiquadFilter(),ng=sound.createGain();
@@ -82,6 +101,10 @@ function sprayVoice(on){
 // A wet slap where it lands, quieter with distance.
 function splat(x,y,z,big){
  if(!master||muted)return;
+ if(sfx.splat3){
+  const t=sound.currentTime;if(t-lastLand<.11)return;lastLand=t;
+  play('splat3',.3*clamp(1.25-Math.hypot(x-bird.x,y-bird.y,z-bird.z)/55,.12,1)*(big?1.5:1),1+.35*Math.random());return;
+ }
  const t=sound.currentTime;if(t-lastSplat<.045)return;lastSplat=t;
  const vol=clamp(1.25-Math.hypot(x-bird.x,y-bird.y,z-bird.z)/55,.12,1)*(big?1.5:1);
  burst({from:2600+900*Math.random(),to:260,gain:.36*vol,dur:.17+.06*Math.random()});
@@ -92,6 +115,7 @@ function splat(x,y,z,big){
 // A hit sounds like what it is: a fat wet splat, heavier for the big ones.
 function hitTick(strong,pitch=1){
  if(!master||muted)return;
+ if(sfx.splat1){play(strong?'splat1':'splat2',strong?.95:.8,pitch*(.95+.1*Math.random()));return;}
  const k=strong?1.35:1;
  burst({from:2100*pitch,to:170,gain:.5*k,attack:.003,dur:.2});
  burst({type:'bandpass',from:950*pitch,to:230,q:2.2,gain:.42*k,dur:.15,delay:.018});
@@ -101,8 +125,9 @@ function hitTick(strong,pitch=1){
 function crunch(){burst({from:2400,to:160,gain:.55,dur:.34});burst({type:'bandpass',from:1800,to:700,q:6,gain:.34,dur:.2,delay:.02});tone(310,63,.26,'sawtooth',.045);}
 function whoosh(){burst({type:'bandpass',from:420,to:2400,q:1.1,gain:.65,attack:.09,dur:.4});}
 // The hawk: a falling cry with a fast vibrato, a heartbeat, and a low drone that swells as it locks on.
-function screech(){
+function screech(attack){
  if(!master||muted)return;
+ if(sfx.hawk1){play(attack?'hawk2':'hawk1',.8);return;}
  const t=sound.currentTime;
  for(const [delay,dur,f0] of [[0,.75,2500],[.9,.5,2300]]){
   const osc=sound.createOscillator(),lfo=sound.createOscillator(),lg=sound.createGain(),bp=sound.createBiquadFilter(),g=sound.createGain(),s=t+delay;
@@ -161,6 +186,11 @@ function whistle(level){
 // The city itself: a low hum that fades with altitude and the odd car horn somewhere below.
 function ambience(playing,dt){
  if(!master)return;
+ if(sfx.city){ // a recorded street, looping, quieter the higher the bird flies
+  if(!cityNodes){cityNodes=play('city',0,1,true);if(humNodes)humNodes.g.gain.setTargetAtTime(0,sound.currentTime,.3);}
+  if(cityNodes)cityNodes.gain.gain.setTargetAtTime(playing?.5*clamp(1.1-bird.y/75,.3,1):0,sound.currentTime,.5);
+  return;
+ }
  if(!humNodes){
   const src=sound.createBufferSource(),lp=sound.createBiquadFilter(),g=sound.createGain();
   src.buffer=noiseBuf;src.loop=true;lp.type='lowpass';lp.frequency.value=210;g.gain.value=0;

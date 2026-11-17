@@ -225,7 +225,7 @@ function updateHawk(dt){
   h.x+=(gx+L[0]*s-h.x)*f;h.y+=(alt-h.y)*f;h.z+=(gz+L[2]*s-h.z)*f;
   const g=ease(6);h.vx=mix(h.vx,(h.x-ox)/dt,g);h.vy=mix(h.vy,(h.y-oy)/dt,g);h.vz=mix(h.vz,(h.z-oz)/dt,g);
   h.tuck=mix(h.tuck,0,ease(4));h.size=mix(h.size,lock?3.4:2.3,ease(2.2));h.dread=mix(h.dread,lock?1-.55*k:.14,ease(5));h.flap+=dt*3.4;
-  if(!lock&&h.t<=0&&b.y>15){h.mode='lock';h.t=1.6-.5*clamp((b.y-45)/30,0,1);screech();} // high up there is less warning
+  if(!lock&&h.t<=0&&b.y>15){h.mode='lock';h.t=1.6-.5*clamp((b.y-45)/30,0,1);screech(true);} // high up there is less warning
   else if(lock&&b.y<13){h.mode='circle';h.t=3;}
   else if(lock&&h.t<=0){
    // Commit to an intercept point. From here it can only bend its line a little.
