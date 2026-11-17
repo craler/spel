@@ -18,6 +18,7 @@
     a.card:hover { transform: translateY(-4px); box-shadow: 0 0 0 2px #ffd24a, 0 24px 50px #0008; }
     a.card:focus-visible { outline: 3px solid #ffd24a; outline-offset: 4px; }
     .art { display: block; width: 100%; aspect-ratio: 16 / 9; }
+    .art.poster { aspect-ratio: 2 / 3; object-fit: cover; object-position: top; }
     .body { padding: 20px 22px 22px; }
     h2 { margin: 0 0 6px; font-size: 26px; font-weight: 900; font-style: italic; letter-spacing: -.02em; }
     .card p { margin: 0; color: #c4ccd8; font-size: 15.5px; }
@@ -35,33 +36,22 @@
     <footer>Skapat med fantasi och hjälp av AI.</footer>
   </main>
   <script>
-    // Lägg nya spel i egna mappar och lägg till dem här. "art" är en liten SVG-bild till kortet.
+    // Lägg nya spel i egna mappar och lägg till dem här. "poster" är en bild till kortet, "art" en liten SVG om bild saknas.
     const games = [
       { title: 'Duv-Diarré', url: './fagelbajs/',
         description: 'Flyg en duva över staden och pricka folk, bilar och guldstjärnor. Klara dig undan frukten, näten, höken och stridsvagnarna.',
-        art: `<svg class="art" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
-          <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b5ea8"/><stop offset="1" stop-color="#f0b98a"/></linearGradient></defs>
-          <rect width="320" height="180" fill="url(#sky)"/>
-          <circle cx="262" cy="46" r="20" fill="#ffe9a8"/>
-          <g fill="#2a3350"><rect x="0" y="112" width="46" height="68"/><rect x="40" y="92" width="38" height="88"/><rect x="74" y="122" width="52" height="58"/><rect x="198" y="104" width="44" height="76"/><rect x="238" y="126" width="40" height="54"/><rect x="274" y="96" width="46" height="84"/></g>
-          <g fill="#ffd98a"><rect x="48" y="102" width="6" height="8"/><rect x="60" y="118" width="6" height="8"/><rect x="208" y="116" width="6" height="8"/><rect x="286" y="110" width="6" height="8"/><rect x="300" y="128" width="6" height="8"/><rect x="12" y="126" width="6" height="8"/></g>
-          <rect x="0" y="160" width="320" height="20" fill="#1b2136"/>
-          <g transform="translate(150 62)">
-            <path d="M-58 -6 Q-30 -30 0 -4 Q30 -30 58 -6 Q30 -10 6 8 L-6 8 Q-30 -10 -58 -6Z" fill="#8792aa"/>
-            <ellipse cx="0" cy="6" rx="13" ry="20" fill="#cfd6e2"/><circle cx="0" cy="-14" r="9" fill="#5b6788"/>
-            <path d="M0 -8 l5 6 h-10z" fill="#e8b830"/><circle cx="-4" cy="-16" r="1.6" fill="#fff"/><circle cx="4" cy="-16" r="1.6" fill="#fff"/>
-          </g>
-          <g fill="#f6f3e8"><ellipse cx="150" cy="96" rx="4" ry="7"/><ellipse cx="152" cy="116" rx="3.4" ry="6"/><ellipse cx="149" cy="134" rx="3" ry="5"/>
-            <path d="M150 148c8 0 20 4 22 9s-10 6-22 6-24-1-22-6 14-9 22-9z"/></g>
-          <g fill="#ffd24a"><path d="M40 60l3 7 7 .6-5.4 4.6 1.8 7-6.4-4-6.4 4 1.8-7L30 67.600l7-.6z"/><path d="M286 70l2 5 5 .4-4 3.300 1.300 5-4.300-2.800-4.300 2.800 1.300-5-4-3.300 5-.4z"/></g>
-        </svg>` }
+        poster: './fagelbajs/poster.jpg' }
     ];
     const list = document.querySelector('#games');
     for (const game of games) {
       const card = document.createElement('a');
       card.className = 'card';
       card.href = game.url;
-      card.innerHTML = game.art;
+      if (game.poster) {
+        const img = document.createElement('img');
+        img.className = 'art poster'; img.src = game.poster; img.alt = game.title + ' – affisch'; img.loading = 'lazy';
+        card.append(img);
+      } else card.innerHTML = game.art;
       const body = document.createElement('div');
       body.className = 'body';
       const title = document.createElement('h2');

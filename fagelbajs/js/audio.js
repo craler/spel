@@ -5,6 +5,9 @@ const sampleCuts=[[0.0, 5.4], [5.45, 0.19], [5.69, 0.19], [5.93, 0.19], [6.17, 0
 let bank=null,bankLoading=false,lastWing=0,wind=null,master=null,crashVoice=null;
 let noiseBuf=null,sprayNodes=null,droneNodes=null,humNodes=null,lastSplat=0,lastYelp=0,nextHorn=6;
 const sfx={};let sfxAsked=false,pooping=null,cityNodes=null,lastLand=0;
+// A random one of name1..nameN that has loaded, never the same one twice in a row.
+const lastPick={};
+function pick(name,n){let k;do{k=1+Math.floor(Math.random()*n);}while(n>1&&k===lastPick[name]);lastPick[name]=k;return sfx[name+k]?name+k:name+1;}
 function play(name,volume=1,rate=1,loop=false){
  if(!sfx[name]||!master||muted)return null;
  const src=sound.createBufferSource(),gain=sound.createGain();
@@ -36,7 +39,7 @@ function setupAudio(){
   source.connect(filter);filter.connect(gain);gain.connect(master);source.start();wind={gain,filter};
  }
  // Recorded effects: poop, splats, the hawk and the city. Until they have loaded (or if they fail to), the synthesised versions are used.
- if(!sfxAsked){sfxAsked=true;for(const name of ['poop1','poop2','poop3','poop4','poop5','poop6','poop7','splat1','splat2','splat3','hawk1','hawk2','city'])
+ if(!sfxAsked){sfxAsked=true;for(const name of ['poop1','poop2','poop3','poop4','poop5','poop6','poop7','hitsplat1','hitsplat2','hitsplat3','hitsplat4','landsplat1','landsplat2','landsplat3','hawk1','hawk2','tank1','tank2','tank3','hit1','city'])
   fetch('./audio/'+name+'.mp3').then(r=>r.arrayBuffer()).then(b=>sound.decodeAudioData(b)).then(b=>{sfx[name]=b;}).catch(()=>{});}
  if(!bank&&!bankLoading){
   bankLoading=true;
@@ -108,9 +111,9 @@ function sprayVoice(on){
 // A wet slap where it lands, quieter with distance.
 function splat(x,y,z,big){
  if(!master||muted)return;
- if(sfx.splat3){
+ if(sfx.landsplat1){ // one of the lighter recorded splats, pitched about so a stream of them does not repeat
   const t=sound.currentTime;if(t-lastLand<.11)return;lastLand=t;
-  play('splat3',.3*clamp(1.25-Math.hypot(x-bird.x,y-bird.y,z-bird.z)/55,.12,1)*(big?1.5:1),1+.35*Math.random());return;
+  play(pick('landsplat',3),.3*clamp(1.25-Math.hypot(x-bird.x,y-bird.y,z-bird.z)/55,.12,1)*(big?1.5:1),.9+.35*Math.random());return;
  }
  const t=sound.currentTime;if(t-lastSplat<.045)return;lastSplat=t;
  const vol=clamp(1.25-Math.hypot(x-bird.x,y-bird.y,z-bird.z)/55,.12,1)*(big?1.5:1);
@@ -122,7 +125,8 @@ function splat(x,y,z,big){
 // A hit sounds like what it is: a fat wet splat, heavier for the big ones.
 function hitTick(strong,pitch=1){
  if(!master||muted)return;
- if(sfx.splat1){play(strong?'splat1':'splat2',strong?.95:.8,pitch*(.95+.1*Math.random()));return;}
+ if(sfx.hit1)play('hit1',.16,.97+.06*Math.random()); // the hit marker, kept low under the splat
+ if(sfx.hitsplat1){play(pick('hitsplat',4),strong?.95:.75,pitch*(.95+.1*Math.random()));return;}
  const k=strong?1.35:1;
  burst({from:2100*pitch,to:170,gain:.5*k,attack:.003,dur:.2});
  burst({type:'bandpass',from:950*pitch,to:230,q:2.2,gain:.42*k,dur:.15,delay:.018});
@@ -211,4 +215,10 @@ function ambience(playing,dt){
   nextHorn=6+10*Math.random();const f=370+90*Math.random(),len=.18+.3*Math.random(),vol=.022*near;
   tone(f,f*1.001,len,'sawtooth',vol);tone(f*1.26,f*1.261,len,'sawtooth',vol);
  }
+}
+// A tank firing: a recorded cannon shot, louder and brighter close by. The synthesised thump stays underneath.
+function cannon(distance){
+ const near=clamp(1.3-distance/110,.25,1);
+ if(sfx.tank1)play(pick('tank',3),.9*near,.92+.12*Math.random());
+ burst({from:500,to:50,gain:.45*near,dur:.5});tone(95,32,.4,'triangle',.22*near);
 }

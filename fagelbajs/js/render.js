@@ -446,12 +446,27 @@ function buildMoving(){
  }
  // The hawk is drawn at its real size; a much larger copy goes only into the shadow map.
  if(hawk){drawHawk(dyn,2.3);hawkShadow();}
- for(const f of plume){ // loose feathers from a crash
-  const a=f.age*f.spin+f.seed,c=Math.cos(a)*.3,s=Math.sin(a)*.3,t=.09*Math.sin(a*1.7);
-  dyn.fan([[f.x-c,f.y-t,f.z-s],[f.x+s*.3,f.y+.03,f.z-c*.3],[f.x+c,f.y+t,f.z+s],[f.x-s*.3,f.y-.03,f.z+c*.3]],rgb(['#e8ecf2','#8792aa','#5b6788','#cfd6e2'][Math.floor(f.seed*7)%4]));
- }
+ for(const f of plume)drawFeather(f); // loose feathers from a crash
  if(camView!==2||crash)renderBird();
  for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();
+}
+// One loose feather: a quill with two curved vanes, the outer one narrower, darker towards the tip.
+const featherShades=[['#eef1f6','#c7cfdd'],['#9aa7c2','#5d6a8c'],['#7f8cab','#454f6e'],['#d9dfe9','#8f9bb6']].map(p=>p.map(rgb));
+function drawFeather(f){
+ const calm=1-Math.exp(-f.age*1.6),grounded=f.y<=.04;
+ const roll=grounded?0:mix(f.tumble[0],.75*Math.sin(f.sway),calm),pitch=grounded?0:mix(f.tumble[1],.25*Math.cos(f.sway),calm);
+ const yaw=f.heading,sr=Math.sin(roll),cr=Math.cos(roll),sp=Math.sin(pitch),cp=Math.cos(pitch),sy=Math.sin(yaw),cy=Math.cos(yaw),L=f.len;
+ const w=([x,y,z])=>{x*=L;y*=L;z*=L;const x1=x*cr-y*sr,y1=x*sr+y*cr,y2=y1*cp-z*sp,z2=y1*sp+z*cp;return [f.x+x1*cy+z2*sy,f.y+y2,f.z-x1*sy+z2*cy];};
+ const [base,tip]=featherShades[f.shade],n=6;
+ for(const side of [-1,1]){
+  const reach=f.wide*(side<0?1:.62);
+  for(let i=0;i<n;i++){
+   const t0=i/n,t1=(i+1)/n,curve=t=>-.12*t*t+f.curl*t*t*.3,width=t=>reach*Math.sin(Math.PI*Math.pow(t,.75))*(1-.25*t);
+   const a=[0,curve(t0),t0-.5],b=[0,curve(t1),t1-.5],c=[side*width(t1),curve(t1)-.04,t1-.5-.06],d=[side*width(t0),curve(t0)-.04,t0-.5-.06];
+   const col=t1>.7?tip:base;dyn.tri(w(a),w(b),w(c),col);dyn.tri(w(a),w(c),w(d),col);
+  }
+ }
+ const q=featherShades[0][0];ribbon(w([0,.01,-.62]),w([0,-.11,.5]),.006*(L/.2),q); // the quill
 }
 function drawHawk(batch,k){
  const h=hawk,yaw=Math.atan2(h.vx,h.vz),pitch=Math.atan2(h.vy,Math.max(.01,Math.hypot(h.vx,h.vz))),roll=h.bank*.7;
@@ -503,7 +518,7 @@ function hawkShadow(){
 function ribbon(p,q,w,col){
  const ax=q[0]-p[0],ay=q[1]-p[1],az=q[2]-p[2],ex=camera.x-p[0],ey=camera.y-p[1],ez=camera.z-p[2];
  let sx=ay*ez-az*ey,sy=az*ex-ax*ez,sz=ax*ey-ay*ex;const l=w/(Math.hypot(sx,sy,sz)||1);sx*=l;sy*=l;sz*=l;
- dyn.fan([[p[0]-sx,p[1]-sy,p[2]-sz],[p[0]+sx,p[1]+sy,p[2]+sz],[q[0]+sx,q[1]+sy,q[2]+sz],[q[0]-sx,q[1]-sy,q[2]-sz]],rope);
+ dyn.fan([[p[0]-sx,p[1]-sy,p[2]-sz],[p[0]+sx,p[1]+sy,p[2]+sz],[q[0]+sx,q[1]+sy,q[2]+sz],[q[0]-sx,q[1]-sy,q[2]-sz]],col||rope);
 }
 // A net: a rope grid that sags towards its weighted corners (or wraps down around a snared bird).
 function drawNet(x,y,z,r,wrap,dir){

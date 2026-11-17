@@ -434,8 +434,12 @@ function startCrash(surface=contact(.28)){
   pitch:0,roll:0,wings:[-1,1].map(dir=>({arm,wrist,tip:wrist,vt:dir*side*force*.31,va:dir*side*force*.21,vw:-dir*side*force*.25}))};
  if(!rig||camView===2){rig=null;setCamera(1/60);}
  slowmo=.7;shake=1.2; // a beat of slow motion on impact, and a cloud of feathers
- for(let n=0;n<34;n++){const a=Math.random()*tau,u=Math.random()*2-1,q=Math.sqrt(1-u*u),v=2+6*Math.random();
-  plume.push({x:b.x,y:b.y,z:b.z,vx:Math.cos(a)*q*v+Math.sin(b.angle)*speed*.25,vy:u*v+2,vz:Math.sin(a)*q*v+Math.cos(b.angle)*speed*.25,age:0,spin:6+9*Math.random(),seed:Math.random()*tau});}
+ for(let n=0;n<30;n++){const a=Math.random()*tau,u=Math.random()*2-1,q=Math.sqrt(1-u*u),v=2+7*Math.random(),big=n<8;
+  plume.push({x:b.x,y:b.y,z:b.z,vx:Math.cos(a)*q*v+Math.sin(b.angle)*speed*.3,vy:u*v+2.5,vz:Math.sin(a)*q*v+Math.cos(b.angle)*speed*.3,age:0,
+   len:big?.26+.1*Math.random():.11+.09*Math.random(),wide:big?.3:.42,curl:.4*Math.random()-.2,heading:Math.random()*tau,turnRate:(Math.random()-.5)*1.2,
+   sway:Math.random()*tau,swayRate:2.6+1.8*Math.random(),fall:.75+.5*Math.random(),
+   tumble:[Math.random()*tau,Math.random()*tau],tumbleRate:[(Math.random()-.5)*24,(Math.random()-.5)*30],
+   shade:big?(n%2?2:1):Math.floor(Math.random()*4),seed:Math.random()*tau});}
  bounce(surface,true);state='crash';keys.clear();crashVoice=voice(0,.8);if(!crashVoice)tone(155,35,.34,'triangle');document.body.classList.add('crashed');
 }
 // A wingtip hitting pavement or a facade kicks the wrist and the shoulder
@@ -455,11 +459,18 @@ function tipContact(w,side,c){
  w.touching=atSurface;
 }
 let plume=[];
-// Loose feathers: thrown out fast, stopped by the air almost at once, then rocking slowly down.
+// Loose feathers: thrown out fast and tumbling, the air stops them within a moment, and then they
+// come down like leaves, swinging from side to side and tipping into each swing, slowly turning as they go.
 function updatePlume(dt){
  for(const f of plume){
-  f.age+=dt;const drag=Math.exp(-dt*3);f.vx*=drag;f.vz*=drag;f.vy=mix(f.vy,-1.1,1-Math.exp(-dt*2.5));
-  f.x+=(f.vx+.9*Math.sin(f.age*2.3+f.seed))*dt;f.y=Math.max(.05,f.y+f.vy*dt);f.z+=(f.vz+.9*Math.cos(f.age*1.9+f.seed))*dt;
+  f.age+=dt;
+  if(f.y<=.04){f.y=.03;continue;} // resting on the ground
+  const calm=1-Math.exp(-f.age*1.6),drag=Math.exp(-dt*4);
+  f.vx*=drag;f.vz*=drag;f.vy=mix(f.vy,-f.fall*(.55+.45*Math.abs(Math.sin(f.sway))),1-Math.exp(-dt*3));
+  f.sway+=dt*f.swayRate*calm;f.heading+=dt*f.turnRate;
+  for(let k=0;k<2;k++){f.tumble[k]+=f.tumbleRate[k]*dt;f.tumbleRate[k]*=Math.exp(-dt*1.8);}
+  const swing=.9*Math.cos(f.sway)*calm,side=f.heading+Math.PI/2;
+  f.x+=(f.vx+swing*Math.cos(side)+.25*Math.sin(f.age*.7+f.seed))*dt;f.z+=(f.vz+swing*Math.sin(side))*dt;f.y=Math.max(.03,f.y+f.vy*dt);
  }
 }
 function advanceCrash(dt){

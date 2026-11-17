@@ -279,7 +279,7 @@ function updateTanks(dt){
     const speed=62,T=Math.hypot(far,bird.y-2.8)/speed,v=forwardSpeed();
     const tx=bird.x+Math.sin(bird.angle)*v*T-t.x,ty=bird.y+bird.vy*T*.5-2.8,tz=bird.z+Math.cos(bird.angle)*v*T-t.z,l=Math.hypot(tx,ty,tz)||1;
     thrown.push({kind:'shell',x:t.x+tx/l*3.5,y:2.8+ty/l*3.5,z:t.z+tz/l*3.5,vx:tx/l*speed,vy:ty/l*speed,vz:tz/l*speed,age:0,windup:0,fuse:Math.max(.15,T-.13),spin:0});
-    burst({from:500,to:50,gain:.7*clamp(1.3-far/110,.25,1),dur:.5});tone(95,32,.4,'triangle',.3*clamp(1.3-far/110,.25,1));
+    cannon(far);
     if(far<60)shake=Math.max(shake,.35);
    }
   }else if(t.cool<=0&&far<140&&bird.y>4){t.aim=1.2;t.cool=5.5;}
