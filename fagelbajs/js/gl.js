@@ -350,7 +350,7 @@ function lightMatrix(cx,cy,cz){
 }
 // View-projection that matches the 2D helpers cameraPoint() and screen() exactly.
 function viewMatrix(){
- const {x,y,z,s,c,cp,sp}=camera,kx=2*scale/width,ky=2*scale/height,near=.4,far=2600,A=(far+near)/(far-near),B=-2*far*near/(far-near);
+ const {x,y,z,s,c,cp,sp}=camera,kx=2*scale/width,ky=2*scale/height,near=camera.near||.4,far=2600,A=(far+near)/(far-near),B=-2*far*near/(far-near);
  const cr=camera.cr??1,sr=camera.sr??0,R=[c*cr+sp*s*sr,cp*sr,-s*cr+sp*c*sr],U=[sp*s*cr-c*sr,cp*cr,sp*c*cr+s*sr]; // right and up, turned by the roll
  const f=[cp*s,-sp,cp*c],rows=[[kx*R[0],kx*R[1],kx*R[2],0],[ky*U[0]+.14*f[0],ky*U[1]+.14*f[1],ky*U[2]+.14*f[2],0],[A*f[0],A*f[1],A*f[2],B],[f[0],f[1],f[2],0]];
  for(let r=0;r<4;r++){const [a,b,d,k]=rows[r];viewM[r]=a;viewM[4+r]=b;viewM[8+r]=d;viewM[12+r]=k-(a*x+b*y+d*z);}
