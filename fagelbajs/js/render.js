@@ -81,7 +81,7 @@ function flightPitch(){
   bird.climb>.01?1.33*bird.climb:-Math.PI/2);
 }
 function renderBird(){
- const b=bird,fl=b.fold*(crash?Math.exp(-crash.age*2):1),bank=b.bank*.62+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
+ const b=bird,fl=Math.max(b.fold*(crash?Math.exp(-crash.age*2):1),b.snare>0&&!crash?.96:0),bank=b.bank*.62+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
  const bob=-.03*Math.sin(wingPhase)*b.effort; // the body rides up on each downstroke
  function world([x,y,z]){
@@ -520,22 +520,50 @@ function ribbon(p,q,w,col){
  let sx=ay*ez-az*ey,sy=az*ex-ax*ez,sz=ax*ey-ay*ex;const l=w/(Math.hypot(sx,sy,sz)||1);sx*=l;sy*=l;sz*=l;
  dyn.fan([[p[0]-sx,p[1]-sy,p[2]-sz],[p[0]+sx,p[1]+sy,p[2]+sz],[q[0]+sx,q[1]+sy,q[2]+sz],[q[0]-sx,q[1]-sy,q[2]-sz]],col||rope);
 }
-// A net: a rope grid that sags towards its weighted corners (or wraps down around a snared bird).
+// A net in flight: a diamond mesh with knots, a thicker edge rope and lead weights at the corners,
+// opened like a parachute with the weights leading. It ripples as it flies.
+const knot=rgb('#5e4c30'),snareRope=rgb('#a88a58'),lead=rgb('#2c2f33');
 function drawNet(x,y,z,r,wrap,dir){
- // In flight the net faces the way it travels, opened like a parachute with its weighted corners leading.
+ if(wrap)return drawSnare();
  let u=[1,0,0],v=[0,0,1],f=[0,-1,0];
  if(dir){
   const l=Math.hypot(...dir)||1;f=dir.map(q=>q/l);
   u=[f[2],0,-f[0]];const ul=Math.hypot(u[0],u[2])||1;u=[u[0]/ul,0,u[2]/ul];
   v=[f[1]*u[2]-f[2]*u[1],f[2]*u[0]-f[0]*u[2],f[0]*u[1]-f[1]*u[0]];
  }
- const n=r>2?8:5,bag=wrap?1.1:dir?-.55:.45;
- const at=(i,j)=>{const a=i/n*2-1,b=j/n*2-1,d=(a*a+b*b)/2-.5;return [x+(u[0]*a+v[0]*b)*r-f[0]*bag*r*d,y+(u[1]*a+v[1]*b)*r-(dir?f[1]:1)*bag*r*d,z+(u[2]*a+v[2]*b)*r-f[2]*bag*r*d];};
+ const n=r>2?9:6,bag=dir?-.6:.45,rip=elapsed*9+x;
+ const at=(i,j)=>{const a=i/n*2-1,b=j/n*2-1,c=(a+b)/2,e=(a-b)/2; // turned 45 degrees: diamonds, corners at the four weights
+  const d=(a*a+b*b)/2-.5,w=.06*r*Math.sin(rip+a*3)*Math.cos(rip*.8+b*3);
+  return [x+(u[0]*c+v[0]*e)*r*1.2-f[0]*(bag*r*d+w),y+(u[1]*c+v[1]*e)*r*1.2-(dir?f[1]:1)*(bag*r*d+w),z+(u[2]*c+v[2]*e)*r*1.2-f[2]*(bag*r*d+w)];};
+ const thin=.008+.005*r;
  for(let i=0;i<=n;i++)for(let j=0;j<n;j++){
-  const edge=i===0||i===n,thick=(edge?.05:.018)+.01*r;
-  ribbon(at(i,j),at(i,j+1),thick,rope);ribbon(at(j,i),at(j+1,i),thick,rope);
+  const edge=i===0||i===n;
+  ribbon(at(i,j),at(i,j+1),edge?thin*2.6:thin,rope);ribbon(at(j,i),at(j+1,i),edge?thin*2.6:thin,rope);
  }
- for(const [i,j] of [[0,0],[0,n],[n,0],[n,n]]){const c=at(i,j),q=.08+.04*r;M.ball.add(c[0],c[1],c[2],0,q,q,q,rgb('#2c2f33'),-1);}
+ if(r<2.5)for(let i=1;i<n;i++)for(let j=1;j<n;j++){const k=at(i,j),q=thin*1.6;M.ball.add(k[0],k[1],k[2],0,q,q,q,knot);}
+ for(const [i,j] of [[0,0],[0,n],[n,0],[n,n]]){const c=at(i,j),q=.08+.04*r;M.ball.add(c[0],c[1],c[2],0,q,q*1.3,q,lead,-1);}
+}
+// Snared: the mesh is pulled tight around the bird's body (the wings are pinned inside it, see renderBird),
+// bunched up under the belly, with the weighted corners hanging below on short lines that trail behind.
+function drawSnare(){
+ const b=bird,t=elapsed,M_=11,L_=7,v=forwardSpeed();
+ const P=(i,k)=>{
+  const lon=i/M_*tau,lat=-1.25+2.5*k/(L_-1),bulge=1+.07*Math.sin(lon*4+k*2+t*7)+.05*Math.sin(t*13+i);
+  return birdPoint([Math.cos(lat)*Math.cos(lon)*.34*bulge,.11+Math.sin(lat)*.27*bulge+(lat<0?-.06*Math.cos(lon)**2:0),-.2+Math.cos(lat)*Math.sin(lon)*.86*bulge]);
+ };
+ for(let i=0;i<M_;i++)for(let k=0;k<L_;k++){
+  const p=P(i,k);
+  if(k<L_-1)ribbon(p,P(i,k+1),.0065,snareRope);
+  ribbon(p,P((i+1)%M_,k),.0065,snareRope);
+  if(camView!==2||crash)M.ball.add(p[0],p[1],p[2],0,.011,.011,.011,knot);
+ }
+ // Four lines from the bottom of the bag down to the weights, swinging and dragged back by the airflow.
+ const back=[-Math.sin(b.angle),0,-Math.cos(b.angle)];
+ for(let n=0;n<4;n++){
+  const top=P(n*3%M_,0),len=.32+.1*(n%2),swing=.12*Math.sin(t*5+n*1.7),drag=clamp(v/30,.2,1)*.5;
+  const end=[top[0]+back[0]*len*drag+Math.cos(b.angle)*swing,top[1]-len*(1-.4*drag),top[2]+back[2]*len*drag-Math.sin(b.angle)*swing];
+  ribbon(top,end,.008,snareRope);M.ball.add(end[0],end[1],end[2],0,.03,.04,.03,lead,-1);
+ }
 }
 function drawThreats(){
  let danger=false;
