@@ -28,6 +28,8 @@ Bra att veta:
 - Kameran (C) växlar mellan bakom, ovanifrån och duvans ögon (`camView`, `setCamera()` i `render.js`).
 - Bajset kommer ur gumpen (`birdPoint()`/`payload()` i `game.js`). En skarp sväng slungar det utåt, och träffytan växer när duvan stiger och krymper i dyk (`spreadNow()`).
 - Topplistan är gemensam och ligger i Supabase (tabellen `scores`, se `scoreApi` i `game.js`). Går den inte att nå visas datorns egen lista.
+- Hemlig luftbroms på Q (visas inte i spelet): vingarna framåt, stjärten utfälld, nosen upp (`brake` i `simulate()`).
+- Polishelikoptern (nivå 4) finns i `updateHeli()` (`world.js`) och `drawHeli()` (`render.js`). Rotorerna är genomskinliga skivor med utsmetade bladstreck (`veil`-batchen i `gl.js`).
 - Pekskärmens spak är analog med dödzon och mjuk kurva (`steer()` i `main.js`).
 - Hökens skugga är en egen platt siluett som bara ritas i skuggkartan (`hawkShadow()` i `render.js`).
 - Fyra tider på dygnet (`skies` i `gl.js`), en ny för varje flygning.

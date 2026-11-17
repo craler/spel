@@ -260,7 +260,7 @@ function forwardSpeed(){
 }
 // A point on the bird, in the same body frame the renderer uses (x right, y up, z towards the beak).
 function birdPoint([x,y,z]){
- const b=bird,bank=b.bank*.62,pitch=flightPitch(),sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
+ const b=bird,bank=(b.vb??b.bank)*1.02,pitch=flightPitch(),sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
  const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
  return [b.x+bx*cy+bz*sy,b.y+by*cp+z*sp,b.z-bx*sy+bz*cy];
 }
@@ -303,8 +303,8 @@ function drop(){
 }
 function simulate(dt){
  const b=bird,held=(...codes)=>codes.some(c=>keys.has(c)),dive=held('ShiftLeft','ShiftRight');
- // Secret air brake on Ctrl: wings thrown forward and beating against the airflow, tail fanned, nose up.
- const braking=held('ControlLeft','ControlRight')&&!dive&&!(b.snare>0);
+ // Secret air brake on Q: wings thrown forward and beating against the airflow, tail fanned, nose up.
+ const braking=held('KeyQ')&&!dive&&!(b.snare>0);
  if(braking&&!(b.brake>.2))whoosh();
  b.brake=mix(b.brake||0,+braking,1-Math.exp(-dt*(braking?5:2.5)));
  let steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
@@ -482,7 +482,7 @@ function startCrash(surface=contact(.28)){
 // A wingtip hitting pavement or a facade kicks the wrist and the shoulder
 // separately. Latch each contact until the feathers clear the surface.
 function tipContact(w,side,c){
- const roll=bird.bank*.62+c.roll,pitch=flightPitch()+c.pitch;
+ const roll=(bird.vb??bird.bank)*1.02+c.roll,pitch=flightPitch()+c.pitch;
  const wx=side*(.089+.43*Math.cos(w.arm)+.22*Math.cos(w.wrist)+.32*Math.cos(w.tip));
  const wy=.101+.43*Math.sin(w.arm)+.22*Math.sin(w.wrist)+.32*Math.sin(w.tip);
  const bx=wx*Math.cos(roll)+wy*Math.sin(roll),by=wy*Math.cos(roll)-wx*Math.sin(roll);

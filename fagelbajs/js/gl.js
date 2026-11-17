@@ -43,7 +43,7 @@ const VS=`#version 300 es
 layout(location=0) in vec3 aPos;layout(location=1) in vec3 aNor;layout(location=2) in vec4 aCol;layout(location=3) in vec2 aAux;
 layout(location=4) in vec4 iPos;layout(location=5) in vec3 iScale;layout(location=6) in vec4 iCol;layout(location=7) in vec4 iAnim;
 uniform mat4 uVP;
-out vec3 vW,vN,vL,vS;out vec4 vC;flat out float vSeed;
+out vec3 vW,vN,vL,vS;out vec4 vC;flat out float vSeed;out float vA;
 vec3 rotX(vec3 p,float a){float s=sin(a),c=cos(a);return vec3(p.x,p.y*c-p.z*s,p.y*s+p.z*c);}
 void main(){
  vec3 p=aPos*iScale,n=aNor;float part=aAux.x;
@@ -56,13 +56,13 @@ void main(){
  float s=sin(iPos.w),c=cos(iPos.w);
  vW=vec3(p.x*c+p.z*s,p.y,-p.x*s+p.z*c)+iPos.xyz;
  vN=vec3(n.x*c+n.z*s,n.y,-n.x*s+n.z*c);
- vL=aPos*iScale;vS=iScale;vSeed=iAnim.x;
+ vL=aPos*iScale;vS=iScale;vSeed=iAnim.x;vA=part<.5&&aAux.y>0.?aAux.y:1.; // see-through amount, only used by the veil batch
  vC=vec4(aCol.a>.5?iCol.rgb*aCol.rgb:aCol.rgb,iCol.a);
  gl_Position=uVP*vec4(vW,1.);
 }`;
 const FS=`#version 300 es
 precision highp float;
-in vec3 vW,vN,vL,vS;in vec4 vC;flat in float vSeed;out vec4 o;uniform float uGlow;
+in vec3 vW,vN,vL,vS;in vec4 vC;flat in float vSeed;in float vA;out vec4 o;uniform float uGlow;
 ${LIGHT}
 vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec3 em){
  spec=0.;em=vec3(0);
@@ -103,10 +103,10 @@ void main(){
  if(vC.a>.5&&vC.a<1.5)alb=facade(vC.rgb,vL,g,vS,vSeed,spec,em);
  else if(vC.a>1.5){em=alb*1.6;alb=vec3(0);}
  else if(vC.a<-.5){spec=.8;}
- o=vec4(tone(fogged(lit(alb,n,vW,spec)+em,vW)),1.);
+ o=vec4(tone(fogged(lit(alb,n,vW,spec)+em,vW)),vA);
 }`;
 const DEPTH_FS=`#version 300 es
-precision highp float;in vec3 vW,vN,vL,vS;in vec4 vC;flat in float vSeed;void main(){}`;
+precision highp float;in vec3 vW,vN,vL,vS;in vec4 vC;flat in float vSeed;in float vA;void main(){}`;
 const GROUND_VS=`#version 300 es
 layout(location=0) in vec2 aPos;uniform mat4 uVP;uniform vec3 uCentre;out vec3 vW;
 void main(){vW=vec3(aPos.x*1700.+uCentre.x,0.,aPos.y*1700.+uCentre.z);gl_Position=uVP*vec4(vW,1.);}`;
@@ -296,9 +296,9 @@ function attribs(list,stride,divisor){
 function triBatch(mat=0){
  const b={data:new Float32Array(STRIDE*3*2048),n:0,vao:gl.createVertexArray(),vbo:gl.createBuffer(),
   // A triangle with its own normal and colour at every corner, for smooth shading.
-  smooth(p,nrm,col){
+  smooth(p,nrm,col,alpha){
    if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
-   for(let k=0;k<3;k++){const a=p[k],n=nrm[k],c=col[k];this.data.set([a[0],a[1],a[2],n[0],n[1],n[2],c[0],c[1],c[2],0,0,0],this.n++*STRIDE);}
+   for(let k=0;k<3;k++){const a=p[k],n=nrm[k],c=col[k];this.data.set([a[0],a[1],a[2],n[0],n[1],n[2],c[0],c[1],c[2],0,0,alpha?alpha[k]:0],this.n++*STRIDE);}
   },
   tri(a,b,c,col){
    if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
@@ -314,7 +314,7 @@ function triBatch(mat=0){
  return b;
 }
 // dyn is drawn normally; omen only casts a shadow (the hawk's oversized silhouette).
-const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1), glow=triBatch(2); // glow: light added on top, like the searchlight
+const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1), glow=triBatch(2), veil=triBatch(); // veil: see-through, like spinning rotor discs // glow: light added on top, like the searchlight
 // Fullscreen / ground quad.
 const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,1,1,-1,-1,1,1,-1,1]),gl.STATIC_DRAW);attribs([[0,2,0]],2,0);gl.bindVertexArray(null);
@@ -393,6 +393,7 @@ function drawFrame(casters,scene,decals){
  gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);gl.depthMask(false);
  for(const m of decals)m.draw();
  gl.depthMask(true);gl.disable(gl.POLYGON_OFFSET_FILL);
+ if(veil.n){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);veil.draw();gl.depthMask(true);gl.disable(gl.BLEND);}
  if(glow.n){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.depthMask(false);glow.draw();gl.depthMask(true);gl.disable(gl.BLEND);}
  gl.bindVertexArray(null);
 }

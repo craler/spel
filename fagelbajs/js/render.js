@@ -8,7 +8,7 @@ function setCamera(dt){
   const a=bird.angle,s=Math.sin(a),c=Math.cos(a),k=1-Math.exp(-dt*6);
   const look=clamp(.2-flightPitch()*.85+(keys.has('Space')?.18:0),-.45,1.35);
   if(!rig||rig.pov===undefined)rig={pov:true,yaw:a,pitch:look,roll:0,rise:0,ahead:0};
-  rig.yaw=a;rig.pitch=mix(rig.pitch,look,k);rig.roll=mix(rig.roll,-(bird.vb??bird.bank)*.42,k);
+  rig.yaw=a;rig.pitch=mix(rig.pitch,look,k);rig.roll=mix(rig.roll,-(bird.vb??bird.bank)*.55,k);
   camera={x:bird.x+s*.38,y:bird.y+.34,z:bird.z+c*.38,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch),cr:Math.cos(rig.roll),sr:Math.sin(rig.roll)};
   const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1),tremble=(.01+.05*rush*rush)*rush;
   camera.x+=c*tremble*Math.sin(elapsed*33);camera.z-=s*tremble*Math.sin(elapsed*33);camera.y+=tremble*.8*Math.sin(elapsed*47);
@@ -110,7 +110,7 @@ function rawPitch(){
 }
 function pitchTarget(){return rawPitch()+(bird.brake||0)*.95;}
 function renderBird(){
- const b=bird,br=crash?0:b.brake||0,fl=Math.max(b.fold*(crash?Math.exp(-crash.age*2):1),b.snare>0&&!crash?.96:0),bank=(b.vb??b.bank)*.62+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
+ const b=bird,br=crash?0:b.brake||0,fl=Math.max(b.fold*(crash?Math.exp(-crash.age*2):1),b.snare>0&&!crash?.96:0),bank=(b.vb??b.bank)*1.02+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
  const bob=-.03*Math.sin(wingPhase)*b.effort; // the body rides up on each downstroke
  function world([x,y,z]){
@@ -248,11 +248,26 @@ const M={
   return m.build();})(),
  big:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,14,8).build(),
  // Police helicopter, nose towards +z: white with a blue band, dark glass, tail boom, fin and skids.
- heli:(()=>{const m=new Mesh(),blue=rgb('#2346a0'),glass=rgb('#141c26'),dark=rgb('#2a2d31'),white=rgb('#e9ecf1');
-  m.ball(0,0,0,1.25,1.15,2.3,white,0,0,0,14,8).ball(0,.18,1.25,1.02,.9,1.18,glass,-1,0,0,12,6).ball(0,-.25,-.1,1.27,.42,2.1,blue,0,0,0,14,4);
-  m.beam([0,.25,-1.8],[0,.55,-6.6],.28,white).beam([0,.6,-6.4],[0,2.1,-7.1],.12,blue).beam([-.9,.62,-6.5],[.9,.62,-6.5],.08,white);
-  for(const sx of [-1,1]){m.beam([sx*.8,-1.15,-1.1],[sx*.8,-1.6,-1.1],.06,dark).beam([sx*.8,-1.15,1],[sx*.8,-1.6,1],.06,dark).beam([sx*.85,-1.65,-1.7],[sx*.85,-1.65,1.9],.07,dark);}
-  m.tube(0,1.05,1.55,0,.22,.18,dark,0,0,0,8).box(-.5,-1.3,1.6,.5,-1,2.1,dark);return m.build();})(),
+ // Police helicopter, nose towards +z: white with a blue and yellow checkered band, a framed canopy, doors with windows,
+ // an engine housing with exhausts, a tapered tail boom with stabilisers and fin, skids, and a searchlight turret.
+ heli:(()=>{const m=new Mesh(),blue=rgb('#1f3f9a'),yellow=rgb('#f2c230'),glass=rgb('#2c3f55'),dark=rgb('#25282c'),white=rgb('#eef0f4'),grey=rgb('#9aa0a8');
+  m.ball(0,0,0,1.25,1.15,2.3,white,0,0,0,16,10);                                    // cabin
+  m.ball(0,.22,1.3,1.04,.92,1.16,glass,-1,0,0,14,8).beam([0,1.05,1.05],[0,.15,2.3],.05,white); // canopy and its centre frame
+  m.ball(0,-.42,0,1.27,.36,2.15,blue,0,0,0,16,4);                                  // dark belly
+  const side=z=>1.25*Math.sqrt(Math.max(0,1-(z/2.3)**2));
+  for(let k=0;k<9;k++)for(const row of [0,1]){const z0=-1.5+k*.34,y0=-.18+row*.17,col=(k+row)%2?yellow:blue; // checkered band
+   for(const sx of [-1,1]){const x=sx*(side(z0+.17)*.985);m.box(x-.02,y0,z0,x+.02,y0+.17,z0+.34,col);}}
+  for(const sx of [-1,1]){const x=sx*side(-.1)*.99; // a door with a window, and its outline
+   m.box(x-.025,.2,-.75,x+.025,.75,.35,glass,-1).box(x-.03,-.32,-.8,x+.03,-.28,.4,dark).box(x-.03,-.32,.38,x+.03,.8,.42,dark);}
+  m.ball(0,1.02,-.55,.72,.42,1.35,white,0,0,0,12,6);                                 // engine housing
+  for(const sx of [-.3,.3])m.tube(sx,.95,1.15,-1.75,.13,.11,dark,0,0,0,8).ball(sx,1.05,-1.82,.12,.08,.06,rgb('#111'),0,0,0,6,3); // exhausts
+  m.tube(0,1.3,1.75,-.2,.13,.1,dark,0,0,0,8).ball(0,1.78,-.2,.22,.12,.22,grey,-1,0,0,10,4);    // mast and hub
+  m.beam([0,.35,-1.9],[0,.5,-4.2],.32,white).beam([0,.5,-4.2],[0,.62,-6.6],.18,white).beam([0,.22,-2.2],[0,.36,-4.4],.06,blue); // tapered boom with a stripe
+  m.box(-1.05,.48,-5.55,1.05,.56,-5.15,white).box(-1.1,.38,-5.6,-1.0,.72,-5.1,blue).box(1.0,.38,-5.6,1.1,.72,-5.1,blue); // stabiliser with end plates
+  m.loft([[-7.1,.55,2.25,.06,.04],[-6.3,.55,1.6,.09,.05]],blue);                       // fin
+  for(const sx of [-1,1]){m.beam([sx*.75,-1.0,-1.1],[sx*.88,-1.62,-1.1],.06,dark).beam([sx*.75,-1.0,.95],[sx*.88,-1.62,1.05],.06,dark).beam([sx*.88,-1.66,-1.8],[sx*.88,-1.66,1.9],.07,dark).beam([sx*.88,-1.66,1.9],[sx*.88,-1.45,2.25],.07,dark);}
+  m.ball(0,-.98,1.6,.26,.26,.26,dark,-1,0,0,10,6).beam([0,-1.05,-.6],[0,-1.4,-.9],.025,dark); // searchlight turret, antenna
+  return m.build();})(),
  boat:new Mesh().loft([[-1.7,.02,.5,.2,.4],[-.9,0,.52,.55,.78],[.9,0,.52,.55,.78],[1.8,.12,.58,.08,.16]],WHITE,1).box(-.6,.3,-.2,.6,.36,.1,[.6,.6,.6],1).build(),
  tank:(()=>{const m=new Mesh(),track=[.22,.22,.2],steel=[.5,.5,.48];
   m.loft([[-3.3,.6,1.15,1.45,1.3],[-3,.5,1.55,1.55,1.4],[2.3,.5,1.55,1.55,1.4],[3.3,.65,1.1,1.45,1.3]],WHITE,1);
@@ -388,7 +403,7 @@ function strand(p,q,w0,w1,col){
 }
 const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
- for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;
+ for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  for(const h of people){
   if(Math.abs(h.x-camera.x)>130||Math.abs(h.z-camera.z)>130)continue;
@@ -508,19 +523,30 @@ function buildMoving(){
  if(heli)drawHeli();
  for(const f of plume)drawFeather(f); // loose feathers from a crash
  if(camView!==2||crash)renderBird();
- for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();glow.upload();
+ for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();glow.upload();veil.upload();
 }
 // One loose feather: a quill with two curved vanes, the outer one narrower, darker towards the tip.
 const featherShades=[['#eef1f6','#c7cfdd'],['#9aa7c2','#5d6a8c'],['#7f8cab','#454f6e'],['#d9dfe9','#8f9bb6']].map(p=>p.map(rgb));
 function drawHeli(){
  const h=heli;M.heli.add(h.x,h.y,h.z,h.yaw,1,1,1,WHITE,0,0,0,h.tilt);
- // Spinning blades (two long, a small tail rotor), and blue and red lights taking turns.
- const sy=Math.sin(h.yaw),cy=Math.cos(h.yaw),hub=[h.x,h.y+1.6,h.z],blade=rgb('#1d1f22');
- for(let k=0;k<4;k++){const a=h.rotor+k*Math.PI/2,ux=Math.cos(a)*5.6,uz=Math.sin(a)*5.6,wx=-Math.sin(a)*.18,wz=Math.cos(a)*.18;
-  dyn.fan([[hub[0]+wx,hub[1],hub[2]+wz],[hub[0]+ux+wx,hub[1]-.05,hub[2]+uz+wz],[hub[0]+ux-wx,hub[1]-.05,hub[2]+uz-wz],[hub[0]-wx,hub[1],hub[2]-wz]],blade);}
- const tail=[h.x-sy*6.9+cy*.25,h.y+.65,h.z-cy*6.9-sy*.25];
- for(let k=0;k<2;k++){const a=h.rotor*1.7+k*Math.PI,u=Math.cos(a)*.9,v=Math.sin(a)*.9;
-  dyn.fan([[tail[0],tail[1],tail[2]],[tail[0]-cy*.0+sy*u*0,tail[1]+v,tail[2]+u*sy*0+u],[tail[0],tail[1]+v+.12,tail[2]+u+.12]],blade);}
+ // The rotors spin far too fast for the eye: each is a see-through disc with two dark smeared blade streaks
+ // turning in it, the way they look on film. Solid blades at 60 frames a second would strobe and seem to crawl.
+ const sy=Math.sin(h.yaw),cy=Math.cos(h.yaw),sp=Math.sin(h.tilt),cp=Math.cos(h.tilt);
+ const at=(x,y,z)=>{const y1=y*cp-z*sp,z1=y*sp+z*cp;return [h.x+x*cy+z1*sy,h.y+y1,h.z-x*sy+z1*cy];}; // a point on the helicopter
+ const blur=rgb('#2a2d33'),skyward=[0,1,0];
+ const disc=(centre,u,v,R,turn,base,dense,nrm)=>{
+  const N=36,pt=(a,r)=>[centre[0]+(u[0]*Math.cos(a)+v[0]*Math.sin(a))*r,centre[1]+(u[1]*Math.cos(a)+v[1]*Math.sin(a))*r,centre[2]+(u[2]*Math.cos(a)+v[2]*Math.sin(a))*r];
+  for(let i=0;i<N;i++){const a0=i/N*tau,a1=(i+1)/N*tau;
+   // How much blade has just passed this sector: strong right behind each blade, fading round the circle.
+   const smear=a=>{let s=0;for(const k of [0,1]){const d=wrap(turn+k*Math.PI-a,tau);s+=Math.exp(-d*2.6);}return s;};
+   const al0=base+dense*smear(a0),al1=base+dense*smear(a1),tip=.06;
+   veil.smooth([centre,pt(a0,R*.97),pt(a1,R*.97)],[nrm,nrm,nrm],[blur,blur,blur],[base*.6,al0,al1]);
+   veil.smooth([pt(a0,R*.97),pt(a0,R),pt(a1,R)],[nrm,nrm,nrm],[blur,blur,blur],[al0+tip,al0+tip,al1+tip]);
+   veil.smooth([pt(a0,R*.97),pt(a1,R),pt(a1,R*.97)],[nrm,nrm,nrm],[blur,blur,blur],[al0+tip,al1+tip,al1]);
+  }
+ };
+ disc(at(0,1.84,-.2),at(1,0,0).map((q,i)=>q-[h.x,h.y,h.z][i]),at(0,0,1).map((q,i)=>q-[h.x,h.y,h.z][i]),5.8,h.rotor,.07,.6,skyward);
+ const sideV=[cy,0,-sy];disc(at(.2,.68,-6.75),at(0,1,0).map((q,i)=>q-[h.x,h.y,h.z][i]),at(0,0,1).map((q,i)=>q-[h.x,h.y,h.z][i]),.95,h.rotor*1.6,.08,.4,sideV);
  const blink=Math.floor(elapsed*4)%2;M.ball.add(h.x+cy*.5,h.y+1.2,h.z-sy*.5,0,.16,.12,.16,rgb(blink?'#3c6dff':'#202a44'),2);M.ball.add(h.x-cy*.5,h.y+1.2,h.z+sy*.5,0,.16,.12,.16,rgb(blink?'#3a1414':'#ff3434'),2);
  // The searchlight: a faint cone of light down to where it lands, and a bright patch there.
  const o=[h.x+sy*2,h.y-1.2,h.z+cy*2],d=h.beam,len=d[1]<-.05?Math.min(150,(o[1]-.05)/-d[1]):110,end=[o[0]+d[0]*len,o[1]+d[1]*len,o[2]+d[2]*len];

@@ -11,8 +11,8 @@ const qualityNames={auto:'Auto',high:'Snygg',fast:'Snabb'};
 const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+'</kbd><span>'+does+'</span></div>';
 function controlsPicture(){
  if(touchMode)return '<div class="pads"><div><i class="pad"></i><span>Spaken styr</span></div><div><i class="round">DYK</i><span>Störtdyk</span></div><div><i class="round">BAJSA</i><span>Bajsa</span></div></div>';
- return '<div class="keyboard"><div><div class="row">'+keycap('W',reversePitch?'stig':'sjunk')+'</div><div class="row">'+keycap('A','vänster')+keycap('S',reversePitch?'sjunk':'stig')+keycap('D','höger')+'</div></div>'+
-  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div><div>'+keycap('C','kamera')+keycap('X','upp/ner')+'</div></div><p class="hint">Pilarna fungerar också · Esc pausar</p>';
+ return '<div class="keyboard"><div><div class="row">'+keycap('↑',reversePitch?'stig':'sjunk')+'</div><div class="row">'+keycap('←','vänster')+keycap('↓',reversePitch?'sjunk':'stig')+keycap('→','höger')+'</div></div>'+
+  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div><div>'+keycap('C','kamera')+keycap('X','upp/ner')+'</div></div><p class="hint">WASD fungerar också · Esc pausar</p>';
 }
 // X swaps which of W and S climbs, in the air or in the menus, and remembers the choice.
 function flipPitch(){
@@ -52,7 +52,7 @@ document.querySelector('.panel').addEventListener('click',e=>{
 $('go').onclick=start;$('pause').onclick=togglePause;$('camera').onclick=view;
 $('audio').onclick=()=>{muted=!muted;setAudio();};
 onblur=()=>{keys.clear();if(state==='play')togglePause();};
-const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','KeyX','Escape','ControlLeft','ControlRight'];
+const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','KeyX','Escape','KeyQ'];
 onkeydown=e=>{
  if(state!=='play'){
   if(e.code==='Escape'&&state==='pause')togglePause();
@@ -92,7 +92,7 @@ for(const [id,code] of [['t-fire','Space'],['t-dive','ShiftLeft']]){
 // ---- First flights: one short tip at a time instead of a wall of text.
 let flights=0;try{flights=+localStorage.getItem('fagelbajs.flights')||0;}catch{}
 const tips=[
- [1,7,'A/D svänger · S/W ändrar höjden','Dra spaken för att styra'],
+ [1,7,'←/→ svänger · ↑/↓ ändrar höjden','Dra spaken för att styra'],
  [7,13,'Håll Space för att bajsa','Håll BAJSA'],
  [13,20,'Shift = störtdyk. Lågt och i dyk ger dubbelt','DYK = störtdyk. Lågt och i dyk ger dubbelt'],
  [20,27,'Guldstjärnor = extra poäng','Guldstjärnor = extra poäng']
