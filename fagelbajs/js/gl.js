@@ -13,7 +13,7 @@ function rgb(str){
  colorCache.set(str,c);return c;
 }
 const LIGHT=`
-uniform vec3 uSun,uSunCol,uSkyCol,uGroundCol,uFogCol,uEye;uniform float uFogD,uTime,uFast,uTexel;
+uniform vec3 uSun,uSunCol,uSkyCol,uGroundCol,uFogCol,uEye;uniform float uFogD,uTime,uFast,uTexel,uNight;uniform vec3 uSpotPos,uSpotDir;uniform float uSpot;
 uniform highp sampler2DShadow uShadow;uniform mat4 uLight;
 float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
@@ -35,6 +35,10 @@ vec3 lit(vec3 alb,vec3 n,vec3 wp,float spec){
  vec3 c=alb*(mix(uGroundCol,uSkyCol,n.y*.5+.5)+uSunCol*d);
  vec3 h=normalize(normalize(uEye-wp)+uSun);
  c+=uSunCol*spec*pow(max(dot(n,h),1e-4),60.)*sh;
+ // A searchlight: a real light with a soft-edged cone and inverse-square falloff, so it is a bright pool close by
+ // and fades with distance. In daylight it hardly shows next to the sun, at night it lights up the street.
+ if(uSpot>0.){vec3 L=uSpotPos-wp;float d=length(L);L/=d;float cone=smoothstep(.972,.993,dot(-L,uSpotDir));
+  c+=alb*vec3(1.,.95,.82)*uSpot*cone*max(dot(n,L),0.)*900./(400.+d*d);}
  return c;
 }
 vec3 tone(vec3 c){c=1.-exp(-max(c,0.)*1.25);return pow(max(c,vec3(1e-5)),vec3(1./2.2));} // pow(0,y) is undefined on some GPUs and showed up as black
@@ -183,10 +187,11 @@ void main(){
  float t=clamp(d.y,1e-4,1.),s=max(dot(d,uSun),1e-4);
  vec3 c=mix(uFogCol,uZenith,pow(t,.55));
  c+=uSunCol*(.1*pow(s,6.)+.25*pow(s,60.)+6.*smoothstep(.9992,.9997,s));
+ if(uNight>.5&&d.y>.02){vec2 g=floor(d.xz/(d.y+.25)*260.);float h=h21(g);c+=vec3(.9,.9,1.)*step(.996,h)*(h-.996)*160.*smoothstep(.02,.25,d.y);} // stars
  if(d.y>.015){
   float n=fbm(d.xz/(d.y+.12)*1.25+uTime*.006),cl=smoothstep(.4,.68,n)*smoothstep(.015,.16,d.y);
   if(uFast<.5)cl=max(cl,.65*smoothstep(.5,.72,fbm(d.xz/(d.y+.2)*3.1-uTime*.004+9.))*smoothstep(.04,.3,d.y)); // a higher, finer layer
-  c=mix(c,mix(uFogCol*1.15,vec3(1.5,1.3,1.12),.35+.65*pow(s,3.))*(1.1-.45*smoothstep(.6,.85,n)),cl*.9);
+  c=mix(c,mix(uFogCol*1.15,uSunCol*.5,.35+.65*pow(s,3.))*(1.1-.45*smoothstep(.6,.85,n)),cl*.9);
  }
  o=vec4(tone(c),1.);
 }`;
@@ -335,10 +340,13 @@ const skies=[
  {name:'kvällssol',dir:[-.52,.6,.61],sun:[3.1,2.25,1.45],sky:[.3,.42,.66],ground:[.2,.17,.14],fog:[.78,.62,.48],zenith:[.14,.28,.62],fogD:.0058,glow:1},
  {name:'middag',dir:[.35,.86,.36],sun:[2.9,2.7,2.4],sky:[.4,.52,.78],ground:[.22,.2,.17],fog:[.62,.71,.82],zenith:[.1,.27,.68],fogD:.0044,glow:.2},
  {name:'morgon',dir:[.66,.52,-.54],sun:[2.5,2.15,1.9],sky:[.36,.44,.6],ground:[.17,.17,.18],fog:[.82,.77,.74],zenith:[.2,.36,.66],fogD:.0072,glow:.55},
+ // Night: a dim blue moon in place of the sun, stars, many lit windows, street lamps and headlights (see nightLights()).
+ {name:'natt',dir:[.45,.72,.3],sun:[.42,.5,.72],sky:[.05,.07,.14],ground:[.025,.025,.035],fog:[.045,.055,.09],zenith:[.008,.015,.05],fogD:.0062,glow:3.2,night:true},
  {name:'skymning',dir:[-.7,.5,-.5],sun:[2.6,1.45,.9],sky:[.22,.26,.5],ground:[.13,.1,.12],fog:[.7,.44,.42],zenith:[.09,.13,.38],fogD:.006,glow:1.7},
 ];
 for(const s of skies){const l=Math.hypot(...s.dir);s.dir=s.dir.map(v=>v/l);}
 let sky=skies[0];
+const spot={on:0,pos:[0,0,0],dir:[0,-1,0]}; // the helicopter's searchlight, set each frame
 function setSky(n){sky=skies[n%skies.length];}
 const lightM=new Float32Array(16), viewM=new Float32Array(16);
 function lightMatrix(cx,cy,cz){
@@ -358,7 +366,8 @@ function viewMatrix(){
 function lightUniforms(prog){
  const u=prog.u;gl.useProgram(prog.p);
  gl.uniform3fv(u.uSun,sky.dir);if(u.uGlow)gl.uniform1f(u.uGlow,sky.glow);gl.uniform3fv(u.uSunCol,sky.sun);gl.uniform3fv(u.uSkyCol,sky.sky);gl.uniform3fv(u.uGroundCol,sky.ground);
- gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fast?1.35:1));if(u.uFast)gl.uniform1f(u.uFast,fast?1:0);if(u.uTexel)gl.uniform1f(u.uTexel,1/SHADOW);
+ gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fast?1.35:1));if(u.uNight)gl.uniform1f(u.uNight,sky.night?1:0);
+ if(u.uSpot){gl.uniform1f(u.uSpot,spot.on);gl.uniform3fv(u.uSpotPos,spot.pos);gl.uniform3fv(u.uSpotDir,spot.dir);}if(u.uFast)gl.uniform1f(u.uFast,fast?1:0);if(u.uTexel)gl.uniform1f(u.uTexel,1/SHADOW);
  if(u.uVP)gl.uniformMatrix4fv(u.uVP,false,viewM);
  if(u.uLight)gl.uniformMatrix4fv(u.uLight,false,lightM);
  if(u.uShadow)gl.uniform1i(u.uShadow,0);

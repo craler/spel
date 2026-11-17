@@ -378,8 +378,8 @@ function buildStatics(){
   }
   for(const [x,z,s,seed] of b.trees)M.tree.add(x,0,z,seed*tau,s,s*(.9+.25*seed),s,rgb(leaf[Math.floor(seed*leaf.length)]));
   for(const [n,[x,z]] of b.lamps.entries())M.lamp.add(x,0,z,[.8,-.8,2.4,-2.4][n]);
-  for(const [x,z,p] of b.tables)M.table.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
-  for(const [x,z,p] of b.stalls)M.stall.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
+  if(!onEventSquare(i,j))for(const [x,z,p] of b.tables)M.table.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
+  if(!onEventSquare(i,j))for(const [x,z,p] of b.stalls)M.stall.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
   for(const [x,z,yaw] of b.benches)M.bench.add(x,0,z,yaw);
   if(b.statue)M.statue.add(b.statue[0],0,b.statue[1],.6);
   if(b.type===3){ // canal: quay walls down to the water, bridge edges and railings, gabled roofs
@@ -403,7 +403,7 @@ function strand(p,q,w0,w1,col){
 }
 const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
- for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
+ spot.on=0;for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  for(const h of people){
   if(Math.abs(h.x-camera.x)>130||Math.abs(h.z-camera.z)>130)continue;
@@ -519,6 +519,8 @@ function buildMoving(){
   const b=block(i,j);if(b.statue&&scored.has('st'+b.key)){M.ball.add(b.statue[0],5.2,b.statue[1],0,.36,.2,.36,splatCol,-1);M.ball.add(b.statue[0],4.3,b.statue[1]+.3,0,.3,.5,.12,splatCol,-1);}
  }
  // The hawk is drawn at its real size; a much larger copy goes only into the shadow map.
+ if(sky.night)nightLights();
+ drawEvent();
  if(hawk){drawHawk(dyn,2.3);hawkShadow();}
  if(heli)drawHeli();
  for(const f of plume)drawFeather(f); // loose feathers from a crash
@@ -527,6 +529,25 @@ function buildMoving(){
 }
 // One loose feather: a quill with two curved vanes, the outer one narrower, darker towards the tip.
 const featherShades=[['#eef1f6','#c7cfdd'],['#9aa7c2','#5d6a8c'],['#7f8cab','#454f6e'],['#d9dfe9','#8f9bb6']].map(p=>p.map(rgb));
+// Night: every street lamp glows and throws a warm pool on the pavement, and vehicles have headlights that light
+// the road ahead and red tail lights. The pools are added light that fades to nothing at their edge.
+const lampGlow=rgb('#ffd38a'),headGlow=rgb('#fff4d6'),tailGlow=rgb('#ff2a1c');
+function pool(x,y,z,yaw,rx,rz,col,ox=0,oz=0){
+ const s=Math.sin(yaw),c=Math.cos(yaw),P=(u,v)=>[x+(u+ox)*c+(v+oz)*s,y,z-(u+ox)*s+(v+oz)*c],n=[0,1,0],zero=[0,0,0],m=P(0,0);
+ for(let i=0;i<16;i++){const a0=i/16*tau,a1=(i+1)/16*tau;glow.smooth([m,P(Math.cos(a0)*rx,Math.sin(a0)*rz),P(Math.cos(a1)*rx,Math.sin(a1)*rz)],[n,n,n],[col,zero,zero]);}
+}
+function nightLights(){
+ const near=(x,z,r)=>Math.abs(x-camera.x)<r&&Math.abs(z-camera.z)<r,ix=Math.floor(camera.x/tile),iz=Math.floor(camera.z/tile),warm=[.05,.034,.016];
+ for(let i=ix-3;i<=ix+3;i++)for(let j=iz-3;j<=iz+3;j++)for(const [n,[x,z]] of block(i,j).lamps.entries()){
+  const yaw=[.8,-.8,2.4,-2.4][n],hx=x+Math.sin(yaw)*.85,hz=z+Math.cos(yaw)*.85;if(!near(hx,hz,140))continue;
+  M.ball.add(hx,5.22,hz,0,.17,.08,.2,lampGlow,2);pool(hx,.05,hz,0,6,6,warm);
+ }
+ for(const c of cars){
+  if(c.parked||!near(c.x,c.z,120))continue;const s=Math.sin(c.yaw),k=Math.cos(c.yaw),L=c.bus?5.2:2.05,W=c.bus?.8:.62,y=c.bus?.9:.68;
+  for(const sx of [-1,1]){M.ball.add(c.x+sx*W*k+L*s,y,c.z-sx*W*s+L*k,0,.12,.08,.06,headGlow,2);M.ball.add(c.x+sx*W*k-L*s,y+.05,c.z-sx*W*s-L*k,0,.11,.07,.05,tailGlow,2);}
+  if(!wrecks.has(c.id))pool(c.x,.05,c.z,c.yaw,2.3,5,[.045,.042,.034],0,L+4.5);
+ }
+}
 function drawHeli(){
  const h=heli;M.heli.add(h.x,h.y,h.z,h.yaw,1,1,1,WHITE,0,0,0,h.tilt);
  // The rotors spin far too fast for the eye: each is a see-through disc with two dark smeared blade streaks
@@ -548,14 +569,16 @@ function drawHeli(){
  disc(at(0,1.84,-.2),at(1,0,0).map((q,i)=>q-[h.x,h.y,h.z][i]),at(0,0,1).map((q,i)=>q-[h.x,h.y,h.z][i]),5.8,h.rotor,.07,.6,skyward);
  const sideV=[cy,0,-sy];disc(at(.2,.68,-6.75),at(0,1,0).map((q,i)=>q-[h.x,h.y,h.z][i]),at(0,0,1).map((q,i)=>q-[h.x,h.y,h.z][i]),.95,h.rotor*1.6,.08,.4,sideV);
  const blink=Math.floor(elapsed*4)%2;M.ball.add(h.x+cy*.5,h.y+1.2,h.z-sy*.5,0,.16,.12,.16,rgb(blink?'#3c6dff':'#202a44'),2);M.ball.add(h.x-cy*.5,h.y+1.2,h.z+sy*.5,0,.16,.12,.16,rgb(blink?'#3a1414':'#ff3434'),2);
- // The searchlight: a faint cone of light down to where it lands, and a bright patch there.
- const o=[h.x+sy*2,h.y-1.2,h.z+cy*2],d=h.beam,len=d[1]<-.05?Math.min(150,(o[1]-.05)/-d[1]):110,end=[o[0]+d[0]*len,o[1]+d[1]*len,o[2]+d[2]*len];
+ // The searchlight lights the scene for real (spot in gl.js). What is drawn here is only the beam in the air:
+ // brightest at the lamp, fading along its length and towards its edges, much stronger at night.
+ const o=[h.x+sy*2,h.y-1.2,h.z+cy*2],d=h.beam,len=d[1]<-.05?Math.min(150,(o[1]-.05)/-d[1]):110;
+ spot.on=sky.night?3.2:1.4;spot.pos=o;spot.dir=d;
  const up=Math.abs(d[1])>.9?[1,0,0]:[0,1,0],a=[d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]],al=Math.hypot(...a);a.forEach((q,i)=>a[i]=q/al);
- const b=[d[1]*a[2]-d[2]*a[1],d[2]*a[0]-d[0]*a[2],d[0]*a[1]-d[1]*a[0]],R=len*.13,ring=[];
- for(let i=0;i<=16;i++){const t=i/16*tau,c=Math.cos(t)*R,s=Math.sin(t)*R;ring.push([end[0]+a[0]*c+b[0]*s,end[1]+a[1]*c+b[1]*s,end[2]+a[2]*c+b[2]*s]);}
- const beam=h.lit?[.0032,.0031,.0024]:[.0018,.0018,.0014];for(let i=0;i<16;i++)glow.tri(o,ring[i],ring[i+1],beam);
- if(d[1]<-.05){const spot=h.lit?[.05,.048,.036]:[.03,.029,.022],sr=R/Math.max(.35,-d[1])*.9,g=[end[0],.08,end[2]];
-  for(let i=0;i<16;i++){const t0=i/16*tau,t1=(i+1)/16*tau;glow.tri(g,[g[0]+Math.cos(t0)*sr,.08,g[2]+Math.sin(t0)*R],[g[0]+Math.cos(t1)*sr,.08,g[2]+Math.sin(t1)*R],spot);}}
+ const b=[d[1]*a[2]-d[2]*a[1],d[2]*a[0]-d[0]*a[2],d[0]*a[1]-d[1]*a[0]],steps=[0,.08,.25,.5,1],N=14,k=(sky.night?.06:.012)*(h.lit?1.4:1);
+ const ringAt=f=>{const c=[o[0]+d[0]*len*f,o[1]+d[1]*len*f,o[2]+d[2]*len*f],R=.25+len*f*.13;return Array.from({length:N+1},(_,i)=>{const t=i/N*tau;return [c[0]+(a[0]*Math.cos(t)+b[0]*Math.sin(t))*R,c[1]+(a[1]*Math.cos(t)+b[1]*Math.sin(t))*R,c[2]+(a[2]*Math.cos(t)+b[2]*Math.sin(t))*R];});};
+ const shade=f=>{const v=k*Math.pow(1-f,1.6)/(1+f*6);return [v,v*.97,v*.85];},nn=[0,1,0];
+ for(let s=1;s<steps.length;s++){const r0=ringAt(steps[s-1]),r1=ringAt(steps[s]),c0=shade(steps[s-1]),c1=shade(steps[s]);
+  for(let i=0;i<N;i++){glow.smooth([r0[i],r1[i],r1[i+1]],[nn,nn,nn],[c0,c1,c1]);glow.smooth([r0[i],r1[i+1],r0[i+1]],[nn,nn,nn],[c0,c1,c0]);}}
  M.ball.add(o[0],o[1],o[2],0,.3,.3,.3,rgb('#fff6d0'),2);
 }
 function drawFeather(f){
@@ -770,6 +793,7 @@ function render(dt=1/60){
   // Gold stars mark the targets that are worth going out of your way for.
   const star=(x,y,z)=>{const far=Math.hypot(x-bird.x,z-bird.z);if(far>150)return;const m=point([x,y,z]);if(m)text('★',m[0],m[1],14+7*clamp(1-far/90,0,1),'#ffd24a');};
   for(const h of people)if((h.star||h.base>=60)&&!scored.has(h.id))star(h.x,h.y+2.9,h.z);
+  for(const c of cars)if(c.show&&!alarms.has(c.id))star(c.x,2.9,c.z);
   for(const c of cars)if((c.cab||c.bus)&&!wrecks.has(c.id))star(c.x,c.bus?4.2:2.7,c.z);
   for(const q of balloons())if(!scored.has(q.id))star(q.x,q.y+15,q.z);
   for(let i=Math.floor(bird.x/tile)-3;i<=Math.floor(bird.x/tile)+3;i++)for(let j=Math.floor(bird.z/tile)-3;j<=Math.floor(bird.z/tile)+3;j++){
@@ -780,7 +804,7 @@ function render(dt=1/60){
    if(scored.has(h.id))return false;
    const t=flightTime(p,h.y+1.8);if(t<0||t>tt)return false;
    const [hx,,hz]=at(p,t);
-   if(wanted||h.fixed)return Math.hypot(h.x-hx,h.z-hz)<R;
+   if(wanted||h.fixed||h.event)return Math.hypot(h.x-hx,h.z-hz)<R;
    const [px,pz]=pavement(h.i,h.j,h.route+h.walk*t);
    return Math.hypot(px-hx,pz-hz)<R;
   })||(()=>{
@@ -794,7 +818,7 @@ function render(dt=1/60){
   }
   drawRing(aim,R,target);
   const centre=point(aim);if(centre){drawSight(centre,target);drawHitmarker(centre);}
-  drawWorldText();drawFeed();
+  drawWorldText();drawFeed();drawEventHud();
   if(tank<.995||emptyTank){ // how much is left, right under the bird where the eyes already are
    const m=point([bird.x,bird.y-.9,bird.z]);
    if(m){const wide=64,x=m[0]-wide/2,y=Math.min(height-30,m[1]+14);

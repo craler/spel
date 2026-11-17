@@ -97,7 +97,7 @@ function updateThreats(dt){
  if(wanted){
   throwWait-=dt;
   if(throwWait<=0){
-   const v=forwardSpeed(),near=people.filter(h=>!h.climbing&&!h.fixed&&!scored.has(h.id)&&Math.abs(h.x-bird.x)<24&&Math.abs(h.z-bird.z)<24);
+   const v=forwardSpeed(),near=people.filter(h=>!h.climbing&&!h.fixed&&!h.event&&!scored.has(h.id)&&Math.abs(h.x-bird.x)<24&&Math.abs(h.z-bird.z)<24);
    throwWait=.23;
    for(let n=0;n<5&&near.length;n++){
     const h=near[Math.floor(Math.random()*near.length)],net=wanted>=3&&Math.random()<.3,t=.5+.55*Math.random();
@@ -185,7 +185,7 @@ function featList(open){
 }
 // ---- Feedback: banner for big moments, a score feed by the sight, numbers and speech bubbles in the world.
 let popups=[],feed=[],bubbles=[],splash=[],marker=-9,markerGold=false,bannerUntil=0,lastDrop=-9,lastBubble=-9;
-const wantedNote=['','De kastar frukt','Fler kastar, och snabbare','Höken, paraplyer och nät','Polishelikoptern','Stridsvagnar'];
+const wantedNote=['','De kastar frukt','Fler kastar, och snabbare','Höken, paraplyer och nät','Höken blir argare','Stridsvagnar'];
 const shouts=['USCH!','ÄSCH!','MEN VA?!','MIN FRISYR!','FY BUBBLAN!','NEEEJ!','MITT I NYLLET!','BLÄ!','DUVJÄKEL!','INTE IGEN!'];
 function banner(title,sub='',kind='',time=2.2){
  const el=$('feedback'),big=document.createElement('strong');el.className=kind;el.textContent='';big.textContent=title;el.append(big);
@@ -238,7 +238,7 @@ function reset(){
  resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
- replay=[];killClip=null;killPending=null;killBest=0;killPlay=0;
+ resetEvents();replay=[];killClip=null;killPending=null;killBest=0;killPlay=0;
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
  bird={x:0,z:0,y:21,angle:0,bank:0,turn:0,spread:1,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9,nextFlap:2,burst:0,lookYaw:0,lookPitch:0,glance:0,nextGlance:1,snare:0};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }
@@ -366,7 +366,7 @@ function simulate(dt){
  elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort+9*b.brake);
  if(b.effort>.5&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
- crowdTime+=dt;if(!halfStep){gather(crowdTime);crowdTime=0;}updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateHeli(dt);updateTanks(dt);if(state!=='play')return;
+ crowdTime+=dt;if(!halfStep){gather(crowdTime);crowdTime=0;}updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateHeli(dt);updateEvent(dt);updateTanks(dt);if(state!=='play')return;
  const floating=balloons();
  drops=drops.filter(p=>{
   const prev=p.age;p.age+=dt;const end=p.end;
@@ -385,7 +385,7 @@ function simulate(dt){
     splashAt(victim.x,victim.y+2.4,victim.z,5);splat(victim.x,victim.y,victim.z);return false;
    }
    if(victim){
-    scored.add(victim.id);fallen.set(victim.id,elapsed);if(victim.base>=60)run.wedding++;yelp();
+    scored.add(victim.id);fallen.set(victim.id,elapsed);if(victim.label==='BRÖLLOPSKAOS')run.wedding++;yelp();eventHit(victim.id);
     award(victim.base||10,victim.label||'SPLATT',p,victim.y,[victim.x,victim.y+2.4,victim.z]);
     bubble(victim.x,victim.y+2.1,victim.z,victim.shout||shouts[Math.floor(Math.random()*shouts.length)]);
     splashAt(victim.x,victim.y+1.8,victim.z,6);splat(victim.x,victim.y,victim.z,true);return false;
@@ -405,7 +405,9 @@ function simulate(dt){
    const [x,,z]=at(p,carTime),vehicle=cars.find(c=>carContact(c,x,1.47,z,extra));
    if(vehicle){
     if(vehicle.parked){ // a parked car cannot crash, but its alarm goes off
-     if(!alarms.has(vehicle.id)){alarms.set(vehicle.id,elapsed);run.alarms++;award(5,'BILLARM',p,0,[vehicle.x,2.5,vehicle.z]);}
+     if(!alarms.has(vehicle.id)){alarms.set(vehicle.id,elapsed);run.alarms++;
+      if(vehicle.show){award(60,'BILSALONGEN',p,0,[vehicle.x,2.5,vehicle.z]);bubble(vehicle.x,2.3,vehicle.z,'NYPOLERAD!');eventHit(vehicle.id);}
+      else award(5,'BILLARM',p,0,[vehicle.x,2.5,vehicle.z]);}
     }else if(!wrecks.has(vehicle.id)){
      crashCar(vehicle);carsHit++;award(vehicle.bus?40:vehicle.cab?50:25,vehicle.bus?'BUSSEN':vehicle.cab?'CABBEN':'PLÅTSMÄLL',p,0,[vehicle.x,vehicle.bus?4:2.5,vehicle.z]);
      bubble(vehicle.x,vehicle.bus?3.8:2.3,vehicle.z,vehicle.bus?'ALLA AV!':vehicle.cab?'MIN FRISYR!':'MIN LACK!');

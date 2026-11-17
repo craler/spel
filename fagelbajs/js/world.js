@@ -75,9 +75,10 @@ function gather(dt=0){
   if(b.cleaner){const [cx,cz,top,s]=b.cleaner;extra('win'+i+','+j,cx,2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s)),cz,0,'#e87a1e',60,'FÖNSTERPUTSAREN','MIN HINK!');} // rides a lift up and down the facade
   if(b.type===3)for(const [n,q] of boatsAt(b).entries())extra('boat'+n+','+i+','+j,q.x,WATER+.3,q.z,q.yaw,n?'#3f7fa8':'#e8e4da',45,'BÅTTUREN','MAN ÖVER BORD!');
   // People who stay put: café guests, picnickers, the wedding party.
-  for(const [n,f] of block(i,j).folk.entries())people.push({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,
+  if(!onEventSquare(i,j))for(const [n,f] of block(i,j).folk.entries())people.push({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,
    yaw:hash(i,j,n+300)*tau,running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false});
  }
+ eventPeople();
  if(runners.size>520){for(const [id,r] of runners)if(Math.hypot(r.x-bird.x,r.z-bird.z)>145)runners.delete(id);}
 }
 // How far each car has fallen behind its place in the stream because it had to stop.
@@ -107,6 +108,7 @@ function traffic(){
  for(let i=px-2;i<=px+2;i++)for(let j=pz-2;j<=pz+2;j++)for(const [n,p] of block(i,j).parked.entries()){
   const id='park:'+i+','+j+','+n;if(!wrecks.has(id))cars.push({id,parked:true,x:p.x,z:p.z,yaw:p.yaw,speed:0,cab:false,hatch:n%2===0,color:p.c});
  }
+ eventCars();
  // Drivers brake: a car stops behind a wreck or a stopped car, and gives way to cross traffic already in the junction.
  // Once the way is clear it drives a little faster until it is back in its place. Only a car that had no room to stop crashes.
  const moving=cars.filter(c=>!c.parked),blockers=[...moving,...wrecks.values()];
@@ -165,7 +167,7 @@ function slips(){
   crashCar(c);carsHit++;run.carSlips++;award(20,'BAJSHALKA',null,0,[c.x,2.5,c.z]);bubble(c.x,2.3,c.z,'JAG HALKAR!');
  }
  for(const h of people){
-  if(h.fixed||h.climbing||h.y>.1||scored.has(h.id))continue;
+  if(h.fixed||h.event||h.climbing||h.y>.1||scored.has(h.id))continue;
   const patch=near(h.x,h.z,.9);if(patch.length<2)continue;
   for(const s of patch)s.used=true;
   scored.add(h.id);fallen.set(h.id,elapsed);hits++;feedLine('HALKADE',5);addPoints(5);
@@ -309,14 +311,14 @@ function updateTanks(dt){
 // ---- Four stars: a police helicopter. It follows the bird above the rooftops and sweeps a searchlight after it.
 // The beam turns slowly, so hard turns shake it off, and a building between the bird and the helicopter hides it.
 // Held in the light long enough, the bird gets a net fired at it from the open side door.
-let heli=null;
+let heli=null,heliEnabled=false; // switched off for now: set heliEnabled to true to bring it back at four stars
 function heliSees(h){
  const dx=bird.x-h.x,dy=bird.y-h.y,dz=bird.z-h.z;
  for(let k=1;k<12;k++){const f=k/12;if(solid(h.x+dx*f,h.y+dy*f,h.z+dz*f))return false;}
  return true;
 }
 function updateHeli(dt){
- if(wanted<4){heli=null;return;}
+ if(wanted<4||!heliEnabled){heli=null;return;}
  const b=bird;
  if(!heli){
   heli={x:b.x-Math.sin(b.angle)*160,y:62,z:b.z-Math.cos(b.angle)*160,vx:0,vy:0,vz:0,yaw:b.angle,tilt:0,roll:0,rotor:0,

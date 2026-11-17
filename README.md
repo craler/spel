@@ -13,7 +13,8 @@ Koden är vanliga skript (inga moduler, inget byggsteg) som delar ett globalt sc
 | `js/core.js` | Hjälpfunktioner och delat speltillstånd |
 | `js/audio.js` | Ljud: syntade toner och `audio/samples.mp3` (krasch + vingslag) |
 | `js/city.js` | Stadens kvarter: hus, parker, torg, mat, staty, bröllop |
-| `js/world.js` | Fotgängare, trafik och kedjekrockar, mat, höken |
+| `js/world.js` | Fotgängare, trafik och kedjekrockar, höken, stridsvagnar, polishelikoptern |
+| `js/events.js` | Händelser på torgen: konsert, parad och bilsalong |
 | `js/game.js` | Regler och simulering: flygning, bajs, poäng, hot, krasch |
 | `js/gl.js` | WebGL 2-rendering: ljus, skuggor, fasader, mark, himmel |
 | `js/render.js` | Kamera, duvan, 3D-scenen och 2D-lagret (sikte, varningar, HUD) |
@@ -29,10 +30,11 @@ Bra att veta:
 - Bajset kommer ur gumpen (`birdPoint()`/`payload()` i `game.js`). En skarp sväng slungar det utåt, och träffytan växer när duvan stiger och krymper i dyk (`spreadNow()`).
 - Topplistan är gemensam och ligger i Supabase (tabellen `scores`, se `scoreApi` i `game.js`). Går den inte att nå visas datorns egen lista.
 - Hemlig luftbroms på Q (visas inte i spelet): vingarna framåt, stjärten utfälld, nosen upp (`brake` i `simulate()`).
-- Polishelikoptern (nivå 4) finns i `updateHeli()` (`world.js`) och `drawHeli()` (`render.js`). Rotorerna är genomskinliga skivor med utsmetade bladstreck (`veil`-batchen i `gl.js`).
+- Polishelikoptern är avstängd (`heliEnabled=false` i `world.js`). Den finns i `updateHeli()` (`world.js`) och `drawHeli()` (`render.js`). Rotorerna är genomskinliga skivor med utsmetade bladstreck (`veil`-batchen i `gl.js`).
 - Pekskärmens spak är analog med dödzon och mjuk kurva (`steer()` i `main.js`).
 - Hökens skugga är en egen platt siluett som bara ritas i skuggkartan (`hawkShadow()` i `render.js`).
-- Fyra tider på dygnet (`skies` i `gl.js`), en ny för varje flygning.
+- Fem tider på dygnet (`skies` i `gl.js`), en ny för varje flygning. Natten har stjärnor, månsken, tända fönster, gatlyktor och strålkastare på bilarna (`nightLights()` i `render.js`).
+- Händelser (`events.js`): var 35–55:e sekund startar en konsert, parad eller bilsalong på ett torg i närheten. En pil visar vägen, och tillräckligt många träffar innan tiden går ut ger en stor bonus.
 - Stridsvagnar (bromsar, svänger på stället, rekyl) finns i `updateTanks()` (`world.js`), näten i `updateThreats()` (`game.js`) och `drawNet()`/`drawSnare()` (`render.js`).
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
 - Affischen `poster.jpg` visas på startsidan.
