@@ -711,11 +711,33 @@ function drawFeed(){
  }
  ctx.globalAlpha=1;
 }
+function draw3D(){
+ buildStatics();buildMoving();
+ drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,dyn,omen,goo],[...statics,...moving,dyn,goo],decals);
+}
+// ---- Killcam: the best hit of the flight, replayed slowly behind the end screen from a camera beside the victim.
+let killPlay=0;
+function renderReplay(dt){
+ const clip=killClip,F=clip.frames,t0=F[0].elapsed,len=F.at(-1).elapsed-t0;
+ killPlay+=dt*.4;if(killPlay>len+1.2)killPlay=0; // slow motion, a short hold at the end, then round again
+ let f=F[0];for(const q of F){if(q.elapsed-t0<=killPlay)f=q;else break;}
+ withSnapshot(f,()=>{
+  const P=clip.pos,B=[bird.x,bird.y,bird.z],k=clamp((f.elapsed-clip.at+.6)/.8,0,1); // the camera turns from the bird to the victim as it lands
+  const look=[mix((B[0]+P[0])/2,P[0],k),mix((B[1]+P[1])/2,P[1]+1,k),mix((B[2]+P[2])/2,P[2],k)];
+  const across=Math.atan2(clip.dir[0],clip.dir[1])+Math.PI/2,cx=P[0]+Math.sin(across)*11,cz=P[2]+Math.cos(across)*11,cy=P[1]+4.5;
+  const dx=look[0]-cx,dy=look[1]-cy,dz=look[2]-cz,side=width>760?Math.atan(.16*width/(Math.min(width*.88,height*.97)*.9)):0;
+  const yaw=Math.atan2(dx,dz)-side,pitch=Math.atan2(-dy,Math.hypot(dx,dz));
+  camera={x:cx,y:cy,z:cz,s:Math.sin(yaw),c:Math.cos(yaw),cp:Math.cos(pitch),sp:Math.sin(pitch),cr:1,sr:0};
+  scale=Math.min(width*.88,height*.97)*.9;
+  draw3D();ctx.clearRect(0,0,width,height);drawWorldText();
+  const x=width>760?width-24:width/2,al=width>760?'right':'center';
+  text('● REPRIS',x,40,15,'#ff5d4f',al,900);text('BÄSTA TRÄFFEN: '+clip.label+' +'+clip.amount,x,64,17,'#ffd24a',al,900);
+ });
+}
 function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt),playing=state==='play';
  if(!crash||!rig)setCamera(dt);
- buildStatics();buildMoving();
- drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,dyn,omen,goo],[...statics,...moving,dyn,goo],decals);
+ draw3D();
  ctx.clearRect(0,0,width,height);
  if(!crash&&state!=='menu'){
   drawThreats();

@@ -34,7 +34,7 @@ function saveScore(name,done){
  return place(board());
 }
 function finish(heading,cause,action){
- state='end';keys.clear();checkFeats();
+ state='end';closeClip();$('feedback').classList.remove('on');if(killClip)document.body.classList.remove('crashed'); // the replay plays in colourkeys.clear();checkFeats();
  const record=points>best;if(record){best=points;try{localStorage.setItem('fagelbajs.best',String(best));}catch{}}
  const top=board().slice(0,10),listed=points>0&&(top.length<10||points>top.at(-1).points);if(Date.now()-sharedAt>20000)fetchScores();
  const row=(k,v)=>'<div><dt>'+k+'</dt><dd>'+v+'</dd></div>',mins=Math.floor(elapsed/60),secs=String(Math.floor(elapsed%60)).padStart(2,'0');
@@ -47,6 +47,34 @@ function finish(heading,cause,action){
  if(form){
   $('name').focus();$('name').select();
   form.onsubmit=e=>{e.preventDefault();const show=place=>{if($('board'))$('board').innerHTML=scoreList(place,Math.max(5,place+1));};show(saveScore($('name').value,show));form.remove();$('go').focus();};
+ }
+}
+// ---- Killcam recording: a rolling record of the last couple of seconds around the bird. When a hit beats the
+// flight's best, the record from two seconds before it to a second after becomes the clip shown at the end.
+let replay=[],killClip=null,killPending=null,killBest=0;
+function record(){
+ const near=(o,r)=>Math.abs(o.x-bird.x)<r&&Math.abs(o.z-bird.z)<r;
+ replay.push({elapsed,wingPhase,bird:{...bird},drops:drops.map(d=>({...d})),splash:splash.map(s=>({...s})),
+  people:people.filter(h=>near(h,70)).map(h=>({...h,down:scored.has(h.id),fell:fallen.get(h.id)})),
+  cars:cars.filter(c=>near(c,90)).map(c=>({...c,wrecked:wrecks.has(c.id),alarm:alarms.get(c.id)})),
+  stains:stains.filter(s=>near(s,70)),popups:popups.slice(),bubbles:bubbles.slice(),thrown:thrown.map(o=>({...o})),
+  hawk:hawk&&{...hawk},heli:heli&&{...heli,beam:heli.beam.slice()},tanks:tanks.map(t=>({...t}))});
+ const keep=killPending?killPending.at-2.2:elapsed-2.2;
+ while(replay.length&&replay[0].elapsed<keep)replay.shift();
+ if(killPending&&elapsed-killPending.at>=1.1)closeClip();
+}
+function closeClip(){if(killPending&&replay.length>5){killClip={...killPending,frames:replay.slice()};}killPending=null;}
+// Draw with the world as it was in a recorded frame, then put everything back.
+function withSnapshot(f,draw){
+ const saved={bird,elapsed,wingPhase,drops,splash,people,cars,stains,popups,bubbles,thrown,hawk,heli,tanks,crash,mist,plume,scored,
+  fallen:new Map(fallen),wrecks:new Map(wrecks),alarms:new Map(alarms),camera,scale};
+ bird=f.bird;elapsed=f.elapsed;wingPhase=f.wingPhase;drops=f.drops;splash=f.splash;people=f.people;cars=f.cars;stains=f.stains;popups=f.popups;bubbles=f.bubbles;
+ thrown=f.thrown;hawk=f.hawk;heli=f.heli;tanks=f.tanks;crash=null;mist=[];plume=[];
+ scored=new Set(f.people.filter(h=>h.down).map(h=>h.id));fallen.clear();for(const h of f.people)if(h.fell!==undefined)fallen.set(h.id,h.fell);
+ wrecks.clear();alarms.clear();for(const c of f.cars){if(c.wrecked)wrecks.set(c.id,c);if(c.alarm!==undefined)alarms.set(c.id,c.alarm);}
+ try{draw();}finally{
+  ({bird,elapsed,wingPhase,drops,splash,people,cars,stains,popups,bubbles,thrown,hawk,heli,tanks,crash,mist,plume,scored,camera,scale}=saved);
+  for(const [m,src] of [[fallen,saved.fallen],[wrecks,saved.wrecks],[alarms,saved.alarms]]){m.clear();for(const [k,v] of src)m.set(k,v);}
  }
 }
 let points=0,cars=[],sprayCount=0,halfStep=false,crowdTime=0;
@@ -199,6 +227,7 @@ function award(base,label,p,targetY=0,pos){
  combo=comboTime>0?combo+1:1;comboTime=2.6;bestCombo=Math.max(bestCombo,combo);
  const amount=Math.max(1,Math.round(base*mult*(1+.25*Math.min(8,combo-1))));
  hits++;feedLine(label,amount,tags.join(' · '));
+ if(p&&pos&&amount>killBest){killBest=amount;killPending={at:elapsed,amount,label,pos,dir:[Math.sin(bird.angle),Math.cos(bird.angle)]};}
  if(pos)popups.push({x:pos[0],y:pos[1],z:pos[2],text:'+'+amount,t:elapsed,gold:mult>1});
  marker=elapsed;markerGold=mult>1;hitTick(base>=25||mult>1,1+.035*Math.min(10,combo-1));
  if(base>=30&&p)run.stars++;
@@ -209,6 +238,7 @@ function reset(){
  resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
+ replay=[];killClip=null;killPending=null;killBest=0;killPlay=0;
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
  bird={x:0,z:0,y:21,angle:0,bank:0,turn:0,spread:1,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9,nextFlap:2,burst:0,lookYaw:0,lookPitch:0,glance:0,nextGlance:1,snare:0};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }

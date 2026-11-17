@@ -127,9 +127,9 @@ function frame(now){
   if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>.75){density=Math.max(.75,density-.25);lastTune=now;quickFor=0;fit();}
   else if(quickFor>8&&density<top){density=Math.min(top,density+.25);lastTune=now;quickFor=0;fit();}
  }
- if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);} // people and traffic move once per frame, on the second step
+ if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);if(state==='play')record();} // people and traffic move once per frame, on the second step
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu')wingPhase+=dt*3;
- render(dt);showTips();requestAnimationFrame(frame);
+ if(state==='end'&&killClip)renderReplay(real);else render(dt);showTips();requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
