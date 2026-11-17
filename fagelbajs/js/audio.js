@@ -265,3 +265,16 @@ function carEngines(playing){
   if(e.pan.pan)setParam(e.pan.pan,clamp((dx*Math.cos(bird.angle)-dz*Math.sin(bird.angle))/Math.max(4,d),-.9,.9),.08);
  }
 }
+// The helicopter: a low thump at the blade rate, made from filtered noise, with a whine on top.
+let rotorNodes=null;
+function rotorSound(level){
+ if(!master)return;
+ if(!rotorNodes){
+  const src=sound.createBufferSource(),lp=sound.createBiquadFilter(),am=sound.createGain(),lfo=sound.createOscillator(),depth=sound.createGain(),g=sound.createGain(),whine=sound.createOscillator(),wg=sound.createGain();
+  src.buffer=noiseBuf;src.loop=true;lp.type='lowpass';lp.frequency.value=320;am.gain.value=.5;lfo.frequency.value=17;depth.gain.value=.5;
+  lfo.connect(depth);depth.connect(am.gain);src.connect(lp);lp.connect(am);am.connect(g);
+  whine.type='sawtooth';whine.frequency.value=930;wg.gain.value=.012;whine.connect(wg);wg.connect(g);g.gain.value=0;g.connect(master);
+  src.start();lfo.start();whine.start();rotorNodes={g};
+ }
+ setParam(rotorNodes.g.gain,state==='play'?.55*level*level:0,.2);
+}

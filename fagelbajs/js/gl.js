@@ -314,7 +314,7 @@ function triBatch(mat=0){
  return b;
 }
 // dyn is drawn normally; omen only casts a shadow (the hawk's oversized silhouette).
-const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1);
+const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1), glow=triBatch(2); // glow: light added on top, like the searchlight
 // Fullscreen / ground quad.
 const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,1,1,-1,-1,1,1,-1,1]),gl.STATIC_DRAW);attribs([[0,2,0]],2,0);gl.bindVertexArray(null);
@@ -392,5 +392,7 @@ function drawFrame(casters,scene,decals){
  // Flat decals: pulled towards the camera, and not written to the depth buffer so they can overlap in order.
  gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);gl.depthMask(false);
  for(const m of decals)m.draw();
- gl.depthMask(true);gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindVertexArray(null);
+ gl.depthMask(true);gl.disable(gl.POLYGON_OFFSET_FILL);
+ if(glow.n){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.depthMask(false);glow.draw();gl.depthMask(true);gl.disable(gl.BLEND);}
+ gl.bindVertexArray(null);
 }

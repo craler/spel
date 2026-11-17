@@ -157,7 +157,7 @@ function featList(open){
 }
 // ---- Feedback: banner for big moments, a score feed by the sight, numbers and speech bubbles in the world.
 let popups=[],feed=[],bubbles=[],splash=[],marker=-9,markerGold=false,bannerUntil=0,lastDrop=-9,lastBubble=-9;
-const wantedNote=['','De kastar frukt','Fler kastar, och snabbare','Paraplyer och nät','Höken kommer','Stridsvagnar'];
+const wantedNote=['','De kastar frukt','Fler kastar, och snabbare','Höken, paraplyer och nät','Polishelikoptern','Stridsvagnar'];
 const shouts=['USCH!','ÄSCH!','MEN VA?!','MIN FRISYR!','FY BUBBLAN!','NEEEJ!','MITT I NYLLET!','BLÄ!','DUVJÄKEL!','INTE IGEN!'];
 function banner(title,sub='',kind='',time=2.2){
  const el=$('feedback'),big=document.createElement('strong');el.className=kind;el.textContent='';big.textContent=title;el.append(big);
@@ -206,7 +206,7 @@ function award(base,label,p,targetY=0,pos){
  addPoints(amount);
 }
 function reset(){
- resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
@@ -273,6 +273,10 @@ function drop(){
 }
 function simulate(dt){
  const b=bird,held=(...codes)=>codes.some(c=>keys.has(c)),dive=held('ShiftLeft','ShiftRight');
+ // Secret air brake on Ctrl: wings thrown forward and beating against the airflow, tail fanned, nose up.
+ const braking=held('ControlLeft','ControlRight')&&!dive&&!(b.snare>0);
+ if(braking&&!(b.brake>.2))whoosh();
+ b.brake=mix(b.brake||0,+braking,1-Math.exp(-dt*(braking?5:2.5)));
  let steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
  if(stickInput.on){steer=clamp(steer+stickInput.x*.85,-1,1);pitch=clamp(pitch+stickInput.y*(reversePitch?-1:1),-1,1);} // the thumb stick is analog
  // Caught in a net: barely any steering, no climbing, and the weight of it pulls the bird down. Holding the nose up shortens it.
@@ -292,7 +296,7 @@ function simulate(dt){
  const targetClimb=dive?0:clamp(pitch,0,1);
  b.climb=mix(b.climb,targetClimb,1-Math.exp(-dt*(targetClimb?.92:2.7)));
  const stallSoftness=clamp((b.climb-.87)/.13,0,1);
- const wantedVy=ragged*1.4*Math.sin(elapsed*6.1)+(19-2.6*ragged)*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82;
+ const wantedVy=ragged*1.4*Math.sin(elapsed*6.1)+(19-2.6*ragged)*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82+b.brake*clamp(b.speed-8,0,30)*.3;
  // Tucked, the bird simply falls: gravity builds the speed up against air drag, towards about 50 m/s.
  // Opening the wings turns that fall into level flight in a smooth pull-out.
  const acceleration=dive?-27*b.fold-.53*b.vy:(wantedVy-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
@@ -301,13 +305,16 @@ function simulate(dt){
  // Gliding is mostly still wings, broken now and then by a short burst of flapping. Climbing is hard work.
  b.nextFlap-=dt;b.burst=Math.max(0,b.burst-dt);
  if(b.nextFlap<=0){b.burst=.4+.55*Math.random();b.nextFlap=1.8+4*Math.random();}
- const effort=dive?0:pitch>.05?Math.max(.4,pitch):pitch<-.05?0:b.burst>0?.8:.1;
+ const effort=Math.max(b.brake*.95,dive?0:pitch>.05?Math.max(.4,pitch):pitch<-.05?0:b.burst>0?.8:.1);
  b.effort=mix(b.effort,effort,1-Math.exp(-(effort>b.effort?9:4)*dt));
  b.nextGlance-=dt;if(b.nextGlance<=0){b.glance=Math.random()<.35?0:(Math.random()-.5)*1.3;b.nextGlance=.7+2.6*Math.random();}
  b.lookYaw=mix(b.lookYaw,clamp(b.bank*.55+b.glance,-.9,.9),1-Math.exp(-dt*7));
  b.lookPitch=mix(b.lookPitch,held('Space')?-.45:-.06+.1*Math.sin(elapsed*1.3),1-Math.exp(-dt*6));
  // Speed won in a dive carries into the glide and bleeds off slowly; climbing spends it faster.
- b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65+(14-b.speed)*(dive?.18:b.speed>14?.13:.55)-Math.max(0,b.vy)*.45)*dt,10,58);
+ b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65*(1-b.brake)+(14-b.speed)*(dive?.18:b.speed>14?.13:.55)*(1-b.brake)-Math.max(0,b.vy)*.45-b.brake*24)*dt,10-6.5*b.brake,58);
+ // Visual pitch and roll ride on critically damped springs: no sudden jerks when the controls change.
+ {const k=26,d=2*Math.sqrt(k);b.vpv=(b.vpv||0)+((pitchTarget()-(b.vp??pitchTarget()))*k-(b.vpv||0)*d)*dt;b.vp=(b.vp??pitchTarget())+b.vpv*dt;
+  const kb=40,db=2*Math.sqrt(kb);b.vbv=(b.vbv||0)+((b.bank-(b.vb??b.bank))*kb-(b.vbv||0)*db)*dt;b.vb=(b.vb??b.bank)+b.vbv*dt;}
  b.x+=Math.sin(b.angle)*forwardSpeed()*dt;b.z+=Math.cos(b.angle)*forwardSpeed()*dt;
  trafficFactor=mix(trafficFactor,1+.61*wanted,1-Math.exp(-dt*1.5));trafficClock+=dt*trafficFactor;if(!halfStep)traffic();
  if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
@@ -326,10 +333,10 @@ function simulate(dt){
  if(solid(b.x,b.y,b.z,1.15)&&Math.hypot(forwardSpeed(),b.vy)>12)b.skim+=dt;
  else{if(b.skim>.12&&elapsed-b.lastSkim>2){b.lastSkim=elapsed;feedLine('NÄRA ÖGAT',10);addPoints(10);tone(900,1300,.07,'triangle',.04);}b.skim=0;}
  const wingCycle=Math.floor(wingPhase/tau);
- elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort);
+ elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort+9*b.brake);
  if(b.effort>.5&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
- crowdTime+=dt;if(!halfStep){gather(crowdTime);crowdTime=0;}updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateTanks(dt);if(state!=='play')return;
+ crowdTime+=dt;if(!halfStep){gather(crowdTime);crowdTime=0;}updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateHeli(dt);updateTanks(dt);if(state!=='play')return;
  const floating=balloons();
  drops=drops.filter(p=>{
   const prev=p.age;p.age+=dt;const end=p.end;

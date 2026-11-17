@@ -52,7 +52,7 @@ document.querySelector('.panel').addEventListener('click',e=>{
 $('go').onclick=start;$('pause').onclick=togglePause;$('camera').onclick=view;
 $('audio').onclick=()=>{muted=!muted;setAudio();};
 onblur=()=>{keys.clear();if(state==='play')togglePause();};
-const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','KeyX','Escape'];
+const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','KeyX','Escape','ControlLeft','ControlRight'];
 onkeydown=e=>{
  if(state!=='play'){
   if(e.code==='Escape'&&state==='pause')togglePause();

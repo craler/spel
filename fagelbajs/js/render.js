@@ -8,7 +8,7 @@ function setCamera(dt){
   const a=bird.angle,s=Math.sin(a),c=Math.cos(a),k=1-Math.exp(-dt*6);
   const look=clamp(.2-flightPitch()*.85+(keys.has('Space')?.18:0),-.45,1.35);
   if(!rig||rig.pov===undefined)rig={pov:true,yaw:a,pitch:look,roll:0,rise:0,ahead:0};
-  rig.yaw=a;rig.pitch=mix(rig.pitch,look,k);rig.roll=mix(rig.roll,-bird.bank*.42,k);
+  rig.yaw=a;rig.pitch=mix(rig.pitch,look,k);rig.roll=mix(rig.roll,-(bird.vb??bird.bank)*.42,k);
   camera={x:bird.x+s*.38,y:bird.y+.34,z:bird.z+c*.38,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch),cr:Math.cos(rig.roll),sr:Math.sin(rig.roll)};
   const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1),tremble=(.01+.05*rush*rush)*rush;
   camera.x+=c*tremble*Math.sin(elapsed*33);camera.z-=s*tremble*Math.sin(elapsed*33);camera.y+=tremble*.8*Math.sin(elapsed*47);
@@ -98,15 +98,19 @@ function smoothBody(toWorld){
   dyn.smooth(flip?[pt,grid[j][k],grid[j][i]]:[pt,grid[j][i],grid[j][k]],[N[j][i],N[j][flip?k:i],N[j][flip?i:k]],[cols[j][i],cols[j][i],cols[j][k]]);}};
  end(tip,last,false);end(tail,0,true);
 }
-function flightPitch(){
+// The body follows its flight path through a soft spring (see simulate), so going from level flight into a dive
+// or a climb eases in and out instead of snapping. Braking rears the bird up.
+function flightPitch(){return bird.vp??rawPitch();}
+function rawPitch(){
  // At low airspeed the beak can still point up even as lift fades.
  const pathAngle=Math.atan2(bird.vy,forwardSpeed());
  if(pathAngle<0)return pathAngle;
  return Math.max(pathAngle*.82,
   bird.climb>.01?1.33*bird.climb:-Math.PI/2);
 }
+function pitchTarget(){return rawPitch()+(bird.brake||0)*.95;}
 function renderBird(){
- const b=bird,fl=Math.max(b.fold*(crash?Math.exp(-crash.age*2):1),b.snare>0&&!crash?.96:0),bank=b.bank*.62+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
+ const b=bird,br=crash?0:b.brake||0,fl=Math.max(b.fold*(crash?Math.exp(-crash.age*2):1),b.snare>0&&!crash?.96:0),bank=(b.vb??b.bank)*.62+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
  const bob=-.03*Math.sin(wingPhase)*b.effort; // the body rides up on each downstroke
  function world([x,y,z]){
@@ -135,11 +139,11 @@ function renderBird(){
   };eye(.024,'#ffbf56',0);eye(.012,'#362c49',.0015);
  }
  // Separate overlapping tail feathers with a dark terminal band and pale tips.
- const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl;
+ const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl+.16*br; // fanned wide as an air brake
  for(let k=-3;k<=3;k++){
   if(hash(k,5,31)<(3-feathers)*.25)continue; // lost feathers leave gaps
   const t=k/3,root=[t*.055,.051,-.33],tx=t*spread,tz=-.73+.09*t*t;
-  const end=[tx,.037-.029*t*t+.014*flutter(k,23+k),tz],w=.042;
+  const end=[tx,.037-.029*t*t+.014*flutter(k,23+k)-.16*br,tz],w=.042;
   const mid=[mix(root[0],tx,.66),.049-.024*t*t,mix(root[2],tz,.66)];
   plain([root,[mid[0]-w,mid[1],mid[2]],[tx-w*.62,end[1],tz],end,[tx+w*.62,end[1],tz],[mid[0]+w,mid[1],mid[2]]],'#687695');
   plain([[mid[0]-w,mid[1]+.002,mid[2]],[mid[0]+w,mid[1]+.002,mid[2]],[tx+w*.65,end[1]+.002,tz+.02],[tx-w*.65,end[1]+.002,tz+.02]],'#424a67');
@@ -157,7 +161,7 @@ function renderBird(){
    const reach=upper*Math.cos(elbowAngle)+(outer-flexible)*Math.cos(tipAngle)+flexible*Math.cos(joint?.tip??tipAngle);
    return [side*(.089+reach*(1-.93*fl)),
     .101+upper*Math.sin(elbowAngle)+(outer-flexible)*Math.sin(tipAngle)+flexible*Math.sin(joint?.tip??tipAngle)+y,
-    .095+chord+.14*Math.sin(u*Math.PI)-.27*u*u-.78*u*fl];
+    .095+chord+.14*Math.sin(u*Math.PI)-.27*u*u-.78*u*fl+br*(.1+.38*u)]; // braking: the wings reach forwards, against the flight
   }
   const patch=(pts,color)=>plain(pts.map(v=>wing(...v)),color);
   // Rounded secondary feathers broaden the trailing edge near the body.
@@ -243,6 +247,12 @@ const M={
   for(let i=0;i<n;i++)m.quad(at(0,i),at(0,i+1),[at(0,i+1)[0]*.9,-1.07,at(0,i+1)[2]*.9],[at(0,i)[0]*.9,-1.07,at(0,i)[2]*.9],WHITE,1);
   return m.build();})(),
  big:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,14,8).build(),
+ // Police helicopter, nose towards +z: white with a blue band, dark glass, tail boom, fin and skids.
+ heli:(()=>{const m=new Mesh(),blue=rgb('#2346a0'),glass=rgb('#141c26'),dark=rgb('#2a2d31'),white=rgb('#e9ecf1');
+  m.ball(0,0,0,1.25,1.15,2.3,white,0,0,0,14,8).ball(0,.18,1.25,1.02,.9,1.18,glass,-1,0,0,12,6).ball(0,-.25,-.1,1.27,.42,2.1,blue,0,0,0,14,4);
+  m.beam([0,.25,-1.8],[0,.55,-6.6],.28,white).beam([0,.6,-6.4],[0,2.1,-7.1],.12,blue).beam([-.9,.62,-6.5],[.9,.62,-6.5],.08,white);
+  for(const sx of [-1,1]){m.beam([sx*.8,-1.15,-1.1],[sx*.8,-1.6,-1.1],.06,dark).beam([sx*.8,-1.15,1],[sx*.8,-1.6,1],.06,dark).beam([sx*.85,-1.65,-1.7],[sx*.85,-1.65,1.9],.07,dark);}
+  m.tube(0,1.05,1.55,0,.22,.18,dark,0,0,0,8).box(-.5,-1.3,1.6,.5,-1,2.1,dark);return m.build();})(),
  boat:new Mesh().loft([[-1.7,.02,.5,.2,.4],[-.9,0,.52,.55,.78],[.9,0,.52,.55,.78],[1.8,.12,.58,.08,.16]],WHITE,1).box(-.6,.3,-.2,.6,.36,.1,[.6,.6,.6],1).build(),
  tank:(()=>{const m=new Mesh(),track=[.22,.22,.2],steel=[.5,.5,.48];
   m.loft([[-3.3,.6,1.15,1.45,1.3],[-3,.5,1.55,1.55,1.4],[2.3,.5,1.55,1.55,1.4],[3.3,.65,1.1,1.45,1.3]],WHITE,1);
@@ -329,7 +339,7 @@ function splatMesh(upright){
 }
 M.cube.cull=true;
 const statics=[M.cube,M.tree,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
-const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.balloon,M.boat,M.ball,M.dome];
+const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.big,M.balloon,M.boat,M.ball,M.dome];
 const decals=[M.splat,M.splatWall,M.drip,M.disc];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 let staticKey='';
@@ -378,7 +388,7 @@ function strand(p,q,w0,w1,col){
 }
 const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
- for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;
+ for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  for(const h of people){
   if(Math.abs(h.x-camera.x)>130||Math.abs(h.z-camera.z)>130)continue;
@@ -495,12 +505,33 @@ function buildMoving(){
  }
  // The hawk is drawn at its real size; a much larger copy goes only into the shadow map.
  if(hawk){drawHawk(dyn,2.3);hawkShadow();}
+ if(heli)drawHeli();
  for(const f of plume)drawFeather(f); // loose feathers from a crash
  if(camView!==2||crash)renderBird();
- for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();
+ for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();glow.upload();
 }
 // One loose feather: a quill with two curved vanes, the outer one narrower, darker towards the tip.
 const featherShades=[['#eef1f6','#c7cfdd'],['#9aa7c2','#5d6a8c'],['#7f8cab','#454f6e'],['#d9dfe9','#8f9bb6']].map(p=>p.map(rgb));
+function drawHeli(){
+ const h=heli;M.heli.add(h.x,h.y,h.z,h.yaw,1,1,1,WHITE,0,0,0,h.tilt);
+ // Spinning blades (two long, a small tail rotor), and blue and red lights taking turns.
+ const sy=Math.sin(h.yaw),cy=Math.cos(h.yaw),hub=[h.x,h.y+1.6,h.z],blade=rgb('#1d1f22');
+ for(let k=0;k<4;k++){const a=h.rotor+k*Math.PI/2,ux=Math.cos(a)*5.6,uz=Math.sin(a)*5.6,wx=-Math.sin(a)*.18,wz=Math.cos(a)*.18;
+  dyn.fan([[hub[0]+wx,hub[1],hub[2]+wz],[hub[0]+ux+wx,hub[1]-.05,hub[2]+uz+wz],[hub[0]+ux-wx,hub[1]-.05,hub[2]+uz-wz],[hub[0]-wx,hub[1],hub[2]-wz]],blade);}
+ const tail=[h.x-sy*6.9+cy*.25,h.y+.65,h.z-cy*6.9-sy*.25];
+ for(let k=0;k<2;k++){const a=h.rotor*1.7+k*Math.PI,u=Math.cos(a)*.9,v=Math.sin(a)*.9;
+  dyn.fan([[tail[0],tail[1],tail[2]],[tail[0]-cy*.0+sy*u*0,tail[1]+v,tail[2]+u*sy*0+u],[tail[0],tail[1]+v+.12,tail[2]+u+.12]],blade);}
+ const blink=Math.floor(elapsed*4)%2;M.ball.add(h.x+cy*.5,h.y+1.2,h.z-sy*.5,0,.16,.12,.16,rgb(blink?'#3c6dff':'#202a44'),2);M.ball.add(h.x-cy*.5,h.y+1.2,h.z+sy*.5,0,.16,.12,.16,rgb(blink?'#3a1414':'#ff3434'),2);
+ // The searchlight: a faint cone of light down to where it lands, and a bright patch there.
+ const o=[h.x+sy*2,h.y-1.2,h.z+cy*2],d=h.beam,len=d[1]<-.05?Math.min(150,(o[1]-.05)/-d[1]):110,end=[o[0]+d[0]*len,o[1]+d[1]*len,o[2]+d[2]*len];
+ const up=Math.abs(d[1])>.9?[1,0,0]:[0,1,0],a=[d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]],al=Math.hypot(...a);a.forEach((q,i)=>a[i]=q/al);
+ const b=[d[1]*a[2]-d[2]*a[1],d[2]*a[0]-d[0]*a[2],d[0]*a[1]-d[1]*a[0]],R=len*.13,ring=[];
+ for(let i=0;i<=16;i++){const t=i/16*tau,c=Math.cos(t)*R,s=Math.sin(t)*R;ring.push([end[0]+a[0]*c+b[0]*s,end[1]+a[1]*c+b[1]*s,end[2]+a[2]*c+b[2]*s]);}
+ const beam=h.lit?[.0032,.0031,.0024]:[.0018,.0018,.0014];for(let i=0;i<16;i++)glow.tri(o,ring[i],ring[i+1],beam);
+ if(d[1]<-.05){const spot=h.lit?[.05,.048,.036]:[.03,.029,.022],sr=R/Math.max(.35,-d[1])*.9,g=[end[0],.08,end[2]];
+  for(let i=0;i<16;i++){const t0=i/16*tau,t1=(i+1)/16*tau;glow.tri(g,[g[0]+Math.cos(t0)*sr,.08,g[2]+Math.sin(t0)*R],[g[0]+Math.cos(t1)*sr,.08,g[2]+Math.sin(t1)*R],spot);}}
+ M.ball.add(o[0],o[1],o[2],0,.3,.3,.3,rgb('#fff6d0'),2);
+}
 function drawFeather(f){
  const calm=1-Math.exp(-f.age*1.6),grounded=f.y<=.04;
  const roll=grounded?0:mix(f.tumble[0],.75*Math.sin(f.sway),calm),pitch=grounded?0:mix(f.tumble[1],.25*Math.cos(f.sway),calm);
@@ -625,6 +656,10 @@ function drawThreats(){
    if(m){ctx.beginPath();ctx.arc(m[0],m[1],o.kind==='shell'||o.kind==='bignet'?16:10,0,tau);ctx.lineWidth=4;ctx.strokeStyle='#0b0e14aa';ctx.stroke();ctx.lineWidth=2;ctx.strokeStyle='#ff5d4f';ctx.stroke();}
   }
  }
+ if(heli&&heli.lock>.02){ // the searchlight is on the bird: a filling bar, then the net comes
+  const m=point([bird.x,bird.y+1.4,bird.z]);if(m){ctx.fillStyle='#0b0e14cc';ctx.fillRect(m[0]-32,m[1]-4,64,8);ctx.fillStyle='#fff2a0';ctx.fillRect(m[0]-31,m[1]-3,62*heli.lock,6);}
+  if(heli.lit&&elapsed>bannerUntil&&Math.sin(elapsed*16)>-.2)text('STRÅLKASTAREN HAR DIG – GÖM DIG!',width/2,height*.3,20,'#fff0a8','center',900);
+ }
  for(const t of tanks){ // tanks show how much more they can take, and flash while they aim
   if(t.hp<=0)continue;const m=point([t.x,5,t.z]);if(!m||Math.hypot(t.x-bird.x,t.z-bird.z)>170)continue;
   ctx.fillStyle='#0b0e14cc';ctx.fillRect(m[0]-22,m[1]-4,44,7);ctx.fillStyle='#ff5d4f';ctx.fillRect(m[0]-21,m[1]-3,42*t.hp/14,5);
@@ -680,7 +715,7 @@ function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt),playing=state==='play';
  if(!crash||!rig)setCamera(dt);
  buildStatics();buildMoving();
- drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.balloon,M.boat,dyn,omen,goo],[...statics,...moving,dyn,goo],decals);
+ drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,dyn,omen,goo],[...statics,...moving,dyn,goo],decals);
  ctx.clearRect(0,0,width,height);
  if(!crash&&state!=='menu'){
   drawThreats();
@@ -743,12 +778,11 @@ function render(dt=1/60){
  if(wanted){hud('time',Math.floor(elapsed/60)+':'+String(Math.floor(elapsed%60)).padStart(2,'0'));hud('time-label','JAKT PÅGÅR');}
  else{hud('time',String(Math.max(0,Math.ceil(60-elapsed))));hud('time-label','SEKUNDER KVAR');}
  $('clock').classList.toggle('hurry',!wanted&&elapsed>50&&playing);
- const diving=bird.fold>.5||bird.vy<-14,low=bird.y<14,stall=!diving&&!low&&bird.climb>.9;
- hud('chip',diving&&low?'×4 LÅGT STÖRTDYK':diving?'×2 STÖRTDYK':low?'×2 LÅGFLYG':stall?'NÄRA STALL':'');
- $('chip').classList.toggle('warn',stall);
+ const diving=bird.fold>.5||bird.vy<-14,low=bird.y<14;
+ hud('chip',diving&&low?'×4 LÅGT STÖRTDYK':diving?'×2 STÖRTDYK':low?'×2 LÅGFLYG':'');
  // Sound and mood that follow the frame.
  windLevel();
- if(sound){whistle(playing?bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-14)/38,0,1):0);sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);carEngines(playing);
+ if(sound){whistle(playing?bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-14)/38,0,1):0);sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);rotorSound(playing&&heli?clamp(1-Math.hypot(bird.x-heli.x,bird.y-heli.y,bird.z-heli.z)/150,0,1):0);ambience(playing,dt);carEngines(playing);
   // The nearest ringing car alarm: horn on, horn off, quieter and duller with distance.
   let horn=0;
   if(playing)for(const c of cars){const since=elapsed-(alarms.get(c.id)??-99);

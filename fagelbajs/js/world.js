@@ -186,8 +186,8 @@ function hurt(text,surface){
 // it circles the spot you are aiming at, slides in over it, and then the hawk stoops.
 // A hard turn, a dive to street level or a building in between makes it miss.
 function updateHawk(dt){
- if(wanted<4){hawk=null;return;}
- const L=sky.dir,b=bird,fierce=wanted>=5;
+ if(wanted<3){hawk=null;return;}
+ const L=sky.dir,b=bird,fierce=wanted>=4;
  if(!hawk){
   hawk={x:b.x+L[0]*120,y:b.y+80,z:b.z+L[2]*120,vx:0,vy:0,vz:1,mode:'circle',t:fierce?5:7,orbit:0,flap:0,miss:99,tuck:0,dread:0,beat:0,size:2.3,bank:0,yaw:0};
   banner('HÖKEN','Sväng när skuggan når siktet','alert',3.6);screech();
@@ -304,4 +304,46 @@ function updateTanks(dt){
   }else if(t.cool<=0&&far<140&&bird.y>4){t.aim=1.2;t.cool=5.5;}
  }
  tanks=tanks.filter(t=>(t.hp>0||t.dead<25)&&Math.hypot(t.x-bird.x,t.z-bird.z)<210);
+}
+
+// ---- Four stars: a police helicopter. It follows the bird above the rooftops and sweeps a searchlight after it.
+// The beam turns slowly, so hard turns shake it off, and a building between the bird and the helicopter hides it.
+// Held in the light long enough, the bird gets a net fired at it from the open side door.
+let heli=null;
+function heliSees(h){
+ const dx=bird.x-h.x,dy=bird.y-h.y,dz=bird.z-h.z;
+ for(let k=1;k<12;k++){const f=k/12;if(solid(h.x+dx*f,h.y+dy*f,h.z+dz*f))return false;}
+ return true;
+}
+function updateHeli(dt){
+ if(wanted<4){heli=null;return;}
+ const b=bird;
+ if(!heli){
+  heli={x:b.x-Math.sin(b.angle)*160,y:62,z:b.z-Math.cos(b.angle)*160,vx:0,vy:0,vz:0,yaw:b.angle,tilt:0,roll:0,rotor:0,
+   beam:[0,-1,0],lock:0,cool:3,lit:false,seen:false};
+  banner('POLISHELIKOPTERN','Göm dig från strålkastaren','alert',3.2);
+ }
+ const h=heli,v=forwardSpeed();
+ // Hang behind and above the bird, never below the rooftops.
+ const tx=b.x-Math.sin(b.angle)*20,tz=b.z-Math.cos(b.angle)*20,ty=Math.max(b.y+17,50);
+ const ax=clamp((tx-h.x)*.9-h.vx*1.5,-13,13),ay=clamp((ty-h.y)*1.2-h.vy*2,-8,8),az=clamp((tz-h.z)*.9-h.vz*1.5,-13,13);
+ h.vx+=ax*dt;h.vy+=ay*dt;h.vz+=az*dt;const sp=Math.hypot(h.vx,h.vz),max=30;if(sp>max){h.vx*=max/sp;h.vz*=max/sp;}
+ h.x+=h.vx*dt;h.y+=h.vy*dt;h.z+=h.vz*dt;h.rotor+=dt*38;
+ // The nose points where it is going when it is fast, and at the bird when it hovers. It leans into its acceleration.
+ const want=sp>6?Math.atan2(h.vx,h.vz):Math.atan2(b.x-h.x,b.z-h.z),turn=wrap(want-h.yaw+Math.PI,tau)-Math.PI;
+ h.yaw+=clamp(turn,-dt*1.2,dt*1.2);
+ const fwd=ax*Math.sin(h.yaw)+az*Math.cos(h.yaw),side=ax*Math.cos(h.yaw)-az*Math.sin(h.yaw);
+ h.tilt=mix(h.tilt,clamp(fwd*.025,-.3,.3),1-Math.exp(-dt*3));h.roll=mix(h.roll,clamp(side*.025,-.3,.3),1-Math.exp(-dt*3));
+ // The searchlight swings towards the bird at a limited rate.
+ const dx=b.x-h.x,dy=b.y-h.y,dz=b.z-h.z,d=Math.hypot(dx,dy,dz)||1,goal=[dx/d,dy/d,dz/d];
+ const cos=clamp(h.beam[0]*goal[0]+h.beam[1]*goal[1]+h.beam[2]*goal[2],-1,1),ang=Math.acos(cos),f=Math.min(1,.9*dt/Math.max(1e-4,ang));
+ h.beam=h.beam.map((q,i)=>mix(q,goal[i],f));const bl=Math.hypot(...h.beam)||1;h.beam=h.beam.map(q=>q/bl);
+ h.seen=heliSees(h);h.lit=h.seen&&ang<.16&&d<140;
+ h.lock=clamp(h.lock+(h.lit?dt/1.8:-dt/1.2),0,1);h.cool-=dt;
+ if(h.lock>=1&&h.cool<=0&&state==='play'){ // fire a net at where the bird will be
+  const speed=48,T=d/speed,px=b.x+Math.sin(b.angle)*v*T-h.x,py=b.y+b.vy*T*.5-h.y,pz=b.z+Math.cos(b.angle)*v*T-h.z,l=Math.hypot(px,py,pz)||1;
+  thrown.push({kind:'shell',x:h.x,y:h.y-1.2,z:h.z,vx:px/l*speed,vy:py/l*speed,vz:pz/l*speed,age:0,windup:0,fuse:Math.max(.15,T-.15),spin:0});
+  burst({type:'bandpass',from:1800,to:300,q:1.4,gain:.35,dur:.25});h.lock=.35;h.cool=4;
+ }
+ if(state==='play'&&Math.hypot(b.x-h.x,b.y-h.y+.6,b.z-h.z)<3.4)startCrash({n:[0,1,0],depth:0,cause:'Helikoptern vann.'});
 }
