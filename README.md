@@ -23,13 +23,17 @@ Testa lokalt: `python3 -m http.server` i repots rot och öppna `http://localhost
 
 Bra att veta:
 
-- Allt ljud utom krasch och vingslag syntas i `js/audio.js` (sprut, nedslag, träffmarkör, hök, billarm, stadsbrus).
+- Ljud: inspelade filer i `audio/` (bajs, splatt vid träff och nedslag, hök, kanonskott, träffmarkör, stadsbrus), resten syntas i `js/audio.js` (vind, vissling, billarm, motorljud från de fyra närmaste bilarna).
+- Ljudnivåer som ändras varje bildruta går via `setParam()` i `audio.js`, som bara skickar verkliga ändringar. Det var det som gjorde spelet hackigt efter en lång paus.
+- Kameran (C) växlar mellan bakom, ovanifrån och duvans ögon (`camView`, `setCamera()` i `render.js`).
+- Bajset kommer ur gumpen (`birdPoint()`/`payload()` i `game.js`). En skarp sväng slungar det utåt, och träffytan växer när duvan stiger och krymper i dyk (`spreadNow()`).
+- Topplistan är gemensam och ligger i Supabase (tabellen `scores`, se `scoreApi` i `game.js`). Går den inte att nå visas datorns egen lista.
+- Pekskärmens spak är analog med dödzon och mjuk kurva (`steer()` i `main.js`).
 - Hökens skugga är en egen platt siluett som bara ritas i skuggkartan (`hawkShadow()` i `render.js`).
-- Träffytan växer med fallhöjden (`hitRadius()` i `game.js`); siktet ritar samma radie på marken.
 - Fyra tider på dygnet (`skies` i `gl.js`), en ny för varje flygning.
-- Topplistan med namn (`scores` i `game.js`) sparas i webbläsaren, alltså per dator, inte gemensamt på nätet.
-- Stridsvagnar och nät finns i `updateTanks()` (`world.js`) och `updateThreats()` (`game.js`).
+- Stridsvagnar (bromsar, svänger på stället, rekyl) finns i `updateTanks()` (`world.js`), näten i `updateThreats()` (`game.js`) och `drawNet()`/`drawSnare()` (`render.js`).
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
+- Affischen `poster.jpg` visas på startsidan.
 
 Trimvärden att känna till: stjärngränser `thresholds` (game.js), riskbonus och kombo i `award()` (game.js),
 tankens påfyllning `recharge()` och hökens fart `updateHawk()` (world.js), kvarterstyper i `city.js`.

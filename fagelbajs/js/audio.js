@@ -222,3 +222,46 @@ function cannon(distance){
  if(sfx.tank1)play(pick('tank',3),.9*near,.92+.12*Math.random());
  burst({from:500,to:50,gain:.45*near,dur:.5});tone(95,32,.4,'triangle',.22*near);
 }
+// Traffic: the four nearest moving vehicles each get an engine and tyre roar, panned to their side,
+// louder close by and pitched up as they come towards the bird and down as they pass (exaggerated Doppler).
+let engines=null;
+function carEngines(playing){
+ if(!master)return;
+ if(!engines){
+  engines=[];
+  for(let n=0;n<4;n++){
+   const osc=sound.createOscillator(),sub=sound.createOscillator(),lp=sound.createBiquadFilter(),src=sound.createBufferSource(),bp=sound.createBiquadFilter();
+   const eg=sound.createGain(),ng=sound.createGain(),g=sound.createGain(),pan=sound.createStereoPanner?sound.createStereoPanner():sound.createGain();
+   osc.type='sawtooth';sub.type='triangle';lp.type='lowpass';lp.frequency.value=420;lp.Q.value=2;eg.gain.value=.55;
+   src.buffer=noiseBuf;src.loop=true;bp.type='bandpass';bp.frequency.value=650;bp.Q.value=.8;ng.gain.value=.5;g.gain.value=0;
+   osc.connect(lp);sub.connect(lp);lp.connect(eg);eg.connect(g);src.connect(bp);bp.connect(ng);ng.connect(g);g.connect(pan);pan.connect(master);
+   osc.start();sub.start();src.start(0,n*.37);
+   engines.push({osc,sub,lp,bp,g,pan,id:null});
+  }
+ }
+ const range=48,picked=[];
+ if(playing){
+  const fx=Math.sin(bird.angle)*forwardSpeed(),fz=Math.cos(bird.angle)*forwardSpeed();
+  for(const c of cars){
+   if(c.parked||wrecks.has(c.id))continue;
+   const dx=c.x-bird.x,dz=c.z-bird.z,d=Math.hypot(dx,bird.y-1,dz);if(d>range)continue;
+   picked.push({c,d,dx,dz,fx,fz});
+  }
+  for(const t of tanks)if(t.hp>0){const dx=t.x-bird.x,dz=t.z-bird.z,d=Math.hypot(dx,bird.y-1.5,dz);if(d<range*1.4)picked.push({c:t,d:d*.75,dx,dz,fx,fz,tank:true});}
+  picked.sort((a,b)=>a.d-b.d);picked.length=Math.min(4,picked.length);
+ }
+ // Keep a vehicle on the voice it already has, so nothing jumps in pitch.
+ const free=engines.filter(e=>!picked.some(p=>p.c.id===e.id));
+ for(const p of picked)if(!engines.some(e=>e.id===p.c.id)){const e=free.shift();if(e)e.id=p.c.id;}
+ for(const e of engines){
+  const p=picked.find(p=>p.c.id===e.id);
+  if(!p){e.id=null;setParam(e.g.gain,0,.15);continue;}
+  const {c,d,dx,dz,fx,fz}=p,speed=p.tank?c.speed:c.stopped?0:c.speed,vx=Math.sin(c.yaw)*speed,vz=Math.cos(c.yaw)*speed;
+  const closing=-((vx-fx)*dx+(vz-fz)*dz)/Math.max(1,Math.hypot(dx,dz)),doppler=clamp(1+closing/110,.72,1.32);
+  const near=(1-d/range)**2,heavy=p.tank||c.bus,base=p.tank?28:c.bus?34:40+14*hash(c.lane||0,c.along|0,3),rev=base*(1+.5*Math.min(1,speed/9))*doppler;
+  setParam(e.osc.frequency,rev,.08);setParam(e.sub.frequency,rev*.5,.08);
+  setParam(e.lp.frequency,(heavy?260:360)+500*near*doppler,.1);setParam(e.bp.frequency,(500+400*Math.min(1,speed/9))*doppler,.1);
+  setParam(e.g.gain,(heavy?.16:.11)*near*(.35+.65*Math.min(1,speed/5)),.08);
+  if(e.pan.pan)setParam(e.pan.pan,clamp((dx*Math.cos(bird.angle)-dz*Math.sin(bird.angle))/Math.max(4,d),-.9,.9),.08);
+ }
+}

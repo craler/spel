@@ -58,21 +58,46 @@ const pigeonSections=[
  [0,.073,.187,.174],[.14,.115,.162,.172],[.208,.197,.127,.142],
  [.25,.27,.126,.126],[.335,.292,.129,.12],[.412,.285,.084,.083],[.444,.278,.032,.043]
 ];
-function bodyMesh(){
- const rings=pigeonSections.map(([z,y,w,h])=>Array.from({length:12},(_,i)=>{
-  const a=i*tau/12;return [w*Math.cos(a),y+h*Math.sin(a),z];
- }));
- const faces=[];
- for(let n=1;n<rings.length;n++)for(let i=0;i<12;i++){
-  const j=(i+1)%12,light=Math.sin((i+.5)*tau/12)*.7-Math.cos((i+.5)*tau/12)*.3;
-  const neck=n===5||n===6;
-  const hue=neck?(light>.25?169:266):n>=7?232:222;
-  const l=(neck?45:n>=7?47:63)+light*(neck?20:16);
-  faces.push({pts:[rings[n-1][i],rings[n-1][j],rings[n][j],rings[n][i]],color:'hsl('+hue+' '+(neck?43:20)+'% '+l+'%)'});
+// The body is a smooth skin: the cross-sections are interpolated along the bird (Catmull-Rom), every ring has
+// eighteen points, and the shading uses normals averaged over the skin, so it reads as soft plumage, not facets.
+// Colours blend from the pale belly to the blue-grey back, through an iridescent green and purple neck to the head.
+const bodyRings=(()=>{
+ const S=pigeonSections,out=[],cr=(a,b,c,d,t)=>.5*(2*b+(c-a)*t+(2*a-5*b+4*c-d)*t*t+(3*b-a-3*c+d)*t*t*t);
+ for(let i=0;i<S.length-1;i++)for(let k=0;k<(i>=4&&i<=7?4:3);k++){
+  const t=k/(i>=4&&i<=7?4:3),q=n=>S[clamp(n,0,S.length-1)];
+  out.push([0,1,2,3].map(c=>cr(q(i-1)[c],q(i)[c],q(i+1)[c],q(i+2)[c],t)));
  }
- return faces;
+ out.push(S.at(-1));return out;
+})();
+const plumeCol={back:rgb('#7c8aab'),belly:rgb('#a9b3c9'),green:rgb('#3f8a74'),purple:rgb('#7b5a98'),head:rgb('#6a7697'),rump:rgb('#9aa6c0')};
+const SEG=18;
+function plumageColor(z,a){
+ const up=Math.sin(a),side=Math.abs(Math.cos(a)),lerp=(p,q,t)=>[mix(p[0],q[0],t),mix(p[1],q[1],t),mix(p[2],q[2],t)];
+ let c=lerp(plumeCol.belly,plumeCol.back,clamp(up*.9+.55,0,1));
+ if(z<-.3)c=lerp(c,plumeCol.rump,clamp((-.3-z)/.15,0,1)*.6);
+ const neck=clamp(1-Math.abs(z-.22)/.1,0,1);
+ if(neck>0)c=lerp(c,lerp(plumeCol.purple,plumeCol.green,side),neck*.85); // green on the sides, purple at the throat and nape
+ if(z>.3)c=lerp(c,plumeCol.head,clamp((z-.3)/.04,0,1));
+ return c;
 }
-const plumage=bodyMesh();
+function smoothBody(toWorld){
+ const R=bodyRings,grid=R.map(([z,y,w,h],j)=>Array.from({length:SEG},(_,i)=>{const a=i*tau/SEG;return toWorld([w*Math.cos(a),y+h*Math.sin(a),z]);}));
+ const cols=R.map(([z])=>Array.from({length:SEG},(_,i)=>plumageColor(z,i*tau/SEG)));
+ const tip=toWorld([0,R.at(-1)[1],R.at(-1)[0]+.012]),tail=toWorld([0,R[0][1],R[0][0]-.02]);
+ const norm=(j,i)=>{ // across the ring and along the body, from the neighbouring points
+  const g=grid,a=g[j][(i+1)%SEG],b=g[j][(i+SEG-1)%SEG],c=g[Math.min(R.length-1,j+1)][i],d=g[Math.max(0,j-1)][i];
+  const u=[a[0]-b[0],a[1]-b[1],a[2]-b[2]],v=[c[0]-d[0],c[1]-d[1],c[2]-d[2]],n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],l=Math.hypot(...n)||1;
+  return [n[0]/l,n[1]/l,n[2]/l];
+ };
+ const N=grid.map((r,j)=>r.map((_,i)=>norm(j,i)));
+ for(let j=1;j<R.length;j++)for(let i=0;i<SEG;i++){
+  const k=(i+1)%SEG,A=[j-1,i],B=[j-1,k],C=[j,k],D=[j,i],P=([a,b])=>grid[a][b],Nn=([a,b])=>N[a][b],Cc=([a,b])=>cols[a][b];
+  dyn.smooth([P(A),P(B),P(C)],[Nn(A),Nn(B),Nn(C)],[Cc(A),Cc(B),Cc(C)]);dyn.smooth([P(A),P(C),P(D)],[Nn(A),Nn(C),Nn(D)],[Cc(A),Cc(C),Cc(D)]);
+ }
+ const last=R.length-1,end=(pt,j,flip)=>{const n=[pt[0]-grid[j][0][0],0,0];for(let i=0;i<SEG;i++){const k=(i+1)%SEG;
+  dyn.smooth(flip?[pt,grid[j][k],grid[j][i]]:[pt,grid[j][i],grid[j][k]],[N[j][i],N[j][flip?k:i],N[j][flip?i:k]],[cols[j][i],cols[j][i],cols[j][k]]);}};
+ end(tip,last,false);end(tail,0,true);
+}
 function flightPitch(){
  // At low airspeed the beak can still point up even as lift fades.
  const pathAngle=Math.atan2(bird.vy,forwardSpeed());
@@ -99,7 +124,7 @@ function renderBird(){
  const face=(pts,color)=>poly(pts.map(p=>world(head(p))),color,1),plain=(pts,color)=>poly(pts.map(world),color,1);
  // Every flight feather flutters by itself in the airstream, harder the faster the bird goes.
  const wind=clamp(Math.hypot(forwardSpeed(),b.vy)/30,.3,1.7)*(1+2*fl),flutter=(i,rate)=>wind*Math.sin(elapsed*rate+i*2.1);
- for(const patch of plumage)face(patch.pts,patch.color);
+ smoothBody(p=>world(head(p)));
  // Wedge bill, pale cere, and lateral amber eyes.
  for(const side of [-1,1]){
   face([[0,.316,.411],[side*.052,.264,.406],[0,.245,.565]],'#58445a');
@@ -140,18 +165,18 @@ function renderBird(){
    if(hash(i,side+2,31)<(3-feathers)*.3)continue;
    const u=.047+i*.074;
    const f=.028*flutter(i+side,17+2.7*i);
-   patch([[u-.034,.065],[u+.064,.063],[u+.093,-.204,f*.6],[u+.053,-.31,f],[u+.016,-.323,f],[u-.02,-.278,f*.8]],i===3||i===5?'#485675':i%2?'#899abd':'#afbad1');
+   patch([[u-.034,.065],[u+.064,.063],[u+.093,-.204,f*.6],[u+.053,-.31,f],[u+.016,-.323,f],[u-.02,-.278,f*.8]],i===3||i===5?'#5b6a8c':i%2?'#8d9dbf':'#a7b3cc');
   }
   // Staggered primaries end in distinct pointed tips.
   for(let i=0;i<6;i++){
    if(hash(i,side+5,37)<(3-feathers)*.3)continue;
    const u=.35+i*.067,tip=.59+i*.091,sweep=-.275+i*.038;
    const f=.04*flutter(i-side,21+3.3*i)+.03*beat*(i-2.5)/2.5; // tips also splay with the beat
-   patch([[u,.06],[u+.11,.044],[tip+.012,sweep+.043,f],[tip,sweep,f*1.2],[tip-.047,sweep-.016,f],[u-.035,-.105]],i%2?'#455072':'#596a8f');
+   patch([[u,.06],[u+.11,.044],[tip+.012,sweep+.043,f],[tip,sweep,f*1.2],[tip-.047,sweep-.016,f],[u-.035,-.105]],i%2?'#4d5a7d':'#5a6a8d');
   }
   patch([[0,.12],[.22,.143],[.44,.098],[.72,.031],[.85,-.019],[.60,-.106],[.32,-.159],[.08,-.165],[0,-.134]],'#aebdd9');
   patch([[.04,.116,.009],[.22,.129,.009],[.42,.086,.009],[.29,.039,.009],[.08,.048,.009]],'#c8d5e6');
-  for(const u of [.32,.46])patch([[u+.018,.056,.012],[u+.065,.044,.012],[u-.009,-.177,.012],[u-.069,-.20,.012]],'#485779');
+  for(const u of [.32,.46])patch([[u+.018,.056,.012],[u+.065,.044,.012],[u-.009,-.177,.012],[u-.069,-.20,.012]],'#56658a');
  }
  paint();
 }
@@ -186,7 +211,16 @@ function hud(id,value){const el=$(id);if(el.textContent!==value)el.textContent=v
 // ---- 3D scene -------------------------------------------------------------
 const overlay=$('overlay2d'), ctx=overlay.getContext('2d');
 // The bird code above describes its feathers as polygons; they go straight into the per-frame triangle batch.
-function poly(points,color){dyn.fan(points,rgb(color));}
+// Each feather is shaded as if gently domed: the normals lean outwards towards its edges, so the light rolls
+// over it instead of the whole patch turning one flat colour.
+function poly(points,color){
+ const col=rgb(color),n=points.length,a=points[0],b=points[1],c=points[n-1];
+ const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+ let f=[uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx];const fl=Math.hypot(...f)||1;f=f.map(q=>q/fl);
+ const m=[0,1,2].map(k=>points.reduce((s,p)=>s+p[k],0)/n);
+ const nrm=points.map(p=>{const d=[p[0]-m[0],p[1]-m[1],p[2]-m[2]],l=Math.hypot(...d)||1,q=[f[0]+.55*d[0]/l,f[1]+.55*d[1]/l,f[2]+.55*d[2]/l],ql=Math.hypot(...q)||1;return [q[0]/ql,q[1]/ql,q[2]/ql];});
+ for(let i=2;i<n;i++)dyn.smooth([points[0],points[i-1],points[i]],[nrm[0],nrm[i-1],nrm[i]],[col,col,col]);
+}
 function paint(){}
 const M={
  cube:new Mesh().box(0,0,0,1,1,1,WHITE,1).build(),
@@ -708,7 +742,7 @@ function render(dt=1/60){
  $('chip').classList.toggle('warn',stall);
  // Sound and mood that follow the frame.
  windLevel();
- if(sound){whistle(playing?bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-14)/38,0,1):0);sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);
+ if(sound){whistle(playing?bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-14)/38,0,1):0);sprayVoice(playing&&elapsed-lastDrop<.09);dread(playing&&hawk?hawk.dread:0);ambience(playing,dt);carEngines(playing);
   // The nearest ringing car alarm: horn on, horn off, quieter and duller with distance.
   let horn=0;
   if(playing)for(const c of cars){const since=elapsed-(alarms.get(c.id)??-99);
