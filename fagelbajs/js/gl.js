@@ -341,7 +341,8 @@ function lightMatrix(cx,cy,cz){
 // View-projection that matches the 2D helpers cameraPoint() and screen() exactly.
 function viewMatrix(){
  const {x,y,z,s,c,cp,sp}=camera,kx=2*scale/width,ky=2*scale/height,near=.4,far=2600,A=(far+near)/(far-near),B=-2*far*near/(far-near);
- const f=[cp*s,-sp,cp*c],rows=[[kx*c,0,-kx*s,0],[ky*sp*s+.14*f[0],ky*cp+.14*f[1],ky*sp*c+.14*f[2],0],[A*f[0],A*f[1],A*f[2],B],[f[0],f[1],f[2],0]];
+ const cr=camera.cr??1,sr=camera.sr??0,R=[c*cr+sp*s*sr,cp*sr,-s*cr+sp*c*sr],U=[sp*s*cr-c*sr,cp*cr,sp*c*cr+s*sr]; // right and up, turned by the roll
+ const f=[cp*s,-sp,cp*c],rows=[[kx*R[0],kx*R[1],kx*R[2],0],[ky*U[0]+.14*f[0],ky*U[1]+.14*f[1],ky*U[2]+.14*f[2],0],[A*f[0],A*f[1],A*f[2],B],[f[0],f[1],f[2],0]];
  for(let r=0;r<4;r++){const [a,b,d,k]=rows[r];viewM[r]=a;viewM[4+r]=b;viewM[8+r]=d;viewM[12+r]=k-(a*x+b*y+d*z);}
 }
 function lightUniforms(prog){
@@ -365,7 +366,7 @@ function drawFrame(casters,scene,decals){
  // Sky
  gl.depthMask(false);gl.disable(gl.DEPTH_TEST);lightUniforms(progSky);
  const {s,c,cp,sp}=camera,u=progSky.u;
- gl.uniform3f(u.uR,c,0,-s);gl.uniform3f(u.uU,sp*s,cp,sp*c);gl.uniform3f(u.uF,cp*s,-sp,cp*c);gl.uniform3fv(u.uZenith,sky.zenith);
+ const cr=camera.cr??1,sr=camera.sr??0;gl.uniform3f(u.uR,c*cr+sp*s*sr,cp*sr,-s*cr+sp*c*sr);gl.uniform3f(u.uU,sp*s*cr-c*sr,cp*cr,sp*c*cr+s*sr);gl.uniform3f(u.uF,cp*s,-sp,cp*c);gl.uniform3fv(u.uZenith,sky.zenith);
  gl.uniform2f(u.uK,width/(2*scale),height/(2*scale));gl.uniform1f(u.uTime,performance.now()/1000);
  gl.bindVertexArray(quadVao);gl.drawArrays(gl.TRIANGLES,0,6);gl.depthMask(true);gl.enable(gl.DEPTH_TEST);
  // Ground

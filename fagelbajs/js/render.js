@@ -1,8 +1,22 @@
 'use strict';
 // Camera, bird mesh, scene assembly for the WebGL renderer and the 2D overlay (sight, warnings, HUD).
 function setCamera(dt){
- // A roof entering the reticle must not move the camera. Frame a virtual
- // unobstructed trajectory, easing both look angle and overhead distance.
+ // Through the bird's eyes: the view follows the flight path and leans into the turns.
+ // In a crash the camera steps back out so the tumble can be seen.
+ const mode=crash&&camView===2?0:camView,above=mode===1;
+ if(mode===2){
+  const a=bird.angle,s=Math.sin(a),c=Math.cos(a),k=1-Math.exp(-dt*6);
+  const look=clamp(.2-flightPitch()*.85+(keys.has('Space')?.18:0),-.45,1.35);
+  if(!rig||rig.pov===undefined)rig={pov:true,yaw:a,pitch:look,roll:0,rise:0,ahead:0};
+  rig.yaw=a;rig.pitch=mix(rig.pitch,look,k);rig.roll=mix(rig.roll,-bird.bank*.42,k);
+  camera={x:bird.x+s*.38,y:bird.y+.34,z:bird.z+c*.38,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch),cr:Math.cos(rig.roll),sr:Math.sin(rig.roll)};
+  const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1),tremble=(.01+.05*rush*rush)*rush;
+  camera.x+=c*tremble*Math.sin(elapsed*33);camera.z-=s*tremble*Math.sin(elapsed*33);camera.y+=tremble*.8*Math.sin(elapsed*47);
+  scale=Math.min(width*.6,height*.72)*(1-.14*bird.fold-.12*rush);
+  if(shake>.01){const q=shake*.12;camera.x+=q*Math.sin(elapsed*71);camera.y+=q*.6*Math.sin(elapsed*97+1);shake*=Math.exp(-dt*7);}
+  return;
+ }
+ if(rig&&rig.pov)rig=null;
  const p=payload(),aim=at(p,Math.max(0,flightTime(p,0)));
  const blend=1-Math.exp(-dt*7);
  const a=rig?mix(rig.yaw,bird.angle,1-Math.exp(-dt*11)):bird.angle;
@@ -24,7 +38,7 @@ function setCamera(dt){
  rig.yaw=a;rig.pitch=mix(rig.pitch,desiredPitch,blend);
  if(!above)rig.pitch=Math.min(rig.pitch,Math.atan2(rig.rise,back)+.24); // never tilt so far down that the bird leaves the top of the picture
  rig.rise=mix(rig.rise,rise,blend);rig.ahead=mix(rig.ahead,focusAhead,blend);
- camera={x:bird.x+s*(rig.ahead-back)+c*shoulder,y:bird.y+rig.rise,z:bird.z+c*(rig.ahead-back)-s*shoulder,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch)};
+ camera={x:bird.x+s*(rig.ahead-back)+c*shoulder,y:bird.y+rig.rise,z:bird.z+c*(rig.ahead-back)-s*shoulder,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch),cr:1,sr:0};
  const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1);
  // The faster the dive, the harder the picture trembles and the wider the view.
  const tremble=(.02+.1*rush*rush)*rush;
@@ -33,8 +47,8 @@ function setCamera(dt){
  if(shake>.01){const k=shake*.3;camera.x+=k*Math.sin(elapsed*71);camera.y+=k*.6*Math.sin(elapsed*97+1);camera.z+=k*Math.cos(elapsed*83);shake*=Math.exp(-dt*7);}
 }
 function cameraPoint([x,y,z]){
- const c=camera,dx=x-c.x,dy=y-c.y,dz=z-c.z,f=dx*c.s+dz*c.c;
- return [dx*c.c-dz*c.s,dy*c.cp+f*c.sp,f*c.cp-dy*c.sp];
+ const c=camera,dx=x-c.x,dy=y-c.y,dz=z-c.z,f=dx*c.s+dz*c.c,X=dx*c.c-dz*c.s,Y=dy*c.cp+f*c.sp;
+ return [X*c.cr+Y*c.sr,Y*c.cr-X*c.sr,f*c.cp-dy*c.sp];
 }
 function screen(p){return [width/2+p[0]*scale/p[2],height*.43-p[1]*scale/p[2]];}
 function point(p){const v=cameraPoint(p);return v[2]>.6?screen(v):null;}
@@ -141,16 +155,6 @@ function renderBird(){
  }
  paint();
 }
-function crashFeathers(){
- const t=crash.age*.42;
- for(let i=0;i<12;i++){
-  const a=tau*i/12,reach=t*(1.1+hash(i,1,1)*3);
-  const [x,y,z]=crash.origin;const pos=point([x+reach*Math.cos(a),y+.2+Math.sin(Math.min(1,t)*Math.PI)*(.7+hash(i,2,2)),z+reach*Math.sin(a)]);
-  if(!pos)continue;
-  ctx.save();ctx.translate(...pos);ctx.rotate(a+t*(i%2?4:-5));ctx.fillStyle=i%3?'#f7edf5':'#7382a2';
-  ctx.beginPath();ctx.ellipse(0,0,3,7,0,0,tau);ctx.fill();ctx.restore();
- }
-}
 function text(str,x,y,size,fill='#fff',align='center',weight=800){
  ctx.font=weight+' '+size+'px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';ctx.textAlign=align;ctx.lineJoin='round';
  ctx.lineWidth=Math.max(3,size*.22);ctx.strokeStyle='#0b0e14d9';ctx.strokeText(str,x,y);ctx.fillStyle=fill;ctx.fillText(str,x,y);
@@ -177,20 +181,6 @@ function drawHitmarker([x,y]){
  const gap=6+age*30;ctx.save();ctx.translate(x,y);ctx.globalAlpha=1-age/.2;ctx.lineCap='round';ctx.beginPath();
  for(const [sx,sy] of [[1,1],[1,-1],[-1,1],[-1,-1]]){ctx.moveTo(sx*gap,sy*gap);ctx.lineTo(sx*(gap+9),sy*(gap+9));}
  ctx.lineWidth=5;ctx.strokeStyle='#0b0e14';ctx.stroke();ctx.lineWidth=2.5;ctx.strokeStyle=markerGold?'#ffd24a':'#fff';ctx.stroke();ctx.restore();
-}
-function impactView(aim,R){
- const last=stains.at(-1),focus=last&&elapsed-last.t<1?[last.x,last.y,last.z]:aim;
- const size=Math.min(150,width*.2,height*.25),x=touchMode?18:width-size-18,y=touchMode?98:height-size-70,k=size/28; // clear of the thumb buttons on touch screens
- ctx.save();ctx.translate(x,y);ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,0,0,size,size,10);ctx.fillStyle='#10141bd9';ctx.fill();ctx.clip();
- const px=n=>size/2+(n-focus[0])*k,pz=n=>size/2-(n-focus[2])*k;
- const dot=(x,z,r,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.arc(px(x),pz(z),r,0,tau);ctx.fill();};
- const i=Math.floor(focus[0]/tile),j=Math.floor(focus[2]/tile);
- ctx.fillStyle='#ffffff26';
- for(let u=i-1;u<=i+1;u++)for(let v=j-1;v<=j+1;v++)for(const [a,b,w,d] of buildings(u,v))ctx.fillRect(px(a),pz(b+d),w*k,d*k);
- for(const h of stains)if(Math.abs(h.x-focus[0])<15&&Math.abs(h.z-focus[2])<15)dot(h.x,h.z,k*.5,'#f4f1e6');
- for(const h of people)if(Math.abs(h.x-focus[0])<15&&Math.abs(h.z-focus[2])<15)dot(h.x,h.z,k*.75,scored.has(h.id)?'#f4f1e6':'#ffd24a');
- ctx.strokeStyle='#ffe45c';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(px(aim[0]),pz(aim[2]),R*k,0,tau);ctx.stroke();
- ctx.fillStyle='#ffffffb3';ctx.font='800 10px system-ui,sans-serif';ctx.textAlign='left';ctx.fillText('NEDSLAG',8,15);ctx.restore();
 }
 function hud(id,value){const el=$(id);if(el.textContent!==value)el.textContent=value;}
 // ---- 3D scene -------------------------------------------------------------
@@ -433,7 +423,7 @@ function buildMoving(){
   const a=f.age*f.spin+f.seed,c=Math.cos(a)*.3,s=Math.sin(a)*.3,t=.09*Math.sin(a*1.7);
   dyn.fan([[f.x-c,f.y-t,f.z-s],[f.x+s*.3,f.y+.03,f.z-c*.3],[f.x+c,f.y+t,f.z+s],[f.x-s*.3,f.y-.03,f.z+c*.3]],rgb(['#e8ecf2','#8792aa','#5b6788','#cfd6e2'][Math.floor(f.seed*7)%4]));
  }
- renderBird();
+ if(camView!==2||crash)renderBird();
  for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();
 }
 function drawHawk(batch,k){
@@ -619,7 +609,6 @@ function render(dt=1/60){
    }
    ctx.restore();
   }
-  if(drops.length||(stains.length&&elapsed-stains.at(-1).t<1.2))impactView(aim,R);
  }
  // HUD
  const lo=thresholds[wanted-1]||0,hi=thresholds[wanted],fill=wanted===maxWanted?100:Math.round(100*(points-lo)/(hi-lo));

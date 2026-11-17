@@ -143,7 +143,7 @@ function featList(open){
 }
 // ---- Feedback: banner for big moments, a score feed by the sight, numbers and speech bubbles in the world.
 let popups=[],feed=[],bubbles=[],splash=[],marker=-9,markerGold=false,bannerUntil=0,lastDrop=-9,lastBubble=-9;
-const wantedNote=['','De kastar frukt','De klättrar upp på taken','Paraplyer och nät','Höken kommer','Stridsvagnar'];
+const wantedNote=['','De kastar frukt','Fler kastar, och snabbare','Paraplyer och nät','Höken kommer','Stridsvagnar'];
 const shouts=['USCH!','ÄSCH!','MEN VA?!','MIN FRISYR!','FY BUBBLAN!','NEEEJ!','MITT I NYLLET!','BLÄ!','DUVJÄKEL!','INTE IGEN!'];
 function banner(title,sub='',kind='',time=2.2){
  const el=$('feedback'),big=document.createElement('strong');el.className=kind;el.textContent='';big.textContent=title;el.append(big);
@@ -199,11 +199,14 @@ function reset(){
  bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9,nextFlap:2,burst:0,lookYaw:0,lookPitch:0,glance:0,nextGlance:1,snare:0};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }
 // body is HTML built from the game's own strings and numbers.
-function panel(heading,body,action){$('title').textContent=heading;$('brief').innerHTML=body;$('brief').hidden=false;$('view').hidden=true;$('go').textContent=action;$('overlay').hidden=false;document.body.classList.add('menu');$('go').focus();}
+let shownAt=0;
+function panel(heading,body,action){shownAt=performance.now();$('title').textContent=heading;$('brief').innerHTML=body;$('brief').hidden=false;$('view').hidden=true;$('go').textContent=action;$('overlay').hidden=false;document.body.classList.add('menu');$('go').focus();}
 function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','<p class="cause">Duvan väntar där du lämnade den.</p>','Fortsätt flyga →');}else if(state==='pause')start();}
-function start(){if(state!=='pause'){if($('save'))saveScore($('name').value); // starting again without pressing Spara still keeps the score
+function start(){if(state==='play')return;if(state!=='pause'){if($('save'))saveScore($('name').value); // starting again without pressing Spara still keeps the score
  reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;document.body.classList.remove('menu');$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
-function view(){if(crash)return;above=!above;rig=null;$('camera').textContent=above?'Vy: ovanifrån':'Vy: bakom';}
+// C cycles the camera: behind the bird, straight down from above, and through the bird's own eyes.
+const viewNames=['bakom','ovanifrån','duvans ögon'];
+function view(){if(crash)return;camView=(camView+1)%3;above=camView===1;rig=null;$('camera').textContent='Vy: '+viewNames[camView];}
 // Convert the stored dive speed into horizontal travel as the nose tips down.
 function forwardSpeed(){
  // As the dive develops, the speed gained from falling goes mostly downwards.
@@ -400,7 +403,7 @@ function startCrash(surface=contact(.28)){
   velocity:[Math.sin(b.angle)*speed,b.vy,Math.cos(b.angle)*speed],
   spin:clamp(force*.20,2,11)*(surface.n[1]?1:-1),rollSpeed:side*clamp(force*.14,1.2,7),
   pitch:0,roll:0,wings:[-1,1].map(dir=>({arm,wrist,tip:wrist,vt:dir*side*force*.31,va:dir*side*force*.21,vw:-dir*side*force*.25}))};
- if(!rig)setCamera(1/60);
+ if(!rig||camView===2){rig=null;setCamera(1/60);}
  slowmo=.7;shake=1.2; // a beat of slow motion on impact, and a cloud of feathers
  for(let n=0;n<34;n++){const a=Math.random()*tau,u=Math.random()*2-1,q=Math.sqrt(1-u*u),v=2+6*Math.random();
   plume.push({x:b.x,y:b.y,z:b.z,vx:Math.cos(a)*q*v+Math.sin(b.angle)*speed*.25,vy:u*v+2,vz:Math.sin(a)*q*v+Math.cos(b.angle)*speed*.25,age:0,spin:6+9*Math.random(),seed:Math.random()*tau});}

@@ -13,7 +13,7 @@ const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><but
 const views={
  scores:()=>['Topplista',scores.length?scoreList():'<p class="cause">Inga flygningar än.</p>'],
  feats:()=>['Bedrifter',featList(true)],
- settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',above?'Ovanifrån':'Bakom','camera')+setting('Grafik',lowGraphics?'Snabb':'Auto','graphics')],
+ settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',lowGraphics?'Snabb':'Auto','graphics')],
  help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
 };
 function openView(name){
@@ -40,7 +40,12 @@ $('audio').onclick=()=>{muted=!muted;setAudio();};
 onblur=()=>{keys.clear();if(state==='play')togglePause();};
 const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','Escape'];
 onkeydown=e=>{
- if(state!=='play'){if(e.code==='Escape'&&state==='pause')togglePause();return;}
+ if(state!=='play'){
+  if(e.code==='Escape'&&state==='pause')togglePause();
+  // Enter or Space flies again from the wasted screen, the menu and the pause, unless a name is being typed.
+  else if((e.code==='Enter'||e.code==='Space'||e.code==='NumpadEnter')&&!e.repeat&&state!=='crash'&&performance.now()-shownAt>500&&!(e.target instanceof HTMLInputElement)&&!(e.target.closest&&e.target.closest('button:not(#go),a,summary'))){e.preventDefault();start();}
+  return;
+ }
  if(!gameKeys.includes(e.code))return;
  e.preventDefault();keys.add(e.code);if(e.repeat)return;
  if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='Escape')togglePause();

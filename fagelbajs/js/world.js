@@ -21,7 +21,7 @@ function walkToward(r,dest,step){
  r.route+=clamp(diff,-step,step);return Math.abs(diff)<=step;
 }
 function pedestrian(i,j,k,dt){
- const id=i+','+j+','+k,phase=hash(i,j,k)*tau,perimeter=4*sidewalkLength,blds=block(i,j).type?[]:buildings(i,j);
+ const id=i+','+j+','+k,phase=hash(i,j,k)*tau,perimeter=4*sidewalkLength;
  const home=k*perimeter/8+phase,walk=(k%2?1.15:-.95)*(jogger(i,j,k)?3.6:1);
  const when=fallen.get(id)??elapsed;
  let route=home+walk*when,y=0,[x,z]=pavement(i,j,route),climbing=false,running=false;
@@ -29,30 +29,15 @@ function pedestrian(i,j,k,dt){
  let yaw=[Math.PI/2,0,-Math.PI/2,Math.PI][side]+(walk<0?Math.PI:0);
  if(wanted){
   let r=runners.get(id);
-  if(!r){r={route,x,z,y:0,stage:0};runners.set(id,r);}
+  if(!r){r={route,x,z};runners.set(id,r);}
   if(!scored.has(id)){
-   const climb=wanted>=2&&k<Math.min(3,wanted-1)&&blds.length>0,ox=r.x,oz=r.z;
-   const step=dt*(2.75+.55*wanted);
-   let tx=bird.x,tz=bird.z,roof;
-   if(climb){roof=blds[k%blds.length];tx=roof[0]+roof[2]/2; // climb the wall that faces the street
-    tz=roof[1]-j*tile<=(j+1)*tile-roof[1]-roof[3]?roof[1]-.24:roof[1]+roof[3]+.24;}
-   if(r.stage===0){
-    const arrived=walkToward(r,closestPavement(i,j,tx,tz),step);
-    [r.x,r.z]=pavement(i,j,r.route);
-    if(climb&&arrived)r.stage=1;
-   }else if(r.stage===1){
-    const dx=tx-r.x,dz=tz-r.z,dist=Math.hypot(dx,dz),f=Math.min(1,step/Math.max(.001,dist));
-    r.x+=dx*f;r.z+=dz*f;if(dist<=step)r.stage=2;
-   }else if(r.stage===2){
-    r.y=Math.min(roof[4],r.y+dt*(2.9+wanted*.35));if(r.y>=roof[4])r.stage=3;
-   }else{
-    r.x+=clamp(clamp(bird.x,roof[0]+.8,roof[0]+roof[2]-.8)-r.x,-step,step);
-    r.z+=clamp(clamp(bird.z,roof[1]+.8,roof[1]+roof[3]-.8)-r.z,-step,step);
-   }
+   // Everyone runs after the bird along the pavement; nobody climbs the walls.
+   const step=dt*(2.75+.55*wanted),ox=r.x,oz=r.z;
+   walkToward(r,closestPavement(i,j,bird.x,bird.z),step);
+   [r.x,r.z]=pavement(i,j,r.route);
    if(Math.hypot(r.x-ox,r.z-oz)>1e-4){r.yaw=Math.atan2(r.x-ox,r.z-oz);r.moving=elapsed;}
-   if(r.stage===2&&roof)r.yaw=Math.atan2(tx-r.x,(roof[1]+roof[3]/2)-r.z);
   }
-  x=r.x;z=r.z;y=r.y;route=r.route;climbing=r.stage===2;yaw=r.yaw??yaw;running=elapsed-(r.moving??-9)<.2;
+  x=r.x;z=r.z;route=r.route;yaw=r.yaw??yaw;running=elapsed-(r.moving??-9)<.2;
  }
  return {x,y,z,id,i,j,route,walk,climbing,yaw,running,c:colors[Math.floor(hash(i,j,k+8)*colors.length)],phase,
   umb:wanted>=3&&hash(i,j,k+20)<.3&&!brokeUmb.has(id)};
