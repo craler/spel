@@ -290,8 +290,14 @@ function attribs(list,stride,divisor){
  for(const [loc,size,offset] of list){gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,stride*4,offset*4);gl.vertexAttribDivisor(loc,divisor);}
 }
 // Triangles rebuilt every frame (the bird, the hawk, the spray ribbon). Instance attributes stay at their constants.
-function triBatch(){
+// mat is the material for the whole batch: 0 matt, -1 wet and glossy.
+function triBatch(mat=0){
  const b={data:new Float32Array(STRIDE*3*2048),n:0,vao:gl.createVertexArray(),vbo:gl.createBuffer(),
+  // A triangle with its own normal and colour at every corner, for smooth shading.
+  smooth(p,nrm,col){
+   if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
+   for(let k=0;k<3;k++){const a=p[k],n=nrm[k],c=col[k];this.data.set([a[0],a[1],a[2],n[0],n[1],n[2],c[0],c[1],c[2],0,0,0],this.n++*STRIDE);}
+  },
   tri(a,b,c,col){
    if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
    const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
@@ -300,13 +306,13 @@ function triBatch(){
   },
   fan(pts,col){for(let i=2;i<pts.length;i++)this.tri(pts[0],pts[i-1],pts[i],col);},
   upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.data.subarray(0,this.n*STRIDE),gl.DYNAMIC_DRAW);},
-  draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.vertexAttrib4f(4,0,0,0,0);gl.vertexAttrib3f(5,1,1,1);gl.vertexAttrib4f(6,1,1,1,0);gl.vertexAttrib4f(7,0,0,0,0);gl.drawArrays(gl.TRIANGLES,0,this.n);}
+  draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.vertexAttrib4f(4,0,0,0,0);gl.vertexAttrib3f(5,1,1,1);gl.vertexAttrib4f(6,1,1,1,mat);gl.vertexAttrib4f(7,0,0,0,0);gl.drawArrays(gl.TRIANGLES,0,this.n);}
  };
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.vbo);attribs([[0,3,0],[1,3,3],[2,4,6],[3,2,10]],STRIDE,0);gl.bindVertexArray(null);
  return b;
 }
 // dyn is drawn normally; omen only casts a shadow (the hawk's oversized silhouette).
-const dyn=triBatch(), omen=triBatch();
+const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1);
 // Fullscreen / ground quad.
 const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,1,1,-1,-1,1,1,-1,1]),gl.STATIC_DRAW);attribs([[0,2,0]],2,0);gl.bindVertexArray(null);

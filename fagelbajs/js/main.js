@@ -11,7 +11,8 @@ function controlsPicture(){
 function homeMenu(){panel('Duv-Diarré',controlsPicture()+(best?'<p class="best">Rekord '+number(best)+' · '+rankOf(best)+'</p>':''),'Nytt spel →');}
 const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><button data-set="'+id+'">'+value+'</button></div>';
 const views={
- scores:()=>['Topplista',scores.length?scoreList():'<p class="cause">Inga flygningar än.</p>'],
+ scores:()=>{if(Date.now()-sharedAt>10000)fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
+  return ['Topplista',board().length?scoreList():'<p class="cause">Inga flygningar än.</p>'];},
  feats:()=>['Bedrifter',featList(true)],
  settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',lowGraphics?'Snabb':'Auto','graphics')],
  help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
@@ -59,10 +60,13 @@ if(touchMode)showTouch();
 addEventListener('touchstart',showTouch,{once:true,passive:true});
 function steer(e){
  const r=stick.getBoundingClientRect(),dx=clamp((e.clientX-r.left-r.width/2)/(r.width/2),-1,1),dy=clamp((e.clientY-r.top-r.height/2)/(r.height/2),-1,1);
- knob.style.transform='translate('+dx*34+'px,'+dy*34+'px)';
- for(const [code,on] of [['KeyA',dx<-.3],['KeyD',dx>.3],['KeyW',dy<-.35],['KeyS',dy>.35]])on?keys.add(code):keys.delete(code);
+ knob.style.transform='translate('+dx*40+'px,'+dy*40+'px)';
+ // Analog, with a dead zone and a soft curve: small thumb movements make small corrections,
+ // and only a push all the way out gives the full turn.
+ const curve=v=>Math.sign(v)*Math.pow(clamp((Math.abs(v)-.12)/.88,0,1),1.7);
+ stickInput.x=curve(dx);stickInput.y=curve(dy);stickInput.on=true;
 }
-function release(){knob.style.transform='';for(const code of ['KeyA','KeyD','KeyW','KeyS'])keys.delete(code);}
+function release(){knob.style.transform='';stickInput.x=stickInput.y=0;stickInput.on=false;}
 stick.onpointerdown=e=>{stick.setPointerCapture(e.pointerId);steer(e);};
 stick.onpointermove=e=>{if(stick.hasPointerCapture(e.pointerId))steer(e);};
 stick.onpointerup=stick.onpointercancel=release;
@@ -85,8 +89,9 @@ function showTips(){
 }
 // The picture is rendered at up to 1.5 device pixels. If the machine cannot keep up, the resolution steps down.
 let density=lowGraphics?.7:Math.min(devicePixelRatio||1,1.5),frameTime=1/60,lastTune=0;
+let pausedDrawn=false,quickFor=0;
 function fit(){
- width=innerWidth;height=innerHeight;
+ pausedDrawn=false;width=innerWidth;height=innerHeight;
  for(const c of [glCanvas,overlay]){c.width=Math.round(width*density);c.height=Math.round(height*density);}
  ctx.setTransform(density,0,0,density,0,0);
 }
@@ -95,8 +100,17 @@ reset();gather();traffic();let prev=0;
 homeMenu();
 function frame(now){
  const real=Math.min(.05,(now-prev)/1000),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
- frameTime=mix(frameTime,real,.04);
- if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>.75){density=Math.max(.75,density-.25);lastTune=now;fit();}
+ // While paused the picture stands still, so it is drawn once and then left alone.
+ if(state==='pause'&&pausedDrawn){requestAnimationFrame(frame);return;}
+ if(state==='pause')pausedDrawn=true;
+ // The resolution steps down when frames are slow and back up after a long run of quick ones.
+ // Only flying counts: a menu or a hidden tab says nothing about how the game itself runs.
+ if(state==='play'){
+  frameTime=mix(frameTime,real,.04);quickFor=frameTime<1/52?quickFor+real:0;
+  const top=lowGraphics?.7:Math.min(devicePixelRatio||1,1.5);
+  if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>.75){density=Math.max(.75,density-.25);lastTune=now;quickFor=0;fit();}
+  else if(quickFor>8&&density<top){density=Math.min(top,density+.25);lastTune=now;quickFor=0;fit();}
+ }
  if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu')wingPhase+=dt*3;

@@ -232,6 +232,8 @@ const M={
   m.ball(0,3.55,0,.44,1.15,.38,bronze,0,0,0,8,6).ball(0,4.95,0,.27,.3,.27,bronze,0,0,0,8,5).tube(.5,3.9,5.5,.1,.1,.07,bronze,0,0,0,6).tube(-.2,2.3,3,0,.2,.16,bronze,0,0,0,6).tube(.2,2.3,3,0,.2,.16,bronze,0,0,0,6);return m.build();})(),
 // Splatter shapes: an uneven blob with a few long rays (flat for the ground, upright for walls) and a drip.
  splat:splatMesh(false),splatWall:splatMesh(true),
+ dome:(()=>{const m=new Mesh();for(let j=0;j<3;j++)for(let i=0;i<9;i++){const q=(a,b)=>{const t=a*tau/9,u=b*Math.PI/6,n=[Math.sin(u)*Math.cos(t),Math.cos(u),Math.sin(u)*Math.sin(t)];return [n,n];};
+  const c=[q(i,j),q(i+1,j),q(i+1,j+1),q(i,j+1)];for(const k of [0,1,2,0,2,3])m.v(c[k][0],c[k][1],WHITE,1);}return m.build();})(),
  drip:(()=>{const m=new Mesh(),pts=[[-.5,0,0],[-.5,-.8,0]];
   for(let i=1;i<6;i++){const a=Math.PI+i*Math.PI/6;pts.push([.5*Math.cos(a),-.8+.2*Math.sin(a),0]);}
   pts.push([.5,-.8,0],[.5,0,0]);for(let i=2;i<pts.length;i++)m.tri(pts[0],pts[i-1],pts[i],WHITE,1);return m.build();})(),
@@ -272,19 +274,28 @@ function carMesh(kind){
  m.box(-.86,.36,2.02,.86,.5,2.1,dark).box(-.86,.38,-2.1,.86,.52,-2.02,dark).box(-.22,.52,-2.08,.22,.64,-2.06,rgb('#e8e6dc'));
  return m.build();
 }
+// A splatter: a dark wet core, a paler body with four rounded fingers, and a cream rim. The vertex colours
+// multiply the instance colour, so one mesh serves every stain.
 function splatMesh(upright){
- const m=new Mesh(),n=36,pts=[];
+ const m=new Mesh(),n=36,P=(x,y)=>upright?[x,y,0]:[x,0,y],N=upright?[0,0,1]:[0,1,0];
+ const core=[.6,.56,.34],body=[.86,.83,.64],rim=[1,1,1];
+ const ring=Array.from({length:n},(_,i)=>{
+  const a=i*tau/n;let r=.66+.16*Math.sin(a*3+1)+.09*Math.sin(a*7+2.4);
+  for(const ray of [.4,1.9,3.3,4.9]){const d=Math.atan2(Math.sin(a-ray),Math.cos(a-ray))/.17;r+=.5*Math.exp(-d*d);}
+  return [a,r];
+ });
+ const pt=(a,r)=>P(Math.cos(a)*r,Math.sin(a)*r);
  for(let i=0;i<n;i++){
-  let a=i*tau/n,r=.66+.16*Math.sin(a*3+1)+.09*Math.sin(a*7+2.4);
-  for(const ray of [.4,1.9,3.3,4.9]){const d=Math.atan2(Math.sin(a-ray),Math.cos(a-ray))/.17;r+=.5*Math.exp(-d*d);} // four rounded fingers
-  pts.push(upright?[Math.cos(a)*r,Math.sin(a)*r,0]:[Math.cos(a)*r,0,Math.sin(a)*r]);
+  const [a0,r0]=ring[i],[a1,r1]=ring[(i+1)%n],k0=.34+.08*Math.sin(a0*5),k1=.34+.08*Math.sin(a1*5);
+  m.v(P(.04,-.03),N,core,1);m.v(pt(a0,r0*k0),N,core,1);m.v(pt(a1,r1*k1),N,core,1);
+  for(const [p,c] of [[pt(a0,r0*k0),core],[pt(a0,r0*.8),body],[pt(a1,r1*.8),body],[pt(a0,r0*k0),core],[pt(a1,r1*.8),body],[pt(a1,r1*k1),core],
+   [pt(a0,r0*.8),body],[pt(a0,r0),rim],[pt(a1,r1),rim],[pt(a0,r0*.8),body],[pt(a1,r1),rim],[pt(a1,r1*.8),body]])m.v(p,N,c,1);
  }
- for(let i=0;i<n;i++)m.tri([0,0,0],pts[i],pts[(i+1)%n],WHITE,1);
  return m.build();
 }
 M.cube.cull=true;
 const statics=[M.cube,M.tree,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
-const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.balloon,M.boat,M.ball];
+const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.balloon,M.boat,M.ball,M.dome];
 const decals=[M.splat,M.splatWall,M.drip,M.disc];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 let staticKey='';
@@ -316,9 +327,18 @@ function buildStatics(){
  }
  for(const m of statics)m.upload();
 }
-const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#5e6b30'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
+const gooShade=['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'].map(rgb);
+// A thick, tapering strand of goo between two points, turned to face the camera and shaded as wet.
+function strand(p,q,w0,w1,col){
+ const ax=q[0]-p[0],ay=q[1]-p[1],az=q[2]-p[2],ex=camera.x-p[0],ey=camera.y-p[1],ez=camera.z-p[2];
+ const sx=ay*ez-az*ey,sy=az*ex-ax*ez,sz=ax*ey-ay*ex,l=Math.hypot(sx,sy,sz)||1;if(w0<=.004&&w1<=.004)return;
+ const u=[sx/l,sy/l,sz/l],a=Math.max(0,w0),b=Math.max(0,w1),m=[(p[0]+q[0])/2,(p[1]+q[1])/2,(p[2]+q[2])/2],c=Math.min(a,b)*.6; // pinched in the middle
+ goo.fan([[p[0]-u[0]*a,p[1]-u[1]*a,p[2]-u[2]*a],[p[0]+u[0]*a,p[1]+u[1]*a,p[2]+u[2]*a],[m[0]+u[0]*c,m[1]+u[1]*c,m[2]+u[2]*c],[m[0]-u[0]*c,m[1]-u[1]*c,m[2]-u[2]*c]],col);
+ goo.fan([[m[0]-u[0]*c,m[1]-u[1]*c,m[2]-u[2]*c],[m[0]+u[0]*c,m[1]+u[1]*c,m[2]+u[2]*c],[q[0]+u[0]*b,q[1]+u[1]*b,q[2]+u[2]*b],[q[0]-u[0]*b,q[1]-u[1]*b,q[2]-u[2]*b]],col);
+}
+const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
- for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;
+ for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  for(const h of people){
   if(Math.abs(h.x-camera.x)>130||Math.abs(h.z-camera.z)>130)continue;
@@ -331,22 +351,22 @@ function buildMoving(){
   M.people[Math.floor(hash(h.phase,9,2)*M.people.length)].add(h.x,h.y+(down?.13*t:0),h.z,h.yaw,size,size,size,rgb(h.c),0,elapsed*pace+h.phase,stride,lean,arms);
   if(down){ // a white cap of it on the head and shoulders
    const fx=Math.sin(h.yaw)*Math.sin(lean),fz=Math.cos(h.yaw)*Math.sin(lean),up=Math.cos(lean);
-   M.ball.add(h.x+fx*1.72,h.y+.2+1.76*up,h.z+fz*1.72,0,.21,.14,.21,splatCol);
-   M.ball.add(h.x+fx*1.4,h.y+.24+1.42*up,h.z+fz*1.4,h.yaw,.3,.09,.17,splatCol);
+   M.ball.add(h.x+fx*1.72,h.y+.2+1.76*up,h.z+fz*1.72,0,.21,.14,.21,splatCol,-1);
+   M.ball.add(h.x+fx*1.4,h.y+.24+1.42*up,h.z+fz*1.4,h.yaw,.3,.09,.17,splatCol,-1);
   }else if(h.umb)M.umbrella.add(h.x,h.y,h.z,h.phase,1,1,1,rgb(parasolPaint[Math.floor(h.phase*7)%parasolPaint.length]));
-  if(h.bride&&!down)M.ball.add(h.x,h.y+.55,h.z,0,.42,.55,.42,splatCol);
+  if(h.bride&&!down)M.ball.add(h.x,h.y+.55,h.z,0,.42,.55,.42,splatCol,-1);
  }
  for(const c of cars){
   (c.bus?M.bus:c.cab?M.cab:c.hatch?M.hatch:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
-  if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol);
+  if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol,-1);
   const alarm=alarms.get(c.id);
   if(alarm!==undefined){ // hit while parked: a white cap on the roof and, for a while, flashing indicators
-   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol);
+   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol,-1);
    if(elapsed-alarm<9&&(elapsed-alarm)%.9<.5)for(const sx of [-1,1])for(const sz of [-1,1]){
     const lx=sx*.8,lz=sz*1.95,sn=Math.sin(c.yaw),cs=Math.cos(c.yaw);M.ball.add(c.x+lx*cs+lz*sn,.72,c.z-lx*sn+lz*cs,0,.14,.1,.14,amber,2);}
   }
   if(wrecks.has(c.id)){
-   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol);M.ball.add(c.x+Math.sin(c.yaw)*.9,1.2,c.z+Math.cos(c.yaw)*.9,c.yaw,.4,.25,.1,splatCol);
+   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol,-1);M.ball.add(c.x+Math.sin(c.yaw)*.9,1.2,c.z+Math.cos(c.yaw)*.9,c.yaw,.4,.25,.1,splatCol,-1);
    for(let i=0;i<3;i++){const t=((elapsed-c.hitTime)*.6+i/3)%1;
     M.ball.add(c.x+Math.sin(c.yaw)*1.7+.25*Math.sin(t*5+i),1+t*3,c.z+Math.cos(c.yaw)*1.7,0,.25+.5*t,.25+.5*t,.25+.5*t,smoke);}
   }
@@ -361,7 +381,7 @@ function buildMoving(){
   else if(o.kind==='egg')M.ball.add(x,y,z,turn,.19*k,.25*k,.19*k,rgb('#f6efe2'),-1);
   else if(o.kind==='cabbage'){M.ball.add(x,y,z,turn,.32*k,.29*k,.32*k,rgb('#7fb04a'));M.ball.add(x+.08,y+.1,z,turn,.24*k,.2*k,.26*k,rgb('#a9d06a'));}
   else{M.ball.add(x,y,z,turn,.13*k,.1*k,.3*k,rgb('#6a3f24'));M.ball.add(x,y-.08*k,z,turn,.14*k,.04*k,.32*k,rgb('#1c1a19'));M.ball.add(x-Math.sin(turn)*.2*k,y+.1*k,z-Math.cos(turn)*.2*k,turn,.12*k,.13*k,.12*k,rgb('#6a3f24'));}
-  if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.ball.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol);}
+  if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.ball.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol,-1);}
  }
  if(bird.snare>0)drawNet(bird.x,bird.y+.25,bird.z,1,true);
  // Star targets with their props: window cleaners on a lift, rowing boats on the canal, hot-air balloons.
@@ -379,43 +399,50 @@ function buildMoving(){
   for(const sx of [-.35,.35])M.ball.add(q.x+sx+sway,q.y-.85,q.z+.1*sx,0,.17,.19,.17,rgb(sx<0?'#dba27e':'#8a5a3c'));
   if((elapsed*.35+q.hue*5)%1<.35)M.ball.add(q.x+sway*.5,q.y+.1,q.z,0,.22,.5+.2*Math.sin(elapsed*30),.22,amber,2);
   for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]])ribbon([q.x+sx*.8+sway,q.y-1.1,q.z+sz*.8],[q.x+sx*.62,q.y+.45,q.z+sz*.62],.03);
-  if(scored.has(q.id))M.ball.add(q.x,q.y+13.2,q.z,0,3,.5,3,splatCol);
+  if(scored.has(q.id))M.ball.add(q.x,q.y+13.2,q.z,0,3,.5,3,splatCol,-1);
  }
  for(const t of tanks){
   const alive=t.hp>0,paint=alive?olive:charred;
   M.tank.add(t.x,0,t.z,t.yaw,1,1,1,paint);M.turret.add(t.x,0,t.z,alive?t.turret:t.turret+.5,1,1,1,paint);
-  for(const [dx,dz] of t.splats)M.ball.add(t.x+clamp(dx,-1.4,1.4),Math.hypot(dx,dz)<1.2?2.32:1.6,t.z+clamp(dz,-3,3),0,.34,.07,.3,splatCol);
+  for(const [dx,dz] of t.splats)M.ball.add(t.x+clamp(dx,-1.4,1.4),Math.hypot(dx,dz)<1.2?2.32:1.6,t.z+clamp(dz,-3,3),0,.34,.07,.3,splatCol,-1);
   if(!alive)for(let i=0;i<4;i++){const f=(t.dead*.5+i/4)%1,q=.5+1.2*f;M.ball.add(t.x+.5*Math.sin(f*6+i),2.4+f*6,t.z,0,q,q,q,smoke);}
  }
- for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splatCol);}
- // The spray: wobbling blobs that stretch as they fall, some with dark bits, joined by a thin thread near the bird.
+ for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splatCol,-1);}
+ // The spray: wet, glossy blobs stretched along their fall, in mixed shades with darker bits,
+ // joined by thick strands that thin out and snap as they fall apart. While it flows, a strand hangs from the vent.
  let prior=null;
+ const vent=birdPoint([0,-.07,-.43]),flowing=state==='play'&&elapsed-lastDrop<.09;
  for(const d of drops){
-  const p=at(d,d.age),vy=d.vy-gravity*d.age,stretch=1+clamp(-vy*.03,0,1.3),wob=1+.2*Math.sin(d.age*26+d.seed);
-  M.ball.add(p[0],p[1],p[2],0,d.r*wob,d.r*stretch,d.r/wob,splatCol);
-  if(d.dark)M.ball.add(p[0]+.05,p[1]-.04,p[2]+.03,0,d.r*.55,d.r*.65,d.r*.55,bits);
-  if(prior&&prior.age-d.age<.095&&d.age<.9){
-   const q=at(prior,prior.age),ax=q[0]-p[0],ay=q[1]-p[1],az=q[2]-p[2],ex=camera.x-p[0],ey=camera.y-p[1],ez=camera.z-p[2];
-   let sx=ay*ez-az*ey,sy=az*ex-ax*ez,sz=ax*ey-ay*ex;const l=.035*(1-d.age)/(Math.hypot(sx,sy,sz)||1);sx*=l;sy*=l;sz*=l;
-   dyn.fan([[p[0]-sx,p[1]-sy,p[2]-sz],[p[0]+sx,p[1]+sy,p[2]+sz],[q[0]+sx,q[1]+sy,q[2]+sz],[q[0]-sx,q[1]-sy,q[2]-sz]],splatCol);
-  }
+  const p=at(d,d.age),vx=d.vx,vy=d.vy-gravity*d.age,vz=d.vz,sp=Math.hypot(vx,vy,vz)||1;
+  const stretch=1+clamp(sp*.035,0,1.6)*(d.big?.6:1),wob=1+.22*Math.sin(d.age*26+d.seed),tilt=Math.atan2(-vy,Math.hypot(vx,vz)||1e-3);
+  M.ball.add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,gooShade[d.seed%gooShade.length],-1,0,0,tilt);
+  if(d.dark)M.ball.add(p[0]+.4*d.r,p[1]+.2*d.r,p[2]+.3*d.r,d.seed,d.r*.5,d.r*.45,d.r*.6,bits,-1);
+  if(prior&&prior.age-d.age<.1&&d.age<1.1)strand(at(prior,prior.age),p,prior.r*.75*(1-prior.age*.8),d.r*.75*(1-d.age*.8),gooShade[d.seed%gooShade.length]);
   prior=d;
  }
- for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.ball.add(s.x,s.y,s.z,0,r,r*1.5,r,splatCol);}
+ if(flowing&&drops.length){const d=drops.at(-1);strand(vent,at(d,d.age),.07,d.r*.7,gooShade[0]);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,gooShade[0],-1);}
+ for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.ball.add(s.x,s.y,s.z,0,r,r*1.5,r,gooShade[Math.floor(s.life*20)%gooShade.length],-1);}
  for(const s of stains){
   if(Math.abs(s.x-camera.x)>130||Math.abs(s.z-camera.z)>130)continue;
-  const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau;
+  const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau,col=gooShade[Math.floor(s.seed*97)%gooShade.length];
   if(s.wall!==undefined){
-   M.splatWall.add(s.x,s.y,s.z,s.wall,r,r,1,splatCol);
+   M.splatWall.add(s.x,s.y,s.z,s.wall,r,r,1,col,-1);
    const len=Math.min(s.drip,age*.45,s.y-.1),off=r*.5*(s.seed-.5);
-   if(len>.05)M.drip.add(s.x+Math.cos(s.wall)*off,s.y-r*.3,s.z-Math.sin(s.wall)*off,s.wall,.09+.09*s.seed,len,1,splatCol);
+   if(len>.05){const dx=s.x+Math.cos(s.wall)*off,dz=s.z-Math.sin(s.wall)*off,w=.09+.09*s.seed;
+    M.drip.add(dx,s.y-r*.3,dz,s.wall,w,len,1,col,-1);
+    M.dome.add(dx+Math.sin(s.wall)*.02,s.y-r*.3-len*.8-.05,dz+Math.cos(s.wall)*.02,s.wall,w*.55,w*.7,w*.45,col,-1);} // a fat drop at the end of the run
   }else{
-   M.splat.add(s.x,s.y+.04,s.z,turn,r,1,r*(.8+.4*s.seed),splatCol);
-   M.disc.add(s.x+.12*r*Math.cos(turn),s.y+.04,s.z+.12*r*Math.sin(turn),0,r*.2,1,r*.16,bits);
+   M.splat.add(s.x,s.y+.04,s.z,turn,r,1,r*(.8+.4*s.seed),col,-1);
+   // A raised, glistening heap in the middle, a dark streak through it, and a few droplets flung out around it.
+   const heap=Math.min(1,age*9)*r;
+   M.dome.add(s.x+.08*r*Math.cos(turn),s.y+.03,s.z+.08*r*Math.sin(turn),turn,heap*.34,heap*(.07+.06*s.seed),heap*.27,col,-1);
+   M.dome.add(s.x+.15*r*Math.cos(turn+1),s.y+.05,s.z+.15*r*Math.sin(turn+1),turn,heap*.2,heap*.08,heap*.09,bits,-1);M.dome.add(s.x-.2*r*Math.cos(turn+2),s.y+.04,s.z-.2*r*Math.sin(turn+2),turn+1,heap*.12,heap*.05,heap*.06,bits,-1);
+   if(r>.4)for(let k=0;k<3;k++){const a=turn+k*2.1+s.seed*3,dd=r*(1.25+.5*hash(k,s.seed,3));
+    M.dome.add(s.x+Math.cos(a)*dd,s.y+.03,s.z+Math.sin(a)*dd,0,r*.07,r*.05,r*.07,col,-1);}
   }
  }
  for(let i=Math.floor(bird.x/tile)-2;i<=Math.floor(bird.x/tile)+2;i++)for(let j=Math.floor(bird.z/tile)-2;j<=Math.floor(bird.z/tile)+2;j++){
-  const b=block(i,j);if(b.statue&&scored.has('st'+b.key)){M.ball.add(b.statue[0],5.2,b.statue[1],0,.36,.2,.36,splatCol);M.ball.add(b.statue[0],4.3,b.statue[1]+.3,0,.3,.5,.12,splatCol);}
+  const b=block(i,j);if(b.statue&&scored.has('st'+b.key)){M.ball.add(b.statue[0],5.2,b.statue[1],0,.36,.2,.36,splatCol,-1);M.ball.add(b.statue[0],4.3,b.statue[1]+.3,0,.3,.5,.12,splatCol,-1);}
  }
  // The hawk is drawn at its real size; a much larger copy goes only into the shadow map.
  if(hawk){drawHawk(dyn,2.3);hawkShadow();}
@@ -424,7 +451,7 @@ function buildMoving(){
   dyn.fan([[f.x-c,f.y-t,f.z-s],[f.x+s*.3,f.y+.03,f.z-c*.3],[f.x+c,f.y+t,f.z+s],[f.x-s*.3,f.y-.03,f.z+c*.3]],rgb(['#e8ecf2','#8792aa','#5b6788','#cfd6e2'][Math.floor(f.seed*7)%4]));
  }
  if(camView!==2||crash)renderBird();
- for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();
+ for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();
 }
 function drawHawk(batch,k){
  const h=hawk,yaw=Math.atan2(h.vx,h.vz),pitch=Math.atan2(h.vy,Math.max(.01,Math.hypot(h.vx,h.vz))),roll=h.bank*.7;
@@ -561,7 +588,7 @@ function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt),playing=state==='play';
  if(!crash||!rig)setCamera(dt);
  buildStatics();buildMoving();
- drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.balloon,M.boat,dyn,omen],[...statics,...moving,dyn],decals);
+ drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.balloon,M.boat,dyn,omen,goo],[...statics,...moving,dyn,goo],decals);
  ctx.clearRect(0,0,width,height);
  if(!crash&&state!=='menu'){
   drawThreats();
@@ -573,7 +600,7 @@ function render(dt=1/60){
   for(let i=Math.floor(bird.x/tile)-3;i<=Math.floor(bird.x/tile)+3;i++)for(let j=Math.floor(bird.z/tile)-3;j<=Math.floor(bird.z/tile)+3;j++){
    const b=block(i,j);if(b.statue&&!scored.has('st'+b.key))star(b.statue[0],6.7,b.statue[1]);
   }
-  const R=hitRadius(bird.y-aim[1]);
+  const R=hitRadius(bird.y-aim[1])*(bird.spread||1);
   const target=people.find(h=>{
    if(scored.has(h.id))return false;
    const t=flightTime(p,h.y+1.8);if(t<0||t>tt)return false;
@@ -600,8 +627,9 @@ function render(dt=1/60){
     ctx.fillStyle=tank<.3||emptyTank?'#ffd24a':'#f4f1e6';ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,x,y,Math.max(3,wide*tank),6,3);ctx.fill();}
   }
   // Streaks at the edges of the picture sell the speed of a dive.
-  const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-12)/36,0,1);
-  if(rush>.15){
+  // Fast level flight (speed carried out of a dive) keeps a few thinner lines going.
+  const airspeed=Math.hypot(forwardSpeed(),bird.vy),rush=Math.max(bird.fold*clamp((airspeed-12)/36,0,1),.5*clamp((airspeed-22)/20,0,1));
+  if(rush>.12){
    ctx.save();ctx.translate(width/2,height*.43);ctx.strokeStyle='#fff';ctx.lineCap='round';const reach=Math.hypot(width,height)/2;
    for(let i=0;i<36;i++){
     const a=i*tau/36+hash(i,4,1),f=(elapsed*(2.6+2*rush)+hash(i,2,5))%1,r0=reach*(.42+.5*f),r1=r0+reach*.2*rush;

@@ -6,33 +6,47 @@ try{best=+localStorage.getItem('fagelbajs.best')||0;}catch{}
 const ranks=[[0,'Blyg sparv'],[100,'Parkens busfrö'],[400,'Torgets skräck'],[1000,'Stadens plåga'],[2000,'Efterlyst legend'],[3500,'Himlens härskare'],[6000,'Stadens mardröm']];
 const number=n=>n.toLocaleString('sv-SE');
 function rankOf(score){return ranks.filter(r=>score>=r[0]).at(-1)[1];}
-// ---- Topplista: the ten best flights with names, kept in this browser.
-let scores=[],lastName='';
+// ---- Topplista: one list for everybody, kept in Supabase. The browser keeps its own copy as well,
+// which is what is shown if the shared list cannot be reached.
+const scoreApi='https://lcnyzjuehtmqnbyyltqh.supabase.co/rest/v1/scores', scoreKey='sb_publishable_GNuIC6yLUsEjypuHn4mzGg_aVqgZODl';
+let scores=[],lastName='',shared=null,sharedAt=0;
 try{scores=JSON.parse(localStorage.getItem('fagelbajs.scores')||'[]');lastName=localStorage.getItem('fagelbajs.name')||'';}catch{}
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
-function scoreList(mark=-1,count=10){
- return '<ol class="scores">'+scores.slice(0,count).map((s,i)=>'<li class="'+(i===mark?'me':'')+'"><span>'+esc(s.name)+'</span><i>'+'★'.repeat(s.stars)+'</i><b>'+number(s.points)+'</b></li>').join('')+'</ol>';
+function board(){return shared||scores;}
+function fetchScores(){
+ sharedAt=Date.now();
+ return fetch(scoreApi+'?select=name,points,stars&order=points.desc,created_at.asc&limit=20',{headers:{apikey:scoreKey}})
+  .then(r=>r.ok?r.json():Promise.reject(r.status)).then(list=>{if(Array.isArray(list))shared=list;return shared;}).catch(()=>null);
 }
-function saveScore(name){
+fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
+function scoreList(mark=-1,count=10){
+ return '<ol class="scores">'+board().slice(0,count).map((s,i)=>'<li class="'+(i===mark?'me':'')+'"><span>'+esc(s.name)+'</span><i>'+'★'.repeat(s.stars)+'</i><b>'+number(s.points)+'</b></li>').join('')+'</ol>'+
+  (shared?'':'<p class="cause">Den gemensamma topplistan gick inte att nå, så här visas bara den här datorns.</p>');
+}
+// Saves locally at once, then sends it to the shared list; done() is called with the place once the list is back.
+function saveScore(name,done){
  const entry={name:name.trim().slice(0,12)||'Anonym duva',points,stars:wanted,date:Date.now()};
  scores.push(entry);scores.sort((a,b)=>b.points-a.points);scores=scores.slice(0,10);lastName=entry.name;
  try{localStorage.setItem('fagelbajs.scores',JSON.stringify(scores));localStorage.setItem('fagelbajs.name',lastName);}catch{}
- return scores.indexOf(entry);
+ const place=list=>list.findIndex(s=>s.name===entry.name&&s.points===entry.points);
+ fetch(scoreApi,{method:'POST',headers:{apikey:scoreKey,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({name:entry.name,points:entry.points,stars:entry.stars})})
+  .then(r=>r.ok?fetchScores():null).catch(()=>null).then(()=>{if(done)done(place(board()));});
+ return place(board());
 }
 function finish(heading,cause,action){
  state='end';keys.clear();checkFeats();
  const record=points>best;if(record){best=points;try{localStorage.setItem('fagelbajs.best',String(best));}catch{}}
- const listed=points>0&&(scores.length<10||points>scores.at(-1).points);
+ const top=board().slice(0,10),listed=points>0&&(top.length<10||points>top.at(-1).points);if(Date.now()-sharedAt>20000)fetchScores();
  const row=(k,v)=>'<div><dt>'+k+'</dt><dd>'+v+'</dd></div>',mins=Math.floor(elapsed/60),secs=String(Math.floor(elapsed%60)).padStart(2,'0');
  panel(heading,'<p class="cause">'+cause+'</p><p class="score">'+number(points)+'<small> poäng</small>'+(record?'<em>NYTT REKORD</em>':'')+'</p>'+
   '<dl class="stats">'+row('Stjärnor','★'.repeat(wanted)||'–')+row('Träffar',hits)+row('Bilar',carsHit)+row('Bästa kombo','×'+bestCombo)+row('Stjärnmål',run.stars)+row('I luften',mins+':'+secs)+'</dl>'+
   '<p class="rank">Titel: <b>'+rankOf(points)+'</b>'+(record?'':' · rekord '+number(best))+'</p>'+
-  (listed?'<form id="save"><label for="name">Du kom in på topplistan! Skriv ditt namn:</label><div><input id="name" maxlength="12" autocomplete="off" spellcheck="false" value="'+esc(lastName)+'"><button>Spara</button></div></form>':'')+
-  '<div id="board">'+(scores.length?scoreList(-1,5):'')+'</div>'+featList(),action);
+  (listed?'<form id="save"><label for="name">Du kom in på '+(shared?'den gemensamma topplistan':'topplistan')+'! Skriv ditt namn:</label><div><input id="name" maxlength="12" autocomplete="off" spellcheck="false" value="'+esc(lastName)+'"><button>Spara</button></div></form>':'')+
+  '<div id="board">'+(board().length?scoreList(-1,5):'')+'</div>'+featList(),action);
  const form=$('save');
  if(form){
   $('name').focus();$('name').select();
-  form.onsubmit=e=>{e.preventDefault();const place=saveScore($('name').value);form.remove();$('board').innerHTML=scoreList(place,Math.max(5,place+1));$('go').focus();};
+  form.onsubmit=e=>{e.preventDefault();const show=place=>{if($('board'))$('board').innerHTML=scoreList(place,Math.max(5,place+1));};show(saveScore($('name').value,show));form.remove();$('go').focus();};
  }
 }
 let points=0,cars=[],sprayCount=0;
@@ -196,12 +210,12 @@ function reset(){
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
- bird={x:0,z:0,y:21,angle:0,bank:0,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9,nextFlap:2,burst:0,lookYaw:0,lookPitch:0,glance:0,nextGlance:1,snare:0};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
+ bird={x:0,z:0,y:21,angle:0,bank:0,turn:0,spread:1,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:0,skim:0,lastSkim:-9,nextFlap:2,burst:0,lookYaw:0,lookPitch:0,glance:0,nextGlance:1,snare:0};slowmo=shake=0;elapsed=hits=cooldown=0;drops=[];stains=[];scored.clear();
 }
 // body is HTML built from the game's own strings and numbers.
 let shownAt=0;
 function panel(heading,body,action){shownAt=performance.now();$('title').textContent=heading;$('brief').innerHTML=body;$('brief').hidden=false;$('view').hidden=true;$('go').textContent=action;$('overlay').hidden=false;document.body.classList.add('menu');$('go').focus();}
-function togglePause(){if(state==='play'){state='pause';keys.clear();panel('Flygpaus','<p class="cause">Duvan väntar där du lämnade den.</p>','Fortsätt flyga →');}else if(state==='pause')start();}
+function togglePause(){if(state==='play'){state='pause';keys.clear();pausedDrawn=false;if(sound)sound.suspend().catch(()=>{});panel('Flygpaus','<p class="cause">Duvan väntar där du lämnade den.</p>','Fortsätt flyga →');}else if(state==='pause')start();}
 function start(){if(state==='play')return;if(state!=='pause'){if($('save'))saveScore($('name').value); // starting again without pressing Spara still keeps the score
  reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;document.body.classList.remove('menu');$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
 // C cycles the camera: behind the bird, straight down from above, and through the bird's own eyes.
@@ -214,7 +228,20 @@ function forwardSpeed(){
  const horizontalFraction=1-Math.max(.925*bird.steep,.94*tuckDive);
  return bird.speed*horizontalFraction*Math.cos(bird.climb*1.31);
 }
-function payload(){return {x:bird.x-.45*Math.sin(bird.angle),z:bird.z-.45*Math.cos(bird.angle),y:bird.y-.22,vx:Math.sin(bird.angle)*forwardSpeed(),vz:Math.cos(bird.angle)*forwardSpeed(),vy:bird.vy-6};}
+// A point on the bird, in the same body frame the renderer uses (x right, y up, z towards the beak).
+function birdPoint([x,y,z]){
+ const b=bird,bank=b.bank*.62,pitch=flightPitch(),sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
+ const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
+ return [b.x+bx*cy+bz*sy,b.y+by*cp+z*sp,b.z-bx*sy+bz*cy];
+}
+// It leaves from the vent under the tail. A hard turn slings it outwards: it keeps the sideways
+// swing of the bird's rump, so the sight swings out of the turn too.
+function payload(){
+ const [x,y,z]=birdPoint([0,-.07,-.43]),v=forwardSpeed(),sling=clamp(-(bird.turn||0)*v*.21,-6,6);
+ return {x,y,z,vx:Math.sin(bird.angle)*v+Math.cos(bird.angle)*sling,vz:Math.cos(bird.angle)*v-Math.sin(bird.angle)*sling,vy:bird.vy-6};
+}
+// Climbing scatters the spray, diving packs it tight: the hit area follows the bird's vertical speed.
+function spreadNow(){return clamp(1+bird.vy*.011,.74,1.26);}
 function at(p,t){return [p.x+p.vx*t,p.y+p.vy*t-gravity*t*t/2,p.z+p.vz*t];}
 function flightTime(p,level){
  const discriminant=p.vy*p.vy+2*gravity*(p.y-level);
@@ -239,7 +266,7 @@ function drop(){
   p.vx+=Math.cos(bird.angle)*lateral+Math.cos(fan)*wide;p.vz+=-Math.sin(bird.angle)*lateral+Math.sin(fan)*wide;p.vy+=.32*Math.sin(n*1.4);
  }
  p.big=big;p.r=big?.19:.055+.05*hash(n,2,6);p.dark=n%4===0;
- p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.3;
+ p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.spread=bird.spread||1;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.3;
  if(tank<1/60-1e-8){emptyTank=true;banner('SLUT PÅ BAJS','Det fylls på av sig självt','hurt',1.6);}
  for(let k=0;k<2;k++){const a=(n*2+k)*2.39996,drift=.65+hash(n,k,1)*1.5;
   mist.push({x:p.x,y:p.y,z:p.z,vx:p.vx+Math.cos(a)*drift,vy:p.vy*.85+Math.sin(a),vz:p.vz+Math.sin(a)*drift,age:0,life:.65+hash(k,n,3)*.8});}
@@ -247,6 +274,7 @@ function drop(){
 function simulate(dt){
  const b=bird,held=(...codes)=>codes.some(c=>keys.has(c)),dive=held('ShiftLeft','ShiftRight');
  let steer=+held('KeyD','ArrowRight')-+held('KeyA','ArrowLeft'), pitch=(+held('KeyS','ArrowDown')-+held('KeyW','ArrowUp'))*(reversePitch?-1:1);
+ if(stickInput.on){steer=clamp(steer+stickInput.x*.85,-1,1);pitch=clamp(pitch+stickInput.y*(reversePitch?-1:1),-1,1);} // the thumb stick is analog
  // Caught in a net: barely any steering, no climbing, and the weight of it pulls the bird down. Holding the nose up shortens it.
  if(b.snare>0){b.snare-=dt*(pitch>0?1.6:1);steer*=.3;pitch=Math.min(pitch,0);b.vy-=13*dt;b.speed=Math.max(9,b.speed-9*dt);}
  if(!dive&&b.fold>.65&&b.wasDiving)tone(200,430,.25,'sine',.03);
@@ -254,13 +282,14 @@ function simulate(dt){
  b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*(dive?4.5:3)));
  // Every lost feather makes the bird harder to fly: it rolls about, turns slower and climbs worse.
  const ragged=3-feathers,wobble=ragged*(.16*Math.sin(elapsed*4.7)+.1*Math.sin(elapsed*11.3));
- b.bank=mix(b.bank,steer+wobble,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold)*(1-.12*ragged);
+ b.bank=mix(b.bank,steer+wobble,1-Math.exp(-dt*5));b.turn=b.bank*(1.52-.44*b.fold)*(1-.12*ragged);b.angle+=b.turn*dt;
+ b.spread=mix(b.spread||1,spreadNow(),1-Math.exp(-dt*3));
  // Ramp into the dive. A short tap makes a small range adjustment.
- const desiredSteep=pitch<0?1:0;
+ const desiredSteep=clamp(-pitch,0,1);
  b.steep+=clamp(desiredSteep-b.steep,-dt*(pitch>0?2.4:1.45),dt*1.1);
  const diveCurve=b.steep*(.62+.38*b.steep);
  const upLimit=clamp((82-b.y)/9,0,1);
- const targetClimb=pitch>0&&!dive?1:0;
+ const targetClimb=dive?0:clamp(pitch,0,1);
  b.climb=mix(b.climb,targetClimb,1-Math.exp(-dt*(targetClimb?.92:2.7)));
  const stallSoftness=clamp((b.climb-.87)/.13,0,1);
  const wantedVy=ragged*1.4*Math.sin(elapsed*6.1)+(19-2.6*ragged)*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82;
@@ -272,7 +301,7 @@ function simulate(dt){
  // Gliding is mostly still wings, broken now and then by a short burst of flapping. Climbing is hard work.
  b.nextFlap-=dt;b.burst=Math.max(0,b.burst-dt);
  if(b.nextFlap<=0){b.burst=.4+.55*Math.random();b.nextFlap=1.8+4*Math.random();}
- const effort=dive?0:pitch>0?1:pitch<0?0:b.burst>0?.8:.1;
+ const effort=dive?0:pitch>.05?Math.max(.4,pitch):pitch<-.05?0:b.burst>0?.8:.1;
  b.effort=mix(b.effort,effort,1-Math.exp(-(effort>b.effort?9:4)*dt));
  b.nextGlance-=dt;if(b.nextGlance<=0){b.glance=Math.random()<.35?0:(Math.random()-.5)*1.3;b.nextGlance=.7+2.6*Math.random();}
  b.lookYaw=mix(b.lookYaw,clamp(b.bank*.55+b.glance,-.9,.9),1-Math.exp(-dt*7));
@@ -312,7 +341,7 @@ function simulate(dt){
   if(y1<y0){
    const victim=people.find(h=>{
     const head=h.y+1.8;if(head>y0||head<y1||scored.has(h.id))return false;
-    const f=(y0-head)/(y0-y1);return Math.hypot(h.x-mix(x0,x1,f),h.z-mix(z0,z1,f))<hitRadius(p.alt-head)+(p.big?.4:0);
+    const f=(y0-head)/(y0-y1);return Math.hypot(h.x-mix(x0,x1,f),h.z-mix(z0,z1,f))<hitRadius(p.alt-head)*p.spread+(p.big?.4:0);
    });
    if(victim&&victim.umb){
     brokeUmb.add(victim.id);feedLine('PARAPLYET TOG SMÄLLEN');bubble(victim.x,victim.y+2.7,victim.z,'HA! MISS!');
@@ -325,7 +354,7 @@ function simulate(dt){
     splashAt(victim.x,victim.y+1.8,victim.z,6);splat(victim.x,victim.y,victim.z,true);return false;
    }
   }
-  const extra=hitRadius(p.alt-1.5)-1.65,carTime=flightTime(p,1.48),tankTime=flightTime(p,2.4);
+  const extra=hitRadius(p.alt-1.5)*p.spread-1.65,carTime=flightTime(p,1.48),tankTime=flightTime(p,2.4);
   if(tankTime>=0&&tankTime<=end&&prev<=tankTime&&p.age>=tankTime){
    const [x,,z]=at(p,tankTime),tank=tanks.find(t=>t.hp>0&&tankContact(t,x,2.3,z,extra));
    if(tank){ // armour shrugs off a few drops; it takes a proper soaking
