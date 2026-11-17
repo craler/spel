@@ -124,7 +124,7 @@ body.menu .hud,body.menu #tip{opacity:0}
 #touch button{position:absolute;right:22px;width:96px;height:96px;border:2px solid #fff8;border-radius:50%;background:#14181f99;font-weight:900;pointer-events:auto;touch-action:none}
 #t-fire{bottom:26px}#t-dive{right:96px;bottom:134px;width:78px;height:78px}
 #touch button.held{background:#ffd24acc;color:var(--ink)}
-body.touch .tools{top:76px;right:14px;bottom:auto}body.touch .tools button{padding:5px 8px;font-size:12px}body.touch #camera{display:none}
+body.touch .tools{top:76px;right:14px;bottom:auto}body.touch .tools button{padding:5px 8px;font-size:12px}
 body.touch #status{left:50%;bottom:14px;transform:translateX(-50%)}body.touch #feathers{justify-content:center}
 body.touch #tip{bottom:84px}body.touch .keys{display:none}
 @media(max-width:760px),(max-height:460px){.hud b{font-size:32px}#top{width:min(40vw,320px)}#stars{font-size:17px}.panel{padding:20px}h1{font-size:38px}.stats dd{font-size:16px}.score{font-size:42px}}

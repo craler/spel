@@ -218,9 +218,9 @@ function panel(heading,body,action){shownAt=performance.now();$('title').textCon
 function togglePause(){if(state==='play'){state='pause';keys.clear();pausedDrawn=false;if(sound)sound.suspend().catch(()=>{});panel('Flygpaus','<p class="cause">Duvan väntar där du lämnade den.</p>','Fortsätt flyga →');}else if(state==='pause')start();}
 function start(){if(state==='play')return;if(state!=='pause'){if($('save'))saveScore($('name').value); // starting again without pressing Spara still keeps the score
  reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;document.body.classList.remove('menu');$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
-// C cycles the camera: behind the bird, straight down from above, and through the bird's own eyes.
+// C cycles the camera: behind the bird, then through the bird's own eyes, then straight down from above.
 const viewNames=['bakom','ovanifrån','duvans ögon'];
-function view(){if(crash)return;camView=(camView+1)%3;above=camView===1;rig=null;$('camera').textContent='Vy: '+viewNames[camView];}
+function view(){if(crash)return;camView=[2,0,1][camView];above=camView===1;rig=null;$('camera').textContent='Vy: '+viewNames[camView];}
 // Convert the stored dive speed into horizontal travel as the nose tips down.
 function forwardSpeed(){
  // As the dive develops, the speed gained from falling goes mostly downwards.

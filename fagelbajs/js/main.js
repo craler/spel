@@ -6,7 +6,7 @@ const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+
 function controlsPicture(){
  if(touchMode)return '<div class="pads"><div><i class="pad"></i><span>Spaken styr</span></div><div><i class="round">DYK</i><span>Störtdyk</span></div><div><i class="round">BAJSA</i><span>Bajsa</span></div></div>';
  return '<div class="keyboard"><div><div class="row">'+keycap('W',reversePitch?'stig':'sjunk')+'</div><div class="row">'+keycap('A','vänster')+keycap('S',reversePitch?'sjunk':'stig')+keycap('D','höger')+'</div></div>'+
-  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div></div><p class="hint">Pilarna fungerar också · C byter vy · Esc pausar</p>';
+  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div><div>'+keycap('C','kamera')+'</div></div><p class="hint">Pilarna fungerar också · Esc pausar</p>';
 }
 function homeMenu(){panel('Duv-Diarré',controlsPicture()+(best?'<p class="best">Rekord '+number(best)+' · '+rankOf(best)+'</p>':''),'Nytt spel →');}
 const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><button data-set="'+id+'">'+value+'</button></div>';
