@@ -1,50 +1,57 @@
 'use strict';
 // ---- Events: now and then something happens on one of the squares nearby: an outdoor concert, a parade or a car show.
-// It lasts a little while; an arrow points the way, and hitting enough of it before the time runs out pays a big bonus.
+// It lasts a little while; for its first seconds an arrow points the way, and hitting enough of it before the time runs out pays a big bonus.
 // While it is on, the square's usual tables, stalls and guests make room for it.
 const eventKinds={
  konsert:{title:'KONSERT PÅ TORGET',goal:10,bonus:300},
  parad:{title:'PARAD PÅ TORGET',goal:10,bonus:300},
  bilsalong:{title:'BILSALONG PÅ TORGET',goal:8,bonus:300},
 };
-let event=null,eventWait=28,eventSerial=0;
-function resetEvents(){if(event)staticKey='';event=null;eventWait=28;}
+// Events come up at random as the bird gets about the city: once it has flown far enough from where the last one
+// appeared, a new one starts on a square ahead, of a random kind, and never close to one that is already on.
+// Up to two can be running at once. Each shows an arrow for its first seconds; after that you have to remember where it was.
+let events=[],eventSerial=0,lastEventAt=null,eventGap=0,lastKind='';
+function resetEvents(){if(events.length)staticKey='';events=[];lastEventAt=null;eventGap=150;}
 function startEvent(){
- // A square two to five blocks away, preferably ahead of the bird.
- const bi=Math.floor(bird.x/tile),bj=Math.floor(bird.z/tile),fx=Math.sin(bird.angle),fz=Math.cos(bird.angle);let best=null,score=-1e9;
- for(let i=bi-5;i<=bi+5;i++)for(let j=bj-5;j<=bj+5;j++){
+ const bi=Math.floor(bird.x/tile),bj=Math.floor(bird.z/tile),fx=Math.sin(bird.angle),fz=Math.cos(bird.angle),cands=[];
+ for(let i=bi-6;i<=bi+6;i++)for(let j=bj-6;j<=bj+6;j++){
   const d=Math.max(Math.abs(i-bi),Math.abs(j-bj));if(d<2||blockType(i,j)!==2)continue;
-  const dx=(i+.5)*tile-bird.x,dz=(j+.5)*tile-bird.z,s=(dx*fx+dz*fz)/Math.hypot(dx,dz)-d*.15;
-  if(s>score){score=s;best=[i,j];}
+  const x=i*tile+21,z=j*tile+21;if(events.some(e=>Math.hypot(e.x-x,e.z-z)<220))continue; // keep well away from the others
+  const dx=x-bird.x,dz=z-bird.z,ahead=(dx*fx+dz*fz)/Math.hypot(dx,dz);if(ahead<-.2)continue;
+  cands.push([i,j,ahead-d*.1+Math.random()*.8]);
  }
- if(!best){eventWait=8;return;}
- const keys=Object.keys(eventKinds),kind=keys[eventSerial%keys.length],[i,j]=best;
- event={kind,i,j,x:i*tile+21,z:j*tile+21,left:kind==='bilsalong'?40:48,hits:0,serial:++eventSerial,done:false,...eventKinds[kind]};
- staticKey='';banner(event.title,'Hinn dit! '+event.goal+' träffar ger +'+event.bonus,'alert',3.4);tone(520,780,.18,'triangle',.07);tone(780,1040,.2,'triangle',.07,.16);
+ if(!cands.length)return false;
+ cands.sort((a,b)=>b[2]-a[2]);const [i,j]=cands[0],keys=Object.keys(eventKinds).filter(k=>k!==lastKind),kind=keys[Math.floor(Math.random()*keys.length)];lastKind=kind; // random, but never the same kind twice in a row
+ const e={kind,i,j,x:i*tile+21,z:j*tile+21,left:kind==='bilsalong'?40:48,age:0,hits:0,serial:++eventSerial,done:false,...eventKinds[kind]};
+ events.push(e);staticKey='';
+ banner(e.title,'Hinn dit! '+e.goal+' träffar ger +'+e.bonus,'alert',3.4);tone(520,780,.18,'triangle',.07);tone(780,1040,.2,'triangle',.07,.16);
+ return true;
 }
 function updateEvent(dt){
- if(!event){if(state==='play'&&(eventWait-=dt)<=0)startEvent();return;}
- event.left-=dt;
- if(event.left<=0){
-  if(!event.done)feedLine(event.title.split(' ')[0]+' ÖVER');
-  staticKey='';event=null;eventWait=35+20*Math.random();
+ if(state!=='play')return;
+ if(!lastEventAt)lastEventAt=[bird.x,bird.z];
+ if(events.length<2&&Math.hypot(bird.x-lastEventAt[0],bird.z-lastEventAt[1])>=eventGap){
+  if(startEvent()){lastEventAt=[bird.x,bird.z];eventGap=230+170*Math.random();}else eventGap+=40;
  }
+ for(const e of events){e.left-=dt;e.age+=dt;}
+ for(const e of events.filter(e=>e.left<=0)){if(!e.done)feedLine(e.title.split(' ')[0]+' ÖVER');staticKey='';}
+ events=events.filter(e=>e.left>0);
 }
-// Called for every hit on a person or a vehicle; counts it if it belongs to the event.
+// Called for every hit on a person or a vehicle; counts it for the event it belongs to.
 function eventHit(id){
- if(!event||event.done||!String(id).startsWith('ev'+event.serial+':'))return;
- event.hits++;
- if(event.hits>=event.goal){
-  event.done=true;event.left=Math.min(event.left,5);addPoints(event.bonus);feedLine(event.title.split(' ')[0]+' KLARAD',event.bonus);
-  banner('+'+event.bonus,event.title.split(' ')[0].toLowerCase()+' i spillror','alert',2.4);tone(660,990,.12,'triangle',.08);tone(990,1320,.25,'triangle',.08,.12);
-  popups.push({x:event.x,y:8,z:event.z,text:'+'+event.bonus,t:elapsed,gold:true});
+ const e=events.find(e=>String(id).startsWith('ev'+e.serial+':'));if(!e||e.done)return;
+ e.hits++;
+ if(e.hits>=e.goal){
+  e.done=true;e.left=Math.min(e.left,5);addPoints(e.bonus);feedLine(e.title.split(' ')[0]+' KLARAD',e.bonus);
+  banner('+'+e.bonus,e.title.split(' ')[0].toLowerCase()+' i spillror','alert',2.4);tone(660,990,.12,'triangle',.08);tone(990,1320,.25,'triangle',.08,.12);
+  popups.push({x:e.x,y:8,z:e.z,text:'+'+e.bonus,t:elapsed,gold:true});
  }
 }
-function onEventSquare(i,j){return event&&event.i===i&&event.j===j;}
+function onEventSquare(i,j){return events.some(e=>e.i===i&&e.j===j);}
 // The people of the event, added to the crowd every frame.
-function eventPeople(){
- if(!event)return;
- const e=event,id=n=>'ev'+e.serial+':'+n,add=(n,x,y,z,yaw,c,base,label,shout,extra={})=>people.push({x,y,z,id:id(n),i:e.i,j:e.j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:n*1.7,fixed:true,event:true,base,label,shout,star:base>=80,umb:false,...extra});
+function eventPeople(){for(const e of events)peopleOf(e);}
+function peopleOf(e){
+ const id=n=>'ev'+e.serial+':'+n,add=(n,x,y,z,yaw,c,base,label,shout,extra={})=>people.push({x,y,z,id:id(n),i:e.i,j:e.j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:n*1.7,fixed:true,event:true,base,label,shout,star:base>=80,umb:false,...extra});
  const t=elapsed;
  const R=(n,k)=>hash(e.serial,n,k); // fixed per event, so the crowd keeps its places from frame to frame
  if(e.kind==='konsert'){
@@ -82,14 +89,13 @@ function eventPeople(){
 // The show cars, parked in a ring round the statue facing out, polished to a shine.
 const showPaint=['#c8102e','#f2c230','#1f3f9a','#111316','#e8e4da','#2e8b57'];
 function eventCars(){
- if(!event||event.kind!=='bilsalong')return;
- for(let n=0;n<6;n++){const a=n/6*tau+.3,x=event.x+Math.cos(a)*9,z=event.z+Math.sin(a)*9,id='ev'+event.serial+':'+n;
+ for(const e of events)if(e.kind==='bilsalong')for(let n=0;n<6;n++){const a=n/6*tau+.3,x=e.x+Math.cos(a)*9,z=e.z+Math.sin(a)*9,id='ev'+e.serial+':'+n;
   if(!wrecks.has(id))cars.push({id,parked:true,show:true,x,z,yaw:Math.atan2(Math.cos(a),Math.sin(a)),speed:0,cab:false,hatch:n%2===1,color:showPaint[n]});}
 }
 // Props: the stage with speakers and lights, flags and drums for the parade, a red carpet and spotlights for the cars.
-function drawEvent(){
- if(!event)return;
- const e=event,box=(x,y,z,w,h,d,col,mat=0)=>M.box.add(x-w/2,y,z-d/2,0,w,h,d,rgb(col),mat);
+function drawEvent(){for(const e of events)propsOf(e);}
+function propsOf(e){
+ const box=(x,y,z,w,h,d,col,mat=0)=>M.box.add(x-w/2,y,z-d/2,0,w,h,d,rgb(col),mat);
  if(e.kind==='konsert'){
   const sz=e.z-13.5;box(e.x,0,sz,11,1.2,5.5,'#2a2d31');box(e.x,1.2,sz-2.6,11,.08,.3,'#c8102e');
   for(const sx of [-5.3,5.3]){box(e.x+sx,0,sz-2.5,.25,6,.25,'#5a5d62');box(e.x+sx,0,sz+2.5,.25,6,.25,'#5a5d62');box(e.x+sx*1.12,0,sz+1.8,1.2,2.6,1,'#141518');}
@@ -111,12 +117,13 @@ function drawEvent(){
  }
 }
 // On the 2D layer: what is on, how far along it is and how long is left, and an arrow towards it when it is out of view.
-function drawEventHud(){
- if(!event)return;
- const e=event,line=e.title+' · '+e.hits+'/'+e.goal+' · '+Math.ceil(e.left)+' s';
- text(line,width/2,96,15,e.done?'#6dff85':'#ffd24a','center',900);
+function drawEventHud(){for(const [n,e] of events.entries())hudOf(e,n);}
+function hudOf(e,row){
+ const line=e.title+' · '+e.hits+'/'+e.goal+' · '+Math.ceil(e.left)+' s';
+ text(line,width/2,96+row*20,15,e.done?'#6dff85':'#ffd24a','center',900);
  const v=cameraPoint([e.x,4,e.z]),far=Math.hypot(e.x-bird.x,e.z-bird.z),m=v[2]>.6&&screen(v),seen=m&&m[0]>40&&m[0]<width-40&&m[1]>60&&m[1]<height-60;
- if(seen){if(far>30)text('▼ '+Math.round(far)+' m',m[0],m[1],14,'#ffd24a','center',900);return;}
+ if(seen){if(far>30&&e.age<12)text('▼ '+Math.round(far)+' m',m[0],m[1],14,'#ffd24a','center',900);return;}
+ if(e.age>=12)return; // the arrow only shows for the first seconds
  const l=Math.hypot(v[0],v[1])||1,dx=(v[2]<0?-1:1)*v[0]/l,dy=-(v[2]<0?-1:1)*v[1]/l,reach=Math.min(width,height);
  ctx.save();ctx.translate(width/2+dx*reach*.4,height*.46+dy*reach*.36);ctx.rotate(Math.atan2(dy,dx));
  ctx.beginPath();ctx.moveTo(17,0);ctx.lineTo(-10,-12);ctx.lineTo(-4,0);ctx.lineTo(-10,12);ctx.closePath();

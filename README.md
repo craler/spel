@@ -34,7 +34,7 @@ Bra att veta:
 - Pekskärmens spak är analog med dödzon och mjuk kurva (`steer()` i `main.js`).
 - Hökens skugga är en egen platt siluett som bara ritas i skuggkartan (`hawkShadow()` i `render.js`).
 - Fem tider på dygnet (`skies` i `gl.js`), en ny för varje flygning. Natten har stjärnor, månsken, tända fönster, gatlyktor och strålkastare på bilarna (`nightLights()` i `render.js`).
-- Händelser (`events.js`): var 35–55:e sekund startar en konsert, parad eller bilsalong på ett torg i närheten. En pil visar vägen, och tillräckligt många träffar innan tiden går ut ger en stor bonus.
+- Händelser (`events.js`): när duvan har flugit 230–400 m sedan förra händelsen startar en slumpad konsert, parad eller bilsalong på ett torg framåt, minst 220 m från andra pågående händelser (högst två åt gången). En pil visar vägen de första 12 sekunderna, och tillräckligt många träffar innan tiden går ut ger en stor bonus.
 - Stridsvagnar (bromsar, svänger på stället, rekyl) finns i `updateTanks()` (`world.js`), näten i `updateThreats()` (`game.js`) och `drawNet()`/`drawSnare()` (`render.js`).
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
 - Affischen `poster.jpg` visas på startsidan.
