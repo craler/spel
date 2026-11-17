@@ -410,8 +410,8 @@ function buildMoving(){
   const down=scored.has(h.id),size=.93+.14*hash(h.phase,3,7),since=down?elapsed-fallen.get(h.id):0;
   // A hit knocks them flat. After a few seconds they get up again, turn to the bird and shake a fist.
   const t=down?clamp(since/.43,0,1)*(1-clamp((since-4.5)/.9,0,1)):0,lean=t*t*Math.PI*.49,angry=down&&since>5.2;
-  const stride=down||h.fixed?0:h.running?.95:h.climbing?.5:.55,pace=h.running?11:h.climbing?9:6.2;
-  const arms=h.climbing||winding.has(h.id)?1:angry?.55+.4*Math.sin(elapsed*9+h.phase):0;
+  const stride=down?0:h.dance?.35:h.fixed?0:h.running?.95:h.climbing?.5:.55,pace=h.dance?h.dance:h.running?11:h.climbing?9:6.2;
+  const arms=h.climbing||winding.has(h.id)?1:angry?.55+.4*Math.sin(elapsed*9+h.phase):h.dance&&!down?h.armsUp??.5+.5*Math.sin(elapsed*h.dance*.5+h.phase):0;
   if(angry)h.yaw=Math.atan2(bird.x-h.x,bird.z-h.z);
   M.people[Math.floor(hash(h.phase,9,2)*M.people.length)].add(h.x,h.y+(down?.13*t:0),h.z,h.yaw,size,size,size,rgb(h.c),0,elapsed*pace+h.phase,stride,lean,arms);
   if(down){ // a white cap of it on the head and shoulders
@@ -532,20 +532,40 @@ const featherShades=[['#eef1f6','#c7cfdd'],['#9aa7c2','#5d6a8c'],['#7f8cab','#45
 // Night: every street lamp glows and throws a warm pool on the pavement, and vehicles have headlights that light
 // the road ahead and red tail lights. The pools are added light that fades to nothing at their edge.
 const lampGlow=rgb('#ffd38a'),headGlow=rgb('#fff4d6'),tailGlow=rgb('#ff2a1c');
+// A pool of light on the ground: bright in the middle and falling off smoothly (roughly inverse-square, eased to
+// nothing at the edge), built from several rings so the gradient has no hard rim.
 function pool(x,y,z,yaw,rx,rz,col,ox=0,oz=0){
- const s=Math.sin(yaw),c=Math.cos(yaw),P=(u,v)=>[x+(u+ox)*c+(v+oz)*s,y,z-(u+ox)*s+(v+oz)*c],n=[0,1,0],zero=[0,0,0],m=P(0,0);
- for(let i=0;i<16;i++){const a0=i/16*tau,a1=(i+1)/16*tau;glow.smooth([m,P(Math.cos(a0)*rx,Math.sin(a0)*rz),P(Math.cos(a1)*rx,Math.sin(a1)*rz)],[n,n,n],[col,zero,zero]);}
+ const s=Math.sin(yaw),c=Math.cos(yaw),P=(u,v)=>[x+(u+ox)*c+(v+oz)*s,y,z-(u+ox)*s+(v+oz)*c],n=[0,1,0];
+ const rings=[0,.12,.28,.46,.66,.84,1],fall=r=>{const q=1/(1+r*r*14);return col.map(v=>v*Math.max(0,q-.067*r)/(1-0));},N=20;
+ for(let k=1;k<rings.length;k++){const r0=rings[k-1],r1=rings[k],c0=fall(r0),c1=fall(r1);
+  for(let i=0;i<N;i++){const a0=i/N*tau,a1=(i+1)/N*tau,p00=P(Math.cos(a0)*rx*r0,Math.sin(a0)*rz*r0),p01=P(Math.cos(a1)*rx*r0,Math.sin(a1)*rz*r0),p10=P(Math.cos(a0)*rx*r1,Math.sin(a0)*rz*r1),p11=P(Math.cos(a1)*rx*r1,Math.sin(a1)*rz*r1);
+   glow.smooth([p00,p10,p11],[n,n,n],[c0,c1,c1]);if(k>1)glow.smooth([p00,p11,p01],[n,n,n],[c0,c1,c0]);}}
+}
+// Headlights: two beams that leave the lamps narrow and spread into a long fan on the road, brightest just ahead
+// of the car and fading with distance and towards the edges of the beam, plus a faint glow in the air.
+function headBeams(c,L,W,y){
+ const s=Math.sin(c.yaw),k=Math.cos(c.yaw),n=[0,1,0],len=c.bus?20:17,spread=.42,R=[0,.06,.16,.32,.55,.8,1],A=7;
+ const at=(u,v,h)=>[c.x+u*k+v*s,h,c.z-u*s+v*k],I=(r,q)=>{const d=1-r,edge=Math.cos(q/spread*Math.PI/2)**2;return Math.max(0,d*d*(.4+.6*Math.exp(-r*3)))*edge;};
+ for(const side of [-1,1]){
+  const ox=side*W*.8,col=r=>r; // each lamp's beam starts at the lamp and aims slightly outwards
+  for(let a=0;a<A;a++){const q0=-spread+2*spread*a/A,q1=-spread+2*spread*(a+1)/A;
+   for(let j=1;j<R.length;j++){const r0=R[j-1],r1=R[j],pt=(r,q)=>at(ox+Math.sin(q+side*.06)*r*len*.9,L+.2+Math.cos(q)*r*len,.05),
+    v=(r,q)=>{const i=I(r,q)*.034;return [i,i*.96,i*.8];};
+    glow.smooth([pt(r0,q0),pt(r1,q0),pt(r1,q1)],[n,n,n],[v(r0,q0),v(r1,q0),v(r1,q1)]);glow.smooth([pt(r0,q0),pt(r1,q1),pt(r0,q1)],[n,n,n],[v(r0,q0),v(r1,q1),v(r0,q1)]);}}
+  // the beam in the air: a thin wedge from the lamp down to the road, very faint
+  const lamp=at(ox,L,y),far1=at(ox-1.6,L+8,.1),far2=at(ox+1.6,L+8,.1),g=[.006,.0058,.005],z0=[0,0,0];glow.smooth([lamp,far1,far2],[n,n,n],[g,z0,z0]);
+ }
 }
 function nightLights(){
- const near=(x,z,r)=>Math.abs(x-camera.x)<r&&Math.abs(z-camera.z)<r,ix=Math.floor(camera.x/tile),iz=Math.floor(camera.z/tile),warm=[.05,.034,.016];
+ const near=(x,z,r)=>Math.abs(x-camera.x)<r&&Math.abs(z-camera.z)<r,ix=Math.floor(camera.x/tile),iz=Math.floor(camera.z/tile),warm=[.07,.048,.022];
  for(let i=ix-3;i<=ix+3;i++)for(let j=iz-3;j<=iz+3;j++)for(const [n,[x,z]] of block(i,j).lamps.entries()){
   const yaw=[.8,-.8,2.4,-2.4][n],hx=x+Math.sin(yaw)*.85,hz=z+Math.cos(yaw)*.85;if(!near(hx,hz,140))continue;
-  M.ball.add(hx,5.22,hz,0,.17,.08,.2,lampGlow,2);pool(hx,.05,hz,0,6,6,warm);
+  M.ball.add(hx,5.22,hz,0,.17,.08,.2,lampGlow,2);pool(hx,.05,hz,0,8,8,warm);
  }
  for(const c of cars){
   if(c.parked||!near(c.x,c.z,120))continue;const s=Math.sin(c.yaw),k=Math.cos(c.yaw),L=c.bus?5.2:2.05,W=c.bus?.8:.62,y=c.bus?.9:.68;
   for(const sx of [-1,1]){M.ball.add(c.x+sx*W*k+L*s,y,c.z-sx*W*s+L*k,0,.12,.08,.06,headGlow,2);M.ball.add(c.x+sx*W*k-L*s,y+.05,c.z-sx*W*s-L*k,0,.11,.07,.05,tailGlow,2);}
-  if(!wrecks.has(c.id))pool(c.x,.05,c.z,c.yaw,2.3,5,[.045,.042,.034],0,L+4.5);
+  if(!wrecks.has(c.id))headBeams(c,L,W,y);
  }
 }
 function drawHeli(){
