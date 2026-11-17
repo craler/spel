@@ -206,6 +206,13 @@ const M={
   for(const sx of [-1,1]){for(const z of [-3.4,3.3])m.wheel(sx*1.15,.5,z,.5,.3,sx,tyre,hub);m.box(sx*.8-.2,.8,5.2,sx*.8+.2,1,5.24,rgb('#fff2c4'));m.box(sx*.8-.2,.8,-5.24,sx*.8+.2,1.05,-5.2,rgb('#b3201c'));}
   return m.build();})(),
  box:new Mesh().box(0,0,0,1,1,1,WHITE,1).build(),
+ gable:new Mesh().loft([[-.5,0,.02,.5,.5],[0,0,1,.5,.5],[.5,0,.02,.5,.5]],WHITE,1).build(),
+ // A hot-air balloon: a teardrop envelope in alternating coloured and cream gores, with a skirt at the mouth.
+ balloon:(()=>{const m=new Mesh(),cream=rgb('#efe6d2'),prof=[[.16,-1],[.2,-.9],[.34,-.74],[.66,-.36],[.9,0],[1,.36],[.93,.66],[.66,.9],[.3,.985],[0,1]],n=16;
+  const at=(k,i)=>{const a=i*tau/n;return [prof[k][0]*Math.cos(a),prof[k][1],prof[k][0]*Math.sin(a)];};
+  for(let i=0;i<n;i++)for(let k=1;k<prof.length;k++){const tint=(i%2===0)!==(k>6);m.quad(at(k-1,i),at(k-1,i+1),at(k,i+1),at(k,i),tint?WHITE:cream,tint?1:0);}
+  for(let i=0;i<n;i++)m.quad(at(0,i),at(0,i+1),[at(0,i+1)[0]*.9,-1.07,at(0,i+1)[2]*.9],[at(0,i)[0]*.9,-1.07,at(0,i)[2]*.9],WHITE,1);
+  return m.build();})(),
  big:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,14,8).build(),
  boat:new Mesh().loft([[-1.7,.02,.5,.2,.4],[-.9,0,.52,.55,.78],[.9,0,.52,.55,.78],[1.8,.12,.58,.08,.16]],WHITE,1).box(-.6,.3,-.2,.6,.36,.1,[.6,.6,.6],1).build(),
  tank:(()=>{const m=new Mesh(),track=[.22,.22,.2],steel=[.5,.5,.48];
@@ -282,8 +289,8 @@ function splatMesh(upright){
  return m.build();
 }
 M.cube.cull=true;
-const statics=[M.cube,M.tree,M.lamp,M.table,M.stall,M.bench,M.statue];
-const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.boat,M.ball,M.food];
+const statics=[M.cube,M.tree,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
+const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.balloon,M.boat,M.ball,M.food];
 const decals=[M.splat,M.splatWall,M.drip,M.disc];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 let staticKey='';
@@ -305,6 +312,13 @@ function buildStatics(){
   for(const [x,z,p] of b.stalls)M.stall.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
   for(const [x,z,yaw] of b.benches)M.bench.add(x,0,z,yaw);
   if(b.statue)M.statue.add(b.statue[0],0,b.statue[1],.6);
+  if(b.type===3){ // canal: quay walls down to the water, bridge edges and railings, gabled roofs
+   const {x,z}=b,stone=rgb('#5d5850'),iron=rgb('#1e2124');
+   for(const wx of [16.2,25.5]){M.cube.add(x+wx,WATER-.2,z+8,0,.3,1.7,26,stone);M.cube.add(x+wx-.05,0,z+8,0,.4,.28,26,stone);}
+   for(const wz of [7.6,34]){M.cube.add(x+16.5,WATER-.2,z+wz,0,9,1.7,.4,stone);M.cube.add(x+16.4,.0,z+wz+.1,0,9.2,.16,.2,stone);
+    M.cube.add(x+16.4,.95,z+wz+.14,0,9.2,.08,.1,iron);for(let n=0;n<=9;n++)M.cube.add(x+16.45+n,.16,z+wz+.15,0,.07,.8,.07,iron);}
+   for(const [gx,gz,h,seed] of b.gables)M.gable.add(gx,h,gz,0,5.5,1.6+1.6*seed,5,rgb(seed<.5?'#5a2f26':'#3a3d42'));
+  }
  }
  for(const m of statics)m.upload();
 }
@@ -362,12 +376,16 @@ function buildMoving(){
   const b=block(i,j);
   if(b.cleaner){const [cx,cz,top,s]=b.cleaner,y=2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s));M.box.add(cx-1.3,y-.14,cz-.5,0,2.6,.14,1.1,rgb('#8a8d90'));
    for(const sx of [-1.25,1.25])ribbon([cx+sx,y,cz+.5],[cx+sx,top,cz+.6],.025);}
-  if(b.type===3){const q=boatAt(b);M.boat.add(q.x,.04,q.z,q.yaw,1,1,1,rgb('#8a5a34'));}
+  if(b.type===3){const q=boatAt(b);M.boat.add(q.x,WATER+.04,q.z,q.yaw,1,1,1,rgb('#8a5a34'));}
  }
  for(const q of balloons()){
-  M.big.add(q.x,q.y+7,q.z,q.hue*9,5.5,6.4,5.5,rgb(balloonPaint[Math.floor(q.hue*40)%balloonPaint.length]));
-  M.big.add(q.x,q.y+1.2,q.z,0,1.5,2.6,1.5,rgb('#e9e4d6'));M.box.add(q.x-.8,q.y-.7,q.z-.8,0,1.6,1.3,1.6,rgb('#7a5a34'));
-  for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]])ribbon([q.x+sx*.75,q.y+.6,q.z+sz*.75],[q.x+sx*2.6,q.y+3.2,q.z+sz*2.6],.03);
+  const paint=rgb(balloonPaint[Math.floor(q.hue*40)%balloonPaint.length]),sway=.2*Math.sin(elapsed*.5+q.hue*9);
+  M.balloon.add(q.x,q.y+7,q.z,q.hue*9+elapsed*.05,5.5,6.6,5.5,paint);
+  // Wicker basket with a rim, two passengers and a burner that flares now and then.
+  M.box.add(q.x-.8+sway,q.y-2.3,q.z-.8,0,1.6,1.15,1.6,rgb('#8a6436'));M.box.add(q.x-.88+sway,q.y-1.2,q.z-.88,0,1.76,.12,1.76,rgb('#4a3520'));
+  for(const sx of [-.35,.35])M.ball.add(q.x+sx+sway,q.y-.85,q.z+.1*sx,0,.17,.19,.17,rgb(sx<0?'#dba27e':'#8a5a3c'));
+  if((elapsed*.35+q.hue*5)%1<.35)M.ball.add(q.x+sway*.5,q.y+.1,q.z,0,.22,.5+.2*Math.sin(elapsed*30),.22,amber,2);
+  for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]])ribbon([q.x+sx*.8+sway,q.y-1.1,q.z+sz*.8],[q.x+sx*.62,q.y+.45,q.z+sz*.62],.03);
   if(scored.has(q.id))M.ball.add(q.x,q.y+13.2,q.z,0,3,.5,3,splatCol);
  }
  for(const t of tanks){
@@ -534,7 +552,7 @@ function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt),playing=state==='play';
  if(!crash||!rig)setCamera(dt);
  buildStatics();buildMoving();
- drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.boat,dyn,omen],[...statics,...moving,dyn],decals);
+ drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.balloon,M.boat,dyn,omen],[...statics,...moving,dyn],decals);
  ctx.clearRect(0,0,width,height);
  if(!crash&&state!=='menu'){
   drawThreats();
@@ -611,7 +629,7 @@ function render(dt=1/60){
   // The nearest ringing car alarm: horn on, horn off, quieter and duller with distance.
   let horn=0;
   if(playing)for(const c of cars){const since=elapsed-(alarms.get(c.id)??-99);
-   if(since<9&&since%.9<.5){const near=clamp(1-Math.hypot(c.x-bird.x,bird.y,c.z-bird.z)/120,0,1);horn=Math.max(horn,.2*near*near*near);}}
+   if(since<9&&since%.9<.5){const near=clamp(1-Math.hypot(c.x-bird.x,bird.y,c.z-bird.z)/95,0,1);horn=Math.max(horn,.055*near*near*near);}}
   alarmHorn(horn);}
  const fear=playing&&hawk?hawk.dread*(.8+.2*Math.sin(elapsed*9)):0,veil=$('dread');
  if(Math.abs(fear-(+veil.style.opacity||0))>.01)veil.style.opacity=fear.toFixed(2);

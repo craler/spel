@@ -137,9 +137,10 @@ void main(){
    if(e<.2)c=vec3(.4,.4,.38);
   }else if(type<.5){
    c=mix(grass,gravel*.8,smoothstep(.45,.6,vnoise(p*.22+7.)));
-  }else if(type>2.5){ // canal: stone quay, then moving water
-   float wave=vnoise(p*.9+vec2(uTime*.35,uTime*.2))+.5*vnoise(p*2.7-uTime*.5);
-   c=e<3.6?vec3(.2,.19,.18):vec3(.012,.05,.065)*(.7+.5*wave)+uSkyCol*.05;spec=e<3.6?0.:.5+.5*wave;
+  }else if(type>2.5){ // canal street: brick quays, and a hole where the water shows through from below
+   if(q.x>16.5&&q.x<25.5&&q.y>8.&&q.y<34.)discard;
+   vec2 s=p*vec2(4.5,2.2);s.x+=.5*floor(s.y);vec2 t=fract(s);
+   c=vec3(.2,.1,.075)*(.7+.5*h21(floor(s)))*mix(.6,1.,step(.08,t.x)*step(.12,t.y));
   }else if(type<1.5){
    vec2 r=q-21.;c=grass*1.15;
    if(min(abs(r.x-r.y),abs(r.x+r.y))<1.5||abs(length(r)-7.4)<1.||e<4.2)c=gravel;
@@ -150,6 +151,24 @@ void main(){
   }
  }
  o=vec4(tone(fogged(lit(c,vec3(0,1,0),vW,spec),vW)),1.);
+}`;
+const WATER_VS=`#version 300 es
+layout(location=0) in vec2 aPos;uniform mat4 uVP;uniform vec3 uCentre;out vec3 vW;
+void main(){vW=vec3(aPos.x*1700.+uCentre.x,-1.5,aPos.y*1700.+uCentre.z);gl_Position=uVP*vec4(vW,1.);}`;
+// Water: small moving waves bend the surface, which mirrors the sky more the flatter you look at it, with sun glints.
+const WATER_FS=`#version 300 es
+precision highp float;
+in vec3 vW;out vec4 o;
+${LIGHT}
+float swell(vec2 q){return .6*vnoise(q*.55+vec2(uTime*.45,uTime*.25))+.3*vnoise(q*1.6-vec2(uTime*.6,uTime*.2))+.1*vnoise(q*4.4+uTime*.9);}
+void main(){
+ vec2 p=vW.xz;float h=swell(p),e=.3;
+ vec3 n=normalize(vec3((h-swell(p+vec2(e,0.)))*1.5,1.,(h-swell(p+vec2(0.,e)))*1.5)),v=normalize(uEye-vW);
+ float fres=pow(1.-max(dot(n,v),0.),3.),sh=shadow(vW,n);
+ vec3 mirror=mix(uFogCol,uSkyCol*1.7,clamp(reflect(-v,n).y,0.,1.));
+ vec3 c=mix(mix(vec3(.008,.04,.045),vec3(.03,.1,.085),h),mirror,.12+.8*fres)*(.4+.6*sh);
+ c+=uSunCol*pow(max(dot(n,normalize(v+uSun)),1e-4),200.)*sh;
+ o=vec4(tone(fogged(c,vW)),1.);
 }`;
 const SKY_VS=`#version 300 es
 layout(location=0) in vec2 aPos;out vec2 vP;void main(){vP=aPos;gl_Position=vec4(aPos,1.,1.);}`;
@@ -182,7 +201,7 @@ function program(vs,fs){
  for(let i=0;i<n;i++){const name=gl.getActiveUniform(p,i).name;u[name]=gl.getUniformLocation(p,name);}
  return {p,u};
 }
-const progMesh=program(VS,FS), progDepth=program(VS,DEPTH_FS), progGround=program(GROUND_VS,GROUND_FS), progSky=program(SKY_VS,SKY_FS);
+const progMesh=program(VS,FS), progDepth=program(VS,DEPTH_FS), progGround=program(GROUND_VS,GROUND_FS), progSky=program(SKY_VS,SKY_FS), progWater=program(WATER_VS,WATER_FS);
 // ---- Geometry. Vertex: position 3, normal 3, colour 3, tint flag, limb id, limb pivot height.
 const STRIDE=12, ISTRIDE=15;
 class Mesh{
@@ -352,6 +371,7 @@ function drawFrame(casters,scene,decals){
  // Ground
  lightUniforms(progGround);gl.uniform3f(progGround.u.uCentre,camera.x,0,camera.z);gl.uniform1i(progGround.u.uCity,1);
  gl.drawArrays(gl.TRIANGLES,0,6);
+ lightUniforms(progWater);gl.uniform3f(progWater.u.uCentre,camera.x,0,camera.z);gl.drawArrays(gl.TRIANGLES,0,6); // seen only through the canal
  // Meshes, then flat decals pulled slightly towards the camera.
  lightUniforms(progMesh);
  for(const m of scene){

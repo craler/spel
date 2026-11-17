@@ -278,7 +278,7 @@ function simulate(dt){
  if(b.y<3){const tank=tanks.find(t=>tankContact(t,b.x,b.y,b.z,.28));if(tank){startCrash({n:[0,1,0],depth:0,vehicle:true,cause:'Stridsvagnen vann.'});return;}}
  for(const q of balloons()){ // hot-air balloons are solid
   const d=Math.hypot(b.x-q.x,b.y-q.y-7,b.z-q.z);
-  if(d<5.8||(Math.abs(b.x-q.x)<1.1&&Math.abs(b.z-q.z)<1.1&&b.y>q.y-.9&&b.y<q.y+1)){startCrash({n:[(b.x-q.x)/d,(b.y-q.y-7)/d,(b.z-q.z)/d],depth:0,cause:'Luftballongen vann.'});return;}
+  if(d<5.8||(Math.abs(b.x-q.x)<1.1&&Math.abs(b.z-q.z)<1.1&&b.y>q.y-2.6&&b.y<q.y-.7)){startCrash({n:[(b.x-q.x)/d,(b.y-q.y-7)/d,(b.z-q.z)/d],depth:0,cause:'Luftballongen vann.'});return;}
  }
  if(b.y<3.3){const vehicle=cars.find(c=>carContact(c,b.x,b.y,b.z,.28));if(vehicle){const surface=carContact(vehicle,b.x,b.y,b.z,.28);crashCar(vehicle);startCrash(surface);return;}}
  // Skimming a wall, a roof edge or the ground at speed without touching pays a little.
@@ -342,7 +342,7 @@ function simulate(dt){
     stain.x=wall.x;stain.z=wall.z;stain.wall=wall.yaw;stain.drip=.3+1.9*hash(p.seed,5,2);
     splashAt(wall.x,y,wall.z,p.big?5:2,Math.sin(wall.yaw),Math.cos(wall.yaw));
    }else splashAt(x,y,z,p.big?7:3);
-   stains.push(stain);splat(x,y,z,p.big);
+   if(y>-.5)stains.push(stain);splat(x,y,z,p.big); // nothing sticks to water
    const sq=block(Math.floor(x/tile),Math.floor(z/tile));
    if(sq.statue&&y>.5&&!scored.has('st'+sq.key)&&Math.hypot(x-sq.statue[0],z-sq.statue[1])<1.9+extra){scored.add('st'+sq.key);run.statue++;award(40,'KULTURSKYMF',p,0,[sq.statue[0],6.4,sq.statue[1]]);}
    return false;

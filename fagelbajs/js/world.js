@@ -62,7 +62,8 @@ const brokeUmb=new Set(), eaten=new Map(), alarms=new Map();
 let hawk=null;
 // ---- High-value targets (gold stars): they move, which is what makes them worth more.
 function jogger(i,j,k){return k===7&&hash(i,j,91)<.4;}
-function boatAt(b){const s=elapsed*.22+b.i*1.7+b.j;return {x:b.x+21+4*Math.sin(s*.6),z:b.z+21+10*Math.sin(s),yaw:Math.cos(s)>0?0:Math.PI};}
+// Boats drift down the canal, under the bridges and on into the next block.
+function boatAt(b){return {x:b.x+21+1.5*Math.sin(elapsed*.3+b.j),z:b.z+wrap(elapsed*2.2+9,tile),yaw:0};}
 function balloons(){
  const out=[],S=168,ci=Math.round(bird.x/S),cj=Math.round(bird.z/S);
  for(let i=ci-1;i<=ci+1;i++)for(let j=cj-1;j<=cj+1;j++){
@@ -81,7 +82,7 @@ function gather(dt=0){
   }
   const b=block(i,j),extra=(id,x,y,z,yaw,c,base,label,shout)=>people.push({x,y,z,id,i,j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:i+j,fixed:true,base,label,shout,star:true,umb:false});
   if(b.cleaner){const [cx,cz,top,s]=b.cleaner;extra('win'+i+','+j,cx,2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s)),cz,0,'#e87a1e',60,'FÖNSTERPUTSAREN','MIN HINK!');} // rides a lift up and down the facade
-  if(b.type===3){const q=boatAt(b);extra('boat'+i+','+j,q.x,.3,q.z,q.yaw,'#e8e4da',45,'BÅTTUREN','MAN ÖVER BORD!');}
+  if(b.type===3){const q=boatAt(b);extra('boat'+i+','+j,q.x,WATER+.3,q.z,q.yaw,'#e8e4da',45,'BÅTTUREN','MAN ÖVER BORD!');}
   // People who stay put: café guests, picnickers, the wedding party.
   for(const [n,f] of block(i,j).folk.entries())people.push({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,
    yaw:hash(i,j,n+300)*tau,running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false});
@@ -94,12 +95,14 @@ function traffic(){
  for(const across of [false,true]){
   const sidePos=across?bird.z:bird.x,alongPos=across?bird.x:bird.z;
   for(let lane=Math.round(sidePos/tile)-2;lane<=Math.round(sidePos/tile)+2;lane++){
-   const direction=lane%2===0?1:-1,speed=direction*(4+hash(lane,8,+across)*2.4);
-   const offset=hash(lane,21,+across)*54+speed*trafficClock,spacing=53;
+   // All lanes run at one speed with one car per block, and the two directions of travel are half a block out of step,
+   // so streams of cars cross each junction in turn (as if on green lights) and never drive through each other.
+   const direction=lane%2===0?1:-1,speed=direction*5.2;
+   const offset=(across?0:21)+speed*trafficClock,spacing=tile;
    const first=Math.floor((alongPos-100-offset)/spacing);
-   for(let n=first;n<=first+4;n++){
+   for(let n=first;n<=first+5;n++){
     const id='car:'+across+','+lane+','+n;if(wrecks.has(id))continue;
-    const along=n*spacing+offset,side=lane*tile+direction*1.45;
+    const along=n*spacing+offset+6*hash(lane,n,5+across)-3,side=lane*tile+direction*1.45;
     cars.push({id,across,lane,along,direction,x:across?along:side,z:across?side:along,yaw:(across?Math.PI/2:0)+(direction<0?Math.PI:0),
      speed:Math.abs(speed)*trafficFactor,bus:hash(lane,n,11)<.09,cab:hash(lane,n,11)>=.09&&hash(lane,n,7+across)<.16,hatch:hash(lane,n,3)<.45,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
    }
@@ -114,10 +117,9 @@ function traffic(){
  for(const w of [...wrecks.values()]){
   if(elapsed-w.pileTime>24){wrecks.delete(w.id);continue;}
   if(w.parked)continue;
-  for(const c of cars){
-   if(c.parked||c.lane!==w.lane||c.across!==w.across||wrecks.has(c.id))continue;
-   const gap=((w.across?w.x:w.z)-c.along)*c.direction;
-   if(gap>0&&gap<4.7)crashCar(c,w);
+  for(const c of cars){ // anything that drives into a wreck, from any direction, crashes into it
+   if(c.parked||wrecks.has(c.id)||Math.abs(c.x-w.x)>9||Math.abs(c.z-w.z)>9)continue;
+   if(carContact(w,c.x,1,c.z,c.bus?1.6:1.15))crashCar(c,w);
   }
  }
  cars=cars.filter(c=>!wrecks.has(c.id));

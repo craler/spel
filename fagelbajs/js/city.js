@@ -2,7 +2,7 @@
 // City layout. Every 42 m tile is one block: roads on the tile lines, a sidewalk ring, then the block itself.
 // Block types: 0 houses, 1 park, 2 square. The type table repeats every 64 blocks and is also sent to the ground shader.
 const CITY=64, cityType=new Uint8Array(CITY*CITY);
-for(let j=0;j<CITY;j++)for(let i=0;i<CITY;i++){const h=hash(i,j,41);cityType[i+j*CITY]=(i&15)===5?3:h<.13?1:h<.27?2:0;} // every sixteenth column of blocks is a canal
+for(let j=0;j<CITY;j++)for(let i=0;i<CITY;i++){const h=hash(i,j,41);cityType[i+j*CITY]=(i&31)===5?3:h<.13?1:h<.27?2:0;} // one column of blocks in thirty-two is a canal street
 const setType=(i,j,t)=>{cityType[(i&63)+(j&63)*CITY]=t;};
 // The first thing the player sees: a park on the left, a square ahead on the right.
 setType(0,0,0);setType(-1,0,1);setType(0,1,2);setType(-1,1,0);setType(0,-1,0);setType(-1,-1,0);
@@ -39,6 +39,14 @@ function block(i,j){
   // Picnics on the lawn: the food sits low, so you have to skim the grass.
   for(let n=0;n<3;n++){const a=n*tau/3+R(40)*tau,fx=21+Math.cos(a)*3.8,fz=21+Math.sin(a)*3.8;food(fx,.75,fz);
    b.folk.push({x:x+fx+1.2,z:z+fz+.5,c:colors[n+1],base:15,label:'PICKNICK',shout:'MIN MACKA!'});}
+ }else if(type===3){
+  // Amsterdam-style: a row of narrow gabled houses on each side, a tree-lined quay, and the water in between.
+  b.gables=[];
+  for(let n=0;n<5;n++)for(const [side,a] of [[0,9],[1,27.5]]){
+   const h=storeys(170+n*2+side,3,5),paint=Math.floor(R(180+n*2+side)*wallPaint.length);
+   b.blds.push([x+a,z+8.5+n*5,5.5,5,h,paint,R(190+n*2+side)]);b.gables.push([x+a+2.75,z+11+n*5,h,R(200+n*2+side)]);
+  }
+  for(let n=0;n<4;n++)b.trees.push([x+15.4,z+11.5+n*6.4,.5+R(210+n)*.12,R(214+n)],[x+26.6,z+14+n*6.4,.5+R(218+n)*.12,R(222+n)]);
  }else if(type===2){
   b.statue=[x+21,z+21];b.blds.push([x+20.1,z+20.1,1.8,1.8,5.6,-1,0]); // the plinth is solid, drawn as a statue
   const spots=[[12,12],[30,12],[12,30],[30,30],[21,10.5],[21,31.5]];
@@ -62,8 +70,14 @@ function block(i,j){
  blockCache.set(key,b);return b;
 }
 function buildings(i,j){return block(i,j).blds;}
+// The canal runs down the middle of its blocks, a storey below street level. The cross streets pass over it as bridges.
+const WATER=-1.5;
+function inCanal(x,z){
+ const i=Math.floor(x/tile);if(blockType(i,Math.floor(z/tile))!==3)return false;
+ const qx=x-i*tile,qz=wrap(z,tile);return qx>16.5&&qx<25.5&&qz>8&&qz<34;
+}
 function solid(x,y,z,r=0){
- if(y<=r)return true;
+ if(y<=r+(y<1.5&&inCanal(x,z)?WATER:0))return true;
  return buildings(Math.floor(x/tile),Math.floor(z/tile)).some(([a,b,w,d,h])=>
  x>=a-r&&x<=a+w+r&&z>=b-r&&z<=b+d+r&&y<=h+r);
 }

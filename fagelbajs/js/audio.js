@@ -89,11 +89,14 @@ function splat(x,y,z,big){
  tone(150,52,.1,'sine',.14*vol);
 }
 // A dry double tick in the spirit of a shooter's hit marker; big hits add a low thump.
+// A hit sounds like what it is: a fat wet splat, heavier for the big ones.
 function hitTick(strong,pitch=1){
  if(!master||muted)return;
- for(const [delay,g] of [[0,.95],[.032,.5]])burst({type:'bandpass',from:2700*pitch,to:2000*pitch,q:1.2,gain:g,attack:.001,dur:.034,delay});
- tone(1900*pitch,1250*pitch,.024,'square',.045);
- if(strong){tone(210,62,.13,'triangle',.22,.012);burst({from:900,to:140,gain:.2,dur:.1,delay:.012});}
+ const k=strong?1.35:1;
+ burst({from:2100*pitch,to:170,gain:.5*k,attack:.003,dur:.2});
+ burst({type:'bandpass',from:950*pitch,to:230,q:2.2,gain:.42*k,dur:.15,delay:.018});
+ burst({type:'bandpass',from:320,to:1300*pitch,q:3.5,gain:.2*k,dur:.07,delay:.05}); // the squelch after the slap
+ tone(175*pitch,52,.13,'sine',.26*k);
 }
 function crunch(){burst({from:2400,to:160,gain:.55,dur:.34});burst({type:'bandpass',from:1800,to:700,q:6,gain:.34,dur:.2,delay:.02});tone(310,63,.26,'sawtooth',.045);}
 function whoosh(){burst({type:'bandpass',from:420,to:2400,q:1.1,gain:.65,attack:.09,dur:.4});}
