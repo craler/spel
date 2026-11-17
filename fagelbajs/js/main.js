@@ -6,7 +6,14 @@ const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+
 function controlsPicture(){
  if(touchMode)return '<div class="pads"><div><i class="pad"></i><span>Spaken styr</span></div><div><i class="round">DYK</i><span>Störtdyk</span></div><div><i class="round">BAJSA</i><span>Bajsa</span></div></div>';
  return '<div class="keyboard"><div><div class="row">'+keycap('W',reversePitch?'stig':'sjunk')+'</div><div class="row">'+keycap('A','vänster')+keycap('S',reversePitch?'sjunk':'stig')+keycap('D','höger')+'</div></div>'+
-  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div><div>'+keycap('C','kamera')+'</div></div><p class="hint">Pilarna fungerar också · Esc pausar</p>';
+  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div><div>'+keycap('C','kamera')+keycap('X','upp/ner')+'</div></div><p class="hint">Pilarna fungerar också · Esc pausar</p>';
+}
+// X swaps which of W and S climbs, in the air or in the menus, and remembers the choice.
+function flipPitch(){
+ reversePitch=!reversePitch;try{localStorage.setItem('fagelbajs.upClimbs',reversePitch?'yes':'no');}catch{}
+ if(state==='play')banner(reversePitch?'W STIGER':'S STIGER',reversePitch?'S sjunker · X ändrar tillbaka':'W sjunker · X ändrar tillbaka','',1.6);
+ else if(!$('view').hidden&&$('view').dataset.name)openView($('view').dataset.name);
+ else if(state==='menu')homeMenu();
 }
 function homeMenu(){panel('Duv-Diarré',controlsPicture()+(best?'<p class="best">Rekord '+number(best)+' · '+rankOf(best)+'</p>':''),'Nytt spel →');}
 const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><button data-set="'+id+'">'+value+'</button></div>';
@@ -39,17 +46,18 @@ document.querySelector('.panel').addEventListener('click',e=>{
 $('go').onclick=start;$('pause').onclick=togglePause;$('camera').onclick=view;
 $('audio').onclick=()=>{muted=!muted;setAudio();};
 onblur=()=>{keys.clear();if(state==='play')togglePause();};
-const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','Escape'];
+const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','KeyX','Escape'];
 onkeydown=e=>{
  if(state!=='play'){
   if(e.code==='Escape'&&state==='pause')togglePause();
+  else if(e.code==='KeyX'&&!e.repeat&&!(e.target instanceof HTMLInputElement))flipPitch();
   // Enter or Space flies again from the wasted screen, the menu and the pause, unless a name is being typed.
   else if((e.code==='Enter'||e.code==='Space'||e.code==='NumpadEnter')&&!e.repeat&&state!=='crash'&&performance.now()-shownAt>500&&!(e.target instanceof HTMLInputElement)&&!(e.target.closest&&e.target.closest('button:not(#go),a,summary'))){e.preventDefault();start();}
   return;
  }
  if(!gameKeys.includes(e.code))return;
  e.preventDefault();keys.add(e.code);if(e.repeat)return;
- if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='Escape')togglePause();
+ if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='KeyX')flipPitch();if(e.code==='Escape')togglePause();
 };
 onkeyup=e=>keys.delete(e.code);
 // ---- Touch: a thumb stick on the left, dive and spray buttons on the right.
