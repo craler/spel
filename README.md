@@ -34,6 +34,9 @@ Bra att veta:
 - Stridsvagnar (bromsar, svänger på stället, rekyl) finns i `updateTanks()` (`world.js`), näten i `updateThreats()` (`game.js`) och `drawNet()`/`drawSnare()` (`render.js`).
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
 - Affischen `poster.jpg` visas på startsidan.
+- Grafik (Inställningar): Auto, Snygg eller Snabb (`quality`/`fast` i `core.js`, `setFast()` i `main.js`). Snabb ger hälften så stor skuggkarta med ett enda sampel, 9 × 9 kvarter i stället för 14 × 14 och lite tätare dis, ett molnlager och inga molnskuggor, ingen kantutjämning (från nästa sidladdning), lägre upplösning och högst 250 bajsfläckar.
+  Auto mäter de första sekunderna av flygningen och slår på Snabb om datorn inte hänger med. Valet sparas till nästa besök (`fagelbajs.autoFast`).
+- Skuggpasset ritar bara de närmaste kvarteren (`Mesh.near`, `drawShadow()` i `gl.js`), och fotgängare och trafik räknas om en gång per bildruta i stället för två.
 
 Trimvärden att känna till: stjärngränser `thresholds` (game.js), riskbonus och kombo i `award()` (game.js),
 tankens påfyllning `recharge()` och hökens fart `updateHawk()` (world.js), kvarterstyper i `city.js`.

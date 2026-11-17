@@ -337,7 +337,13 @@ let staticKey='';
 function buildStatics(){
  const ix=Math.round(bird.x/tile),iz=Math.round(bird.z/tile),key=ix+','+iz;if(key===staticKey)return;staticKey=key;
  for(const m of statics)m.clear();
- for(let i=ix-7;i<=ix+6;i++)for(let j=iz-7;j<=iz+6;j++){
+ // Nearest blocks first, so the shadow pass can stop after the ones its map covers (see Mesh.drawShadow).
+ // Fast graphics draw 9 x 9 blocks instead of 14 x 14 and let the haze close in a little sooner.
+ const reach=fast?4.5:7,list=[];
+ for(let i=Math.ceil(ix-.5-reach);i<=Math.floor(ix-.5+reach);i++)for(let j=Math.ceil(iz-.5-reach);j<=Math.floor(iz-.5+reach);j++)list.push([i,j,Math.max(Math.abs(i-ix+.5),Math.abs(j-iz+.5))]);
+ list.sort((a,b)=>a[2]-b[2]);let marked=false;
+ for(const [i,j,d] of list){
+  if(!marked&&d>4.5){marked=true;for(const m of statics)m.near=m.n;}
   const b=block(i,j);
   for(const [a,c,w,d,h,paint,seed] of b.blds){
    if(paint<0)continue;
@@ -480,7 +486,7 @@ function buildMoving(){
    const heap=Math.min(1,age*9)*r;
    M.dome.add(s.x+.08*r*Math.cos(turn),s.y+.03,s.z+.08*r*Math.sin(turn),turn,heap*.34,heap*(.07+.06*s.seed),heap*.27,col,-1);
    M.dome.add(s.x+.15*r*Math.cos(turn+1),s.y+.05,s.z+.15*r*Math.sin(turn+1),turn,heap*.2,heap*.08,heap*.09,bits,-1);M.dome.add(s.x-.2*r*Math.cos(turn+2),s.y+.04,s.z-.2*r*Math.sin(turn+2),turn+1,heap*.12,heap*.05,heap*.06,bits,-1);
-   if(r>.4)for(let k=0;k<3;k++){const a=turn+k*2.1+s.seed*3,dd=r*(1.25+.5*hash(k,s.seed,3));
+   if(r>.4&&!fast)for(let k=0;k<3;k++){const a=turn+k*2.1+s.seed*3,dd=r*(1.25+.5*hash(k,s.seed,3));
     M.dome.add(s.x+Math.cos(a)*dd,s.y+.03,s.z+Math.sin(a)*dd,0,r*.07,r*.05,r*.07,col,-1);}
   }
  }

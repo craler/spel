@@ -49,7 +49,7 @@ function finish(heading,cause,action){
   form.onsubmit=e=>{e.preventDefault();const show=place=>{if($('board'))$('board').innerHTML=scoreList(place,Math.max(5,place+1));};show(saveScore($('name').value,show));form.remove();$('go').focus();};
  }
 }
-let points=0,cars=[],sprayCount=0;
+let points=0,cars=[],sprayCount=0,halfStep=false,crowdTime=0;
 const carPaint=['#c8382e','#2f8fa0','#e0b030','#4f74b8','#d9d6cf','#8a3f6a','#3f7a52'];
 const maxWanted=5, sidewalkEdge=6.45, sidewalkLength=tile-2*sidewalkEdge;
 let wanted=0,trafficClock=0,trafficFactor=1,throwWait=1,thrown=[],mist=[],tank=1,refillWait=0,emptyTank=false;
@@ -309,7 +309,7 @@ function simulate(dt){
  // Speed won in a dive carries into the glide and bleeds off slowly; climbing spends it faster.
  b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65+(14-b.speed)*(dive?.18:b.speed>14?.13:.55)-Math.max(0,b.vy)*.45)*dt,10,58);
  b.x+=Math.sin(b.angle)*forwardSpeed()*dt;b.z+=Math.cos(b.angle)*forwardSpeed()*dt;
- trafficFactor=mix(trafficFactor,1+.61*wanted,1-Math.exp(-dt*1.5));trafficClock+=dt*trafficFactor;traffic();
+ trafficFactor=mix(trafficFactor,1+.61*wanted,1-Math.exp(-dt*1.5));trafficClock+=dt*trafficFactor;if(!halfStep)traffic();
  if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
  for(let i=Math.floor(b.x/tile)-1;i<=Math.floor(b.x/tile)+1;i++)for(let j=Math.floor(b.z/tile)-1;j<=Math.floor(b.z/tile)+1;j++)for(const [tx,tz,s,seed] of block(i,j).trees){
   const dx=b.x-tx,dz=b.z-tz;if(Math.abs(dx)>4.5||Math.abs(dz)>4.5)continue;
@@ -329,7 +329,7 @@ function simulate(dt){
  elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort);
  if(b.effort>.5&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
- gather(dt);updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateTanks(dt);if(state!=='play')return;
+ crowdTime+=dt;if(!halfStep){gather(crowdTime);crowdTime=0;}updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateTanks(dt);if(state!=='play')return;
  const floating=balloons();
  drops=drops.filter(p=>{
   const prev=p.age;p.age+=dt;const end=p.end;
@@ -393,7 +393,7 @@ function simulate(dt){
  if(elapsed>bannerUntil)$('feedback').classList.remove('on');
  if(++slipTick%5===0)slips();if(slipTick%30===0)checkFeats();
  popups=popups.filter(p=>elapsed-p.t<1.1);bubbles=bubbles.filter(b=>elapsed-b.t<1.5);
- if(stains.length>650)stains.splice(0,stains.length-600);
+ const maxStains=fast?250:650;if(stains.length>maxStains)stains.splice(0,stains.length-maxStains+50);
  if(!wanted&&elapsed>=60){finish('Tiden är ute!','Du hann inte starta jakten.','Flyg igen →');}
 }
 // Resolve the nearest contact plane for the tumbling body, including roof edges.

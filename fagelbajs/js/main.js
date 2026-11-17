@@ -1,7 +1,13 @@
 'use strict';
 // Input, menus and the frame loop.
 // ---- Start menu: the controls as a picture, and sub-pages for the high scores, feats, settings and rules.
-let lowGraphics=false;try{lowGraphics=localStorage.getItem('fagelbajs.low')==='yes';}catch{}
+// Switch fast graphics on or off while running: smaller and simpler shadows, fewer blocks drawn, cheaper shaders,
+// lower resolution and fewer old stains. Edge smoothing follows on the next page load.
+function topDensity(){return fast?Math.min(devicePixelRatio||1,1)*.85:Math.min(devicePixelRatio||1,1.5);}
+function setFast(on){
+ if(on===fast)return;fast=on;shadowSize(on?1024:2048);staticKey='';density=Math.min(density,topDensity());if(!on)density=topDensity();fit();
+}
+const qualityNames={auto:'Auto',high:'Snygg',fast:'Snabb'};
 const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+'</kbd><span>'+does+'</span></div>';
 function controlsPicture(){
  if(touchMode)return '<div class="pads"><div><i class="pad"></i><span>Spaken styr</span></div><div><i class="round">DYK</i><span>Störtdyk</span></div><div><i class="round">BAJSA</i><span>Bajsa</span></div></div>';
@@ -21,7 +27,7 @@ const views={
  scores:()=>{if(Date.now()-sharedAt>10000)fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
   return ['Topplista',board().length?scoreList():'<p class="cause">Inga flygningar än.</p>'];},
  feats:()=>['Bedrifter',featList(true)],
- settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',lowGraphics?'Snabb':'Auto','graphics')],
+ settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',qualityNames[quality]+(quality==='auto'?(fast?' (snabb just nu)':' (snygg just nu)'):''),'graphics')+(smoothEdges===fast?'<p class="cause">Kantutjämningen ändras när sidan laddas om.</p>':'')],
  help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
 };
 function openView(name){
@@ -39,7 +45,7 @@ document.querySelector('.panel').addEventListener('click',e=>{
   if(what==='pitch'){reversePitch=!reversePitch;try{localStorage.setItem('fagelbajs.upClimbs',reversePitch?'yes':'no');}catch{}}
   if(what==='sound'){muted=!muted;setAudio();}
   if(what==='camera')view();
-  if(what==='graphics'){lowGraphics=!lowGraphics;try{localStorage.setItem('fagelbajs.low',lowGraphics?'yes':'no');}catch{}density=lowGraphics?.7:Math.min(devicePixelRatio||1,1.5);fit();}
+  if(what==='graphics'){quality={auto:'high',high:'fast',fast:'auto'}[quality];try{localStorage.setItem('fagelbajs.quality',quality);}catch{}setFast(quality==='fast'||(quality==='auto'&&autoFast));}
   openView('settings');
  }
 });
@@ -96,7 +102,7 @@ function showTips(){
  const el=$('tip');if(el.textContent!==text){el.textContent=text;el.classList.toggle('on',!!text);}
 }
 // The picture is rendered at up to 1.5 device pixels. If the machine cannot keep up, the resolution steps down.
-let density=lowGraphics?.7:Math.min(devicePixelRatio||1,1.5),frameTime=1/60,lastTune=0;
+let density=topDensity(),frameTime=1/60,lastTune=0,judged=0;
 let pausedDrawn=false,quickFor=0;
 function fit(){
  pausedDrawn=false;width=innerWidth;height=innerHeight;
@@ -115,11 +121,13 @@ function frame(now){
  // Only flying counts: a menu or a hidden tab says nothing about how the game itself runs.
  if(state==='play'){
   frameTime=mix(frameTime,real,.04);quickFor=frameTime<1/52?quickFor+real:0;
-  const top=lowGraphics?.7:Math.min(devicePixelRatio||1,1.5);
+  const top=topDensity();
+  // Auto: watch the first seconds of flight. A computer that cannot keep up gets the fast graphics, now and on later visits.
+  if(quality==='auto'&&!fast&&!navigator.webdriver){judged+=real;if(judged>4&&frameTime>1/40){autoFast=true;try{localStorage.setItem('fagelbajs.autoFast','yes');}catch{}setFast(true);feedLine('SNABB GRAFIK PÅ');}}
   if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>.75){density=Math.max(.75,density-.25);lastTune=now;quickFor=0;fit();}
   else if(quickFor>8&&density<top){density=Math.min(top,density+.25);lastTune=now;quickFor=0;fit();}
  }
- if(state==='play'){for(let i=0;i<2&&state==='play';i++)simulate(dt/2);}
+ if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);} // people and traffic move once per frame, on the second step
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu')wingPhase+=dt*3;
  render(dt);showTips();requestAnimationFrame(frame);
