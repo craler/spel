@@ -21,7 +21,9 @@ function setCamera(dt){
  const shoulder=above?0:1.05;
  const focusAhead=above?forward*rise/(2*rise+fall):0;
  if(!rig)rig={yaw:a,pitch:desiredPitch,rise,ahead:focusAhead};
- rig.yaw=a;rig.pitch=mix(rig.pitch,desiredPitch,blend);rig.rise=mix(rig.rise,rise,blend);rig.ahead=mix(rig.ahead,focusAhead,blend);
+ rig.yaw=a;rig.pitch=mix(rig.pitch,desiredPitch,blend);
+ if(!above)rig.pitch=Math.min(rig.pitch,Math.atan2(rig.rise,back)+.24); // never tilt so far down that the bird leaves the top of the picture
+ rig.rise=mix(rig.rise,rise,blend);rig.ahead=mix(rig.ahead,focusAhead,blend);
  camera={x:bird.x+s*(rig.ahead-back)+c*shoulder,y:bird.y+rig.rise,z:bird.z+c*(rig.ahead-back)-s*shoulder,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch)};
  const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1);
  // The faster the dive, the harder the picture trembles and the wider the view.
@@ -74,7 +76,7 @@ function renderBird(){
   return [b.x+offset[0],b.y+offset[1],b.z+offset[2]];
  }
  // The head turns on the neck: into a turn, down at the target while spraying, and in small glances of its own.
- const hy=crash?0:b.lookYaw,hp=crash?0:b.lookPitch;
+ const hy=crash?.9*Math.sin(crash.age*7)*Math.exp(-crash.age*.7):b.lookYaw,hp=crash?-.5:b.lookPitch; // in a crash the head lolls
  function head([x,y,z]){
   const w=clamp((z-.2)/.07,0,1);if(!w)return [x,y,z];
   const a=hy*w,e=hp*w,py=y-.2,pz=z-.2,x1=x*Math.cos(a)+pz*Math.sin(a),z1=-x*Math.sin(a)+pz*Math.cos(a);
@@ -96,6 +98,7 @@ function renderBird(){
  // Separate overlapping tail feathers with a dark terminal band and pale tips.
  const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl;
  for(let k=-3;k<=3;k++){
+  if(hash(k,5,31)<(3-feathers)*.25)continue; // lost feathers leave gaps
   const t=k/3,root=[t*.055,.051,-.33],tx=t*spread,tz=-.73+.09*t*t;
   const end=[tx,.037-.029*t*t+.014*flutter(k,23+k),tz],w=.042;
   const mid=[mix(root[0],tx,.66),.049-.024*t*t,mix(root[2],tz,.66)];
@@ -120,12 +123,14 @@ function renderBird(){
   const patch=(pts,color)=>plain(pts.map(v=>wing(...v)),color);
   // Rounded secondary feathers broaden the trailing edge near the body.
   for(let i=0;i<6;i++){
+   if(hash(i,side+2,31)<(3-feathers)*.3)continue;
    const u=.047+i*.074;
    const f=.028*flutter(i+side,17+2.7*i);
    patch([[u-.034,.065],[u+.064,.063],[u+.093,-.204,f*.6],[u+.053,-.31,f],[u+.016,-.323,f],[u-.02,-.278,f*.8]],i===3||i===5?'#485675':i%2?'#899abd':'#afbad1');
   }
   // Staggered primaries end in distinct pointed tips.
   for(let i=0;i<6;i++){
+   if(hash(i,side+5,37)<(3-feathers)*.3)continue;
    const u=.35+i*.067,tip=.59+i*.091,sweep=-.275+i*.038;
    const f=.04*flutter(i-side,21+3.3*i)+.03*beat*(i-2.5)/2.5; // tips also splay with the beat
    patch([[u,.06],[u+.11,.044],[tip+.012,sweep+.043,f],[tip,sweep,f*1.2],[tip-.047,sweep-.016,f],[u-.035,-.105]],i%2?'#455072':'#596a8f');
@@ -235,7 +240,6 @@ const M={
  statue:(()=>{const m=new Mesh(),stone=rgb('#8e897e'),bronze=rgb('#3d6b5b');
   m.box(-.9,0,-.9,.9,2.3,.9,stone,0,0,0,.86).box(-1.15,0,-1.15,1.15,.35,1.15,stone);
   m.ball(0,3.55,0,.44,1.15,.38,bronze,0,0,0,8,6).ball(0,4.95,0,.27,.3,.27,bronze,0,0,0,8,5).tube(.5,3.9,5.5,.1,.1,.07,bronze,0,0,0,6).tube(-.2,2.3,3,0,.2,.16,bronze,0,0,0,6).tube(.2,2.3,3,0,.2,.16,bronze,0,0,0,6);return m.build();})(),
- food:new Mesh().ball(0,0,0,.34,.2,.34,rgb('#c9862e'),0,0,0,8,5).ball(0,.1,0,.2,.14,.2,rgb('#e8c98a'),0,0,0,8,4).build(),
 // Splatter shapes: an uneven blob with a few long rays (flat for the ground, upright for walls) and a drip.
  splat:splatMesh(false),splatWall:splatMesh(true),
  drip:(()=>{const m=new Mesh(),pts=[[-.5,0,0],[-.5,-.8,0]];
@@ -290,7 +294,7 @@ function splatMesh(upright){
 }
 M.cube.cull=true;
 const statics=[M.cube,M.tree,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
-const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.balloon,M.boat,M.ball,M.food];
+const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.box,M.big,M.balloon,M.boat,M.ball];
 const decals=[M.splat,M.splatWall,M.drip,M.disc];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 let staticKey='';
@@ -314,8 +318,8 @@ function buildStatics(){
   if(b.statue)M.statue.add(b.statue[0],0,b.statue[1],.6);
   if(b.type===3){ // canal: quay walls down to the water, bridge edges and railings, gabled roofs
    const {x,z}=b,stone=rgb('#5d5850'),iron=rgb('#1e2124');
-   for(const wx of [16.2,25.5]){M.cube.add(x+wx,WATER-.2,z+8,0,.3,1.7,26,stone);M.cube.add(x+wx-.05,0,z+8,0,.4,.28,26,stone);}
-   for(const wz of [7.6,34]){M.cube.add(x+16.5,WATER-.2,z+wz,0,9,1.7,.4,stone);M.cube.add(x+16.4,.0,z+wz+.1,0,9.2,.16,.2,stone);
+   for(const wx of [16.2,25.5]){M.cube.add(x+wx,WATER-.2,z+8,0,.3,.2-WATER,26,stone);M.cube.add(x+wx-.05,0,z+8,0,.4,.28,26,stone);}
+   for(const wz of [7.6,34]){M.cube.add(x+16.5,-.7,z+wz,0,9,.7,.4,stone);M.cube.add(x+16.4,.0,z+wz+.1,0,9.2,.16,.2,stone);
     M.cube.add(x+16.4,.95,z+wz+.14,0,9.2,.08,.1,iron);for(let n=0;n<=9;n++)M.cube.add(x+16.45+n,.16,z+wz+.15,0,.07,.8,.07,iron);}
    for(const [gx,gz,h,seed] of b.gables)M.gable.add(gx,h,gz,0,5.5,1.6+1.6*seed,5,rgb(seed<.5?'#5a2f26':'#3a3d42'));
   }
@@ -357,10 +361,9 @@ function buildMoving(){
     M.ball.add(c.x+Math.sin(c.yaw)*1.7+.25*Math.sin(t*5+i),1+t*3,c.z+Math.cos(c.yaw)*1.7,0,.25+.5*t,.25+.5*t,.25+.5*t,smoke);}
   }
  }
- for(const f of nearbyFood())M.food.add(f.x,f.y+.25+.12*Math.sin(elapsed*3+f.x),f.z,elapsed*1.5,1.5,1.5,1.5,WHITE,2);
  for(const o of thrown){
   const held=o.windup>0,x=o.x,y=o.y+(held?.5:0),z=o.z,k=held?.75:1.25,turn=o.spin+o.age*9;
-  if(o.kind==='net'||o.kind==='bignet'){if(held)M.ball.add(x,y,z,0,.2,.16,.2,rope);else drawNet(x,y,z,o.r||.3);continue;}
+  if(o.kind==='net'||o.kind==='bignet'){if(held)M.ball.add(x,y,z,0,.2,.16,.2,rope);else drawNet(x,y,z,o.r||.3,false,[o.vx,o.vy,o.vz]);continue;}
   if(o.kind==='shell'){M.ball.add(x,y,z,0,.3,.3,.3,rgb('#2a2c2e'),-1);for(let i=1;i<5;i++)M.ball.add(x-o.vx*i*.012,y-o.vy*i*.012,z-o.vz*i*.012,0,.2+.08*i,.2+.08*i,.2+.08*i,smoke);continue;}
   // Recognisable groceries, a size bigger than life, each leaving a short trail so it can be seen coming.
   if(o.kind==='tomato'){M.ball.add(x,y,z,0,.26*k,.23*k,.26*k,rgb('#d8261c'),-1);M.ball.add(x,y+.2*k,z,turn,.12*k,.05*k,.12*k,rgb('#3f8a2c'));}
@@ -376,7 +379,7 @@ function buildMoving(){
   const b=block(i,j);
   if(b.cleaner){const [cx,cz,top,s]=b.cleaner,y=2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s));M.box.add(cx-1.3,y-.14,cz-.5,0,2.6,.14,1.1,rgb('#8a8d90'));
    for(const sx of [-1.25,1.25])ribbon([cx+sx,y,cz+.5],[cx+sx,top,cz+.6],.025);}
-  if(b.type===3){const q=boatAt(b);M.boat.add(q.x,WATER+.04,q.z,q.yaw,1,1,1,rgb('#8a5a34'));}
+  if(b.type===3)for(const [n,q] of boatsAt(b).entries())M.boat.add(q.x,WATER+.04,q.z,q.yaw,1,1,1,rgb(n?'#2f5d7a':'#8a5a34'));
  }
  for(const q of balloons()){
   const paint=rgb(balloonPaint[Math.floor(q.hue*40)%balloonPaint.length]),sway=.2*Math.sin(elapsed*.5+q.hue*9);
@@ -425,7 +428,11 @@ function buildMoving(){
   const b=block(i,j);if(b.statue&&scored.has('st'+b.key)){M.ball.add(b.statue[0],5.2,b.statue[1],0,.36,.2,.36,splatCol);M.ball.add(b.statue[0],4.3,b.statue[1]+.3,0,.3,.5,.12,splatCol);}
  }
  // The hawk is drawn at its real size; a much larger copy goes only into the shadow map.
- if(hawk){drawHawk(dyn,1.9);hawkShadow();}
+ if(hawk){drawHawk(dyn,2.3);hawkShadow();}
+ for(const f of plume){ // loose feathers from a crash
+  const a=f.age*f.spin+f.seed,c=Math.cos(a)*.3,s=Math.sin(a)*.3,t=.09*Math.sin(a*1.7);
+  dyn.fan([[f.x-c,f.y-t,f.z-s],[f.x+s*.3,f.y+.03,f.z-c*.3],[f.x+c,f.y+t,f.z+s],[f.x-s*.3,f.y-.03,f.z+c*.3]],rgb(['#e8ecf2','#8792aa','#5b6788','#cfd6e2'][Math.floor(f.seed*7)%4]));
+ }
  renderBird();
  for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();
 }
@@ -436,22 +443,33 @@ function drawHawk(batch,k){
   const bx=x*cr+y*sr,by=y*cr-x*sr,py=by*cp+z*sp,pz=z*cp-by*sp;
   return [h.x+(bx*cy+pz*sy)*k,h.y+py*k,h.z+(-bx*sy+pz*cy)*k];
  };
- const top=rgb('#33251a'),mid=rgb('#57402a'),pale=rgb('#c8b089'),tail=rgb('#241a12'),beak=rgb('#e8b830');
+ const top=rgb('#3a2a1c'),mid=rgb('#5e4630'),pale=rgb('#d8c4a0'),bar=rgb('#7a5a3c'),dark=rgb('#1c140d'),yellow=rgb('#e8b830'),white=rgb('#efe8da');
  const tri=(a,b,c,col)=>batch.tri(w(a),w(b),w(c),col),t=h.tuck,flap=Math.sin(h.flap)*(1-t),tip=Math.sin(h.flap-.6)*(1-t);
- // Body: nose, shoulders, rump.
- const nose=[0,.02,.72],rump=[0,0,-.62],ring=[[0,.19,.05],[.2,0,.05],[0,-.15,.05],[-.2,0,.05]];
- for(let i=0;i<4;i++){const a=ring[i],b=ring[(i+1)%4],col=i===1||i===2?pale:top;tri(nose,a,b,col);tri(rump,b,a,col);}
- tri([0,.03,.72],[.05,-.02,.6],[0,-.06,.86],beak);tri([0,.03,.72],[-.05,-.02,.6],[0,-.06,.86],beak);
- // Tail fan with a dark band.
- for(let i=-2;i<2;i++){const a=i*.17*(1.3-t*.6),b=(i+1)*.17*(1.3-t*.6);tri([0,0,-.5],[a,0,-1.18],[b,0,-1.18],i%2?tail:mid);}
- // Wings: an arm, a hand that lags the beat, and spread finger feathers. They sweep back when it stoops.
+ // Body in three rings so it reads as chest, belly and rump, dark above and barred pale below.
+ const rings=[[.62,.1,.09],[.3,.2,.17],[0,.23,.19],[-.35,.17,.14],[-.6,.07,.06]].map(([z,rx,ry])=>[[0,ry,z],[rx,.02,z],[0,-ry*.85,z],[-rx,.02,z]]);
+ for(let n=1;n<rings.length;n++)for(let i=0;i<4;i++){const a=rings[n-1],b=rings[n],j=(i+1)%4,col=i===1||i===2?(n%2?pale:bar):top;tri(a[i],a[j],b[j],col);tri(a[i],b[j],b[i],col);}
+ // Head: pale brow, hooked yellow beak, dark eyes.
+ const nose=[0,.03,.86];for(let i=0;i<4;i++)tri(nose,rings[0][i],rings[0][(i+1)%4],i<1||i>2?white:top);
+ tri([0,.05,.84],[.05,-.01,.74],[0,-.09,.96],yellow);tri([0,.05,.84],[-.05,-.01,.74],[0,-.09,.96],yellow);
+ for(const sd of [-1,1])tri([sd*.085,.07,.7],[sd*.1,.03,.66],[sd*.09,.07,.62],dark);
+ // Tail: a fan of feathers with a dark band and a white tip.
+ for(let i=-3;i<3;i++){const s=.11*(1.5-t*.8),a=i*s,b=(i+1)*s;
+  tri([0,0,-.5],[a,0,-1.05],[b,0,-1.05],i%2?mid:top);tri([a,0,-1.05],[a*1.08,0,-1.2],[b*1.08,0,-1.2],dark);tri([a,0,-1.05],[b*1.08,0,-1.2],[b,0,-1.05],dark);
+  tri([a*1.08,0,-1.2],[a*1.1,0,-1.27],[b*1.1,0,-1.27],white);tri([a*1.08,0,-1.2],[b*1.1,0,-1.27],[b*1.08,0,-1.2],white);}
+ // Legs: tucked in flight, thrown forward with open talons in the stoop.
+ for(const sd of [-1,1]){const foot=[sd*.1,-.22-.1*t,mix(-.3,.45,t)];tri([sd*.08,-.12,-.1],[sd*.13,-.12,-.05],foot,yellow);
+  for(const c of [-.07,0,.07])tri(foot,[foot[0]+c,foot[1]-.09*t-.02,foot[2]+.1],[foot[0]+c*.5,foot[1],foot[2]+.03],dark);}
+ // Wings: arm, hand and six separate finger feathers; barred underneath. They sweep back when it stoops.
  for(const sd of [-1,1]){
-  const root1=[sd*.16,.06,.34],root2=[sd*.16,.06,-.32];
-  const el1=[sd*mix(.98,.5,t),.06+flap*.4,mix(.3,.05,t)],el2=[sd*mix(.98,.46,t),.06+flap*.4,mix(-.3,-.5,t)];
-  const hx=sd*mix(1.72,.62,t),hy=.06+flap*.4+tip*.5,hz=mix(-.1,-1.02,t);
+  const root1=[sd*.18,.07,.36],root2=[sd*.18,.07,-.34],lift=.07+flap*.42;
+  const el1=[sd*mix(1,.5,t),lift,mix(.34,.08,t)],el2=[sd*mix(1,.46,t),lift,mix(-.34,-.52,t)];
+  const hx=sd*mix(1.7,.62,t),hy=lift+tip*.5,hz=mix(-.08,-1,t);
   batch.fan([w(root1),w(el1),w(el2),w(root2)],top);
-  tri(el1,[hx,hy,hz+.22],el2,mid);tri(el2,[hx,hy,hz+.22],[hx*.86,hy,hz-.2],mid);
-  for(let f=0;f<4;f++){const s=f/3,fx=hx+sd*(.18-.1*s)*(1-t),fz=hz+.26-s*.5;tri([hx*.9,hy,hz+.2-s*.34],[fx,hy+tip*.12,fz],[hx*.9,hy,hz+.08-s*.34],tail);}
+  for(let n=0;n<4;n++){const a=n/4,b=(n+1)/4,p=q=>[mix(root2[0],el2[0],q),mix(root2[1],el2[1],q)-.004,mix(root2[2],el2[2],q)];
+   tri(p(a),p(b),[mix(root1[0],el1[0],b),lift*b+.066*(1-b),mix(.36,el1[2],b)-.3],n%2?bar:mid);}
+  tri(el1,[hx,hy,hz+.24],el2,mid);tri(el2,[hx,hy,hz+.24],[hx*.84,hy,hz-.22],mid);
+  for(let f=0;f<6;f++){const s=f/5,fx=hx+sd*(.3-.2*s)*(1-t),fz=hz+.3-s*.62;
+   tri([hx*.9,hy,hz+.24-s*.4],[fx,hy+tip*.14*(1-s),fz],[hx*.9,hy,hz+.13-s*.4],f%2?dark:top);}
  }
 }
 // The shadow caster: a flat, oversized bird-of-prey outline at the hawk's position. Because it lies level,
@@ -464,16 +482,6 @@ function hawkShadow(){
   for(let i=1;i<pts.length;i++)omen.tri([h.x,h.y,h.z],pts[i-1],pts[i],WHITE);
  }
 }
-// A compass-style arrow near the edge of the picture, pointing at something on the ground that is out of view.
-function groundArrow(pos,label){
- const m=point(pos);if(m&&m[0]>40&&m[0]<width-40&&m[1]>60&&m[1]<height-40)return;
- const dx=pos[0]-bird.x,dz=pos[2]-bird.z,s=Math.sin(bird.angle),c=Math.cos(bird.angle),right=dx*c-dz*s,ahead=dx*s+dz*c,l=Math.hypot(right,ahead)||1;
- const ux=right/l,uy=-ahead/l,reach=Math.min(width,height),x=width/2+ux*reach*.4,y=height*.5+uy*reach*.36;
- ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(uy,ux));
- ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-9,-11);ctx.lineTo(-4,0);ctx.lineTo(-9,11);ctx.closePath();
- ctx.lineJoin='round';ctx.lineWidth=4;ctx.strokeStyle='#0b0e14';ctx.stroke();ctx.fillStyle='#ffd24a';ctx.fill();ctx.restore();
- text(label+' '+Math.round(l)+' m',x,y+28,12,'#ffd24a','center',800);
-}
 // A thin strip between two points that always faces the camera.
 function ribbon(p,q,w,col){
  const ax=q[0]-p[0],ay=q[1]-p[1],az=q[2]-p[2],ex=camera.x-p[0],ey=camera.y-p[1],ez=camera.z-p[2];
@@ -481,10 +489,21 @@ function ribbon(p,q,w,col){
  dyn.fan([[p[0]-sx,p[1]-sy,p[2]-sz],[p[0]+sx,p[1]+sy,p[2]+sz],[q[0]+sx,q[1]+sy,q[2]+sz],[q[0]-sx,q[1]-sy,q[2]-sz]],rope);
 }
 // A net: a rope grid that sags towards its weighted corners (or wraps down around a snared bird).
-function drawNet(x,y,z,r,wrap){
- const n=5,at=(i,j)=>{const u=i/n*2-1,v=j/n*2-1,d=(u*u+v*v)/2;return [x+u*r,y-(wrap?1.1:.45)*r*d,z+v*r];};
- for(let i=0;i<=n;i++)for(let j=0;j<n;j++){ribbon(at(i,j),at(i,j+1),.02+.012*r,rope);ribbon(at(j,i),at(j+1,i),.02+.012*r,rope);}
- for(const [i,j] of [[0,0],[0,n],[n,0],[n,n]]){const c=at(i,j);M.ball.add(c[0],c[1],c[2],0,.07+.03*r,.07+.03*r,.07+.03*r,rgb('#3a3d40'));}
+function drawNet(x,y,z,r,wrap,dir){
+ // In flight the net faces the way it travels, opened like a parachute with its weighted corners leading.
+ let u=[1,0,0],v=[0,0,1],f=[0,-1,0];
+ if(dir){
+  const l=Math.hypot(...dir)||1;f=dir.map(q=>q/l);
+  u=[f[2],0,-f[0]];const ul=Math.hypot(u[0],u[2])||1;u=[u[0]/ul,0,u[2]/ul];
+  v=[f[1]*u[2]-f[2]*u[1],f[2]*u[0]-f[0]*u[2],f[0]*u[1]-f[1]*u[0]];
+ }
+ const n=r>2?8:5,bag=wrap?1.1:dir?-.55:.45;
+ const at=(i,j)=>{const a=i/n*2-1,b=j/n*2-1,d=(a*a+b*b)/2-.5;return [x+(u[0]*a+v[0]*b)*r-f[0]*bag*r*d,y+(u[1]*a+v[1]*b)*r-(dir?f[1]:1)*bag*r*d,z+(u[2]*a+v[2]*b)*r-f[2]*bag*r*d];};
+ for(let i=0;i<=n;i++)for(let j=0;j<n;j++){
+  const edge=i===0||i===n,thick=(edge?.05:.018)+.01*r;
+  ribbon(at(i,j),at(i,j+1),thick,rope);ribbon(at(j,i),at(j+1,i),thick,rope);
+ }
+ for(const [i,j] of [[0,0],[0,n],[n,0],[n,n]]){const c=at(i,j),q=.08+.04*r;M.ball.add(c[0],c[1],c[2],0,q,q,q,rgb('#2c2f33'),-1);}
 }
 function drawThreats(){
  let danger=false;
@@ -556,16 +575,6 @@ function render(dt=1/60){
  ctx.clearRect(0,0,width,height);
  if(!crash&&state!=='menu'){
   drawThreats();
-  // Food markers, most visible when the tank is running low.
-  const hungry=tank<.5;let foodInView=false;
-  for(const f of nearbyFood()){
-   const far=Math.hypot(f.x-bird.x,f.z-bird.z);if(far>(hungry?120:55))continue;
-   const m=point([f.x,f.y+1.5+.15*Math.sin(elapsed*3+f.x),f.z]);if(!m||m[0]<0||m[0]>width||m[1]<0||m[1]>height)continue;
-   foodInView=true;
-   const r=hungry?9:6;ctx.save();ctx.translate(...m);ctx.globalAlpha=hungry?1:.7*clamp(1.6-far/40,0,1);ctx.beginPath();ctx.moveTo(0,r);ctx.lineTo(r,-r*.6);ctx.lineTo(-r,-r*.6);ctx.closePath();
-   ctx.lineWidth=3;ctx.strokeStyle='#4a2f12';ctx.stroke();ctx.fillStyle='#ffd24a';ctx.fill();ctx.restore();
-  }
-  if(tank<.3&&!foodInView){const f=nearestFood();if(f)groundArrow([f.x,f.y,f.z],'MAT');}
   // Gold stars mark the targets that are worth going out of your way for.
   const star=(x,y,z)=>{const far=Math.hypot(x-bird.x,z-bird.z);if(far>150)return;const m=point([x,y,z]);if(m)text('★',m[0],m[1],14+7*clamp(1-far/90,0,1),'#ffd24a');};
   for(const h of people)if((h.star||h.base>=60)&&!scored.has(h.id))star(h.x,h.y+2.9,h.z);
@@ -594,6 +603,12 @@ function render(dt=1/60){
   drawRing(aim,R,target);
   const centre=point(aim);if(centre){drawSight(centre,target);drawHitmarker(centre);}
   drawWorldText();drawFeed();
+  if(tank<.995||emptyTank){ // how much is left, right under the bird where the eyes already are
+   const m=point([bird.x,bird.y-.9,bird.z]);
+   if(m){const wide=64,x=m[0]-wide/2,y=Math.min(height-30,m[1]+14);
+    ctx.fillStyle='#0b0e14cc';ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,x-2,y-2,wide+4,10,5);ctx.fill();
+    ctx.fillStyle=tank<.3||emptyTank?'#ffd24a':'#f4f1e6';ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,x,y,Math.max(3,wide*tank),6,3);ctx.fill();}
+  }
   // Streaks at the edges of the picture sell the speed of a dive.
   const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-12)/36,0,1);
   if(rush>.15){
@@ -606,7 +621,6 @@ function render(dt=1/60){
   }
   if(drops.length||(stains.length&&elapsed-stains.at(-1).t<1.2))impactView(aim,R);
  }
- if(crash)crashFeathers();
  // HUD
  const lo=thresholds[wanted-1]||0,hi=thresholds[wanted],fill=wanted===maxWanted?100:Math.round(100*(points-lo)/(hi-lo));
  const meter=$('meter');if(meter.getAttribute('aria-valuenow')!==String(fill)){

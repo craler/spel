@@ -3,50 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111827">
-  <title>Spelhörnan</title>
+  <meta name="theme-color" content="#10141b">
+  <title>Kornhalls spelhörna</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #111827; color: #f9fafb; font: 17px/1.6 system-ui, sans-serif; }
-    main { width: min(900px, 100%); margin: auto; padding: 72px 24px; }
-    .label { color: #a3e635; font-size: 13px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
-    h1 { margin: 12px 0; font-size: clamp(40px, 8vw, 64px); line-height: 1.1; letter-spacing: -.04em; }
-    .intro { color: #cbd5e1; margin-bottom: 40px; }
-    #games { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 18px; }
-    .card { display: block; padding: 26px; border: 1px solid #334155; border-radius: 18px; background: #1e293b; color: inherit; text-decoration: none; }
-    a.card:hover { border-color: #a3e635; }
-    a.card:focus-visible { outline: 3px solid #a3e635; outline-offset: 5px; }
-    h2 { margin: 0 0 10px; font-size: 23px; }
-    .card p { color: #cbd5e1; margin: 0; }
-    .play { display: inline-block; margin-top: 24px; color: #a3e635; font-weight: 750; }
-    footer { margin-top: 44px; color: #94a3b8; font-size: 14px; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(1200px 600px at 80% -10%, #2b3a63 0%, transparent 60%), #10141b; color: #f4f6fa; font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { width: min(980px, 100%); margin: auto; padding: 64px 24px 40px; }
+    .label { color: #ffd24a; font-size: 12px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+    h1 { margin: 10px 0 12px; font-size: clamp(42px, 8vw, 76px); font-weight: 900; font-style: italic; line-height: .98; letter-spacing: -.035em; }
+    .intro { max-width: 34em; margin: 0 0 44px; color: #c4ccd8; }
+    #games { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; }
+    .card { display: flex; flex-direction: column; overflow: hidden; border-radius: 20px; background: #1a2130; box-shadow: 0 0 0 1px #ffffff1a, 0 18px 40px #0006; color: inherit; text-decoration: none; transition: transform .15s, box-shadow .15s; }
+    a.card:hover { transform: translateY(-4px); box-shadow: 0 0 0 2px #ffd24a, 0 24px 50px #0008; }
+    a.card:focus-visible { outline: 3px solid #ffd24a; outline-offset: 4px; }
+    .art { display: block; width: 100%; aspect-ratio: 16 / 9; }
+    .body { padding: 20px 22px 22px; }
+    h2 { margin: 0 0 6px; font-size: 26px; font-weight: 900; font-style: italic; letter-spacing: -.02em; }
+    .card p { margin: 0; color: #c4ccd8; font-size: 15.5px; }
+    .play { display: inline-block; margin-top: 16px; padding: 9px 16px; border-radius: 10px; background: #ffd24a; color: #10141b; font-weight: 900; }
+    .soon { display: grid; place-items: center; min-height: 220px; border: 2px dashed #ffffff26; border-radius: 20px; color: #8d97a5; text-align: center; padding: 24px; }
+    footer { margin-top: 48px; color: #8d97a5; font-size: 14px; }
   </style>
 </head>
 <body>
   <main>
-    <div class="label">Egna idéer. Egna spel.</div>
-    <h1>Spelhörnan 🎮</h1>
-    <p class="intro">Välkommen till mina spel! Välj ett spel och kör direkt i webbläsaren.</p>
-    <section id="games" aria-label="Alla spel">
-      <div class="card" id="empty">
-        <h2>Första spelet är på gång!</h2>
-        <p>Här kommer mina spel att dyka upp. Kom tillbaka snart!</p>
-      </div>
-    </section>
+    <div class="label">Egna idéer · egna spel</div>
+    <h1>Kornhalls spelhörna</h1>
+    <p class="intro">Spel vi har hittat på själva. Välj ett och kör direkt i webbläsaren – inget att installera.</p>
+    <section id="games" aria-label="Alla spel"></section>
     <footer>Skapat med fantasi och hjälp av AI.</footer>
   </main>
   <script>
-    // Lägg nya spel i egna mappar och lägg till dem här.
-    // Exempel: { title: 'Rymdäventyret', description: 'Undvik meteoriter!', url: './spel/rymdaventyret/' }
+    // Lägg nya spel i egna mappar och lägg till dem här. "art" är en liten SVG-bild till kortet.
     const games = [
-      { title: 'Fågelbajs', description: 'Flyg en duva över staden, pricka folk och bilar, bygg kaos – och klara dig undan frukten och höken.', url: './fagelbajs/' }
+      { title: 'Duv-Diarré', url: './fagelbajs/',
+        description: 'Flyg en duva över staden och pricka folk, bilar och guldstjärnor. Klara dig undan frukten, näten, höken och stridsvagnarna.',
+        art: `<svg class="art" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b5ea8"/><stop offset="1" stop-color="#f0b98a"/></linearGradient></defs>
+          <rect width="320" height="180" fill="url(#sky)"/>
+          <circle cx="262" cy="46" r="20" fill="#ffe9a8"/>
+          <g fill="#2a3350"><rect x="0" y="112" width="46" height="68"/><rect x="40" y="92" width="38" height="88"/><rect x="74" y="122" width="52" height="58"/><rect x="198" y="104" width="44" height="76"/><rect x="238" y="126" width="40" height="54"/><rect x="274" y="96" width="46" height="84"/></g>
+          <g fill="#ffd98a"><rect x="48" y="102" width="6" height="8"/><rect x="60" y="118" width="6" height="8"/><rect x="208" y="116" width="6" height="8"/><rect x="286" y="110" width="6" height="8"/><rect x="300" y="128" width="6" height="8"/><rect x="12" y="126" width="6" height="8"/></g>
+          <rect x="0" y="160" width="320" height="20" fill="#1b2136"/>
+          <g transform="translate(150 62)">
+            <path d="M-58 -6 Q-30 -30 0 -4 Q30 -30 58 -6 Q30 -10 6 8 L-6 8 Q-30 -10 -58 -6Z" fill="#8792aa"/>
+            <ellipse cx="0" cy="6" rx="13" ry="20" fill="#cfd6e2"/><circle cx="0" cy="-14" r="9" fill="#5b6788"/>
+            <path d="M0 -8 l5 6 h-10z" fill="#e8b830"/><circle cx="-4" cy="-16" r="1.6" fill="#fff"/><circle cx="4" cy="-16" r="1.6" fill="#fff"/>
+          </g>
+          <g fill="#f6f3e8"><ellipse cx="150" cy="96" rx="4" ry="7"/><ellipse cx="152" cy="116" rx="3.4" ry="6"/><ellipse cx="149" cy="134" rx="3" ry="5"/>
+            <path d="M150 148c8 0 20 4 22 9s-10 6-22 6-24-1-22-6 14-9 22-9z"/></g>
+          <g fill="#ffd24a"><path d="M40 60l3 7 7 .6-5.4 4.6 1.8 7-6.4-4-6.4 4 1.8-7L30 67.600l7-.6z"/><path d="M286 70l2 5 5 .4-4 3.300 1.300 5-4.300-2.800-4.300 2.800 1.300-5-4-3.300 5-.4z"/></g>
+        </svg>` }
     ];
     const list = document.querySelector('#games');
-    if (games.length) document.querySelector('#empty').remove();
     for (const game of games) {
       const card = document.createElement('a');
       card.className = 'card';
       card.href = game.url;
+      card.innerHTML = game.art;
+      const body = document.createElement('div');
+      body.className = 'body';
       const title = document.createElement('h2');
       title.textContent = game.title;
       const description = document.createElement('p');
@@ -54,9 +71,14 @@
       const play = document.createElement('span');
       play.className = 'play';
       play.textContent = 'Spela →';
-      card.append(title, description, play);
+      body.append(title, description, play);
+      card.append(body);
       list.append(card);
     }
+    const soon = document.createElement('div');
+    soon.className = 'soon';
+    soon.textContent = 'Nästa spel är på gång…';
+    list.append(soon);
   </script>
 </body>
 </html>

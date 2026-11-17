@@ -18,7 +18,7 @@ function block(i,j){
  // Heights follow whole 3.1 m storeys so the window rows line up with the roof.
  const storeys=(n,lo,hi)=>3.1*(lo+Math.floor(R(n)*(hi-lo+1)))+.8;
  const add=(a,c,w,d,h,n)=>b.blds.push([x+a,z+c,w,d,h,Math.floor(R(n)*wallPaint.length),R(n+1)]);
- const food=(fx,fy,fz)=>b.food.push({id:key+':'+b.food.length,x:x+fx,y:fy,z:z+fz});
+ const food=()=>{}; // the eat-to-reload mechanic is gone; tables and picnics are just scenery and targets now
  if(type===0){
   const v=Math.floor(R(5)*6);
   if(v===0){add(10,10,11,10,storeys(3,1,8),30);add(24,22,9,12,storeys(6,2,12),32);
@@ -71,7 +71,7 @@ function block(i,j){
 }
 function buildings(i,j){return block(i,j).blds;}
 // The canal runs down the middle of its blocks, a storey below street level. The cross streets pass over it as bridges.
-const WATER=-1.5;
+const WATER=-2.6;
 function inCanal(x,z){
  const i=Math.floor(x/tile);if(blockType(i,Math.floor(z/tile))!==3)return false;
  const qx=x-i*tile,qz=wrap(z,tile);return qx>16.5&&qx<25.5&&qz>8&&qz<34;

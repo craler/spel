@@ -8,13 +8,13 @@ function controlsPicture(){
  return '<div class="keyboard"><div><div class="row">'+keycap('W',reversePitch?'stig':'sjunk')+'</div><div class="row">'+keycap('A','vänster')+keycap('S',reversePitch?'sjunk':'stig')+keycap('D','höger')+'</div></div>'+
   '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div></div><p class="hint">Pilarna fungerar också · C byter vy · Esc pausar</p>';
 }
-function homeMenu(){panel('Fågelbajs',controlsPicture()+(best?'<p class="best">Rekord '+number(best)+' · '+rankOf(best)+'</p>':''),'Nytt spel →');}
+function homeMenu(){panel('Duv-Diarré',controlsPicture()+(best?'<p class="best">Rekord '+number(best)+' · '+rankOf(best)+'</p>':''),'Nytt spel →');}
 const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><button data-set="'+id+'">'+value+'</button></div>';
 const views={
  scores:()=>['Topplista',scores.length?scoreList():'<p class="cause">Inga flygningar än.</p>'],
  feats:()=>['Bedrifter',featList(true)],
- settings:()=>['Inställningar',setting('Höjdroder',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',above?'Ovanifrån':'Bakom','camera')+setting('Grafik',lowGraphics?'Snabb':'Auto','graphics')],
- help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Ät</b> vid de gula pilarna när bajset tar slut.</li><li><b>Tre fjädrar.</b> Frukt och hökar tar en, väggar tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
+ settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',above?'Ovanifrån':'Bakom','camera')+setting('Grafik',lowGraphics?'Snabb':'Auto','graphics')],
+ help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
 };
 function openView(name){
  const [title,body]=views[name](),v=$('view');
@@ -72,8 +72,7 @@ const tips=[
  [1,7,'A/D svänger · S/W ändrar höjden','Dra spaken för att styra'],
  [7,13,'Håll Space för att bajsa','Håll BAJSA'],
  [13,20,'Shift = störtdyk. Lågt och i dyk ger dubbelt','DYK = störtdyk. Lågt och i dyk ger dubbelt'],
- [20,28,'Slut på bajs? Ät vid de gula pilarna','Slut på bajs? Ät vid de gula pilarna'],
- [28,35,'Guldstjärnor = extra poäng','Guldstjärnor = extra poäng']
+ [20,27,'Guldstjärnor = extra poäng','Guldstjärnor = extra poäng']
 ];
 function showTips(){
  const tip=state==='play'&&flights<=3?tips.find(t=>elapsed>=t[0]&&elapsed<t[1]):null,text=tip?tip[touchMode?3:2]:'';

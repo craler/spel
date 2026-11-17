@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="sv">
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><title>Fågelbajs • Spelhörnan</title>
-<link rel="stylesheet" href="./style.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><title>Duv-Diarré • Kornhalls spelhörna</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg"><link rel="stylesheet" href="./style.css">
 <body class="menu">
 <canvas id="world" aria-label="Flygspel"></canvas><canvas id="overlay2d" aria-hidden="true"></canvas>
 <div id="dread"></div><div id="flash"></div>
@@ -9,17 +9,17 @@
 <div id="top" class="hud"><div id="stars" aria-label="Efterlysningsnivå">☆☆☆☆☆</div>
  <div id="meter" role="progressbar" aria-label="Kaosmätare" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="meter-fill"></div></div><small id="meter-label">KAOS 0 / 100</small></div>
 <div id="clock" class="hud"><b id="time">60</b><small id="time-label">SEKUNDER KVAR</small></div>
-<div id="status" class="hud"><div id="feathers" aria-label="Fjädrar kvar"><i></i><i></i><i></i></div>
+<div id="status" class="hud"><small>FJÄDRAR = LIV</small><div id="feathers" aria-label="Fjädrar kvar, ett liv per fjäder"><svg viewBox="0 0 24 44"><path d="M12 2C4 9 3 24 12 33 21 24 20 9 12 2Z"/><path class="q" d="M12 6V43M12 14l-5-4M12 14l5-4M12 21l-6-4M12 21l6-4M12 28l-5-4M12 28l5-4"/></svg><svg viewBox="0 0 24 44"><path d="M12 2C4 9 3 24 12 33 21 24 20 9 12 2Z"/><path class="q" d="M12 6V43M12 14l-5-4M12 14l5-4M12 21l-6-4M12 21l6-4M12 28l-5-4M12 28l5-4"/></svg><svg viewBox="0 0 24 44"><path d="M12 2C4 9 3 24 12 33 21 24 20 9 12 2Z"/><path class="q" d="M12 6V43M12 14l-5-4M12 14l5-4M12 21l-6-4M12 21l6-4M12 28l-5-4M12 28l5-4"/></svg></div>
  <div id="reserve"><span id="tank-label">BAJS</span><div id="tank"><i id="tank-fill"></i></div></div></div>
 <div class="tools"><button id="camera">Vy: bakom</button><button id="audio">Ljud på</button><button id="pause">Paus</button></div>
 <div id="feedback"></div><div id="tip"></div>
 <div id="touch" hidden><div id="stick"><div id="knob"></div></div><button id="t-dive">DYK</button><button id="t-fire">BAJSA</button></div>
 <div id="crash-banner" hidden>wasted</div>
-<div id="overlay"><section class="panel"><small class="kicker">SPELHÖRNAN / 01</small><h1 id="title">Fågelbajs</h1>
+<div id="overlay"><section class="panel"><small class="kicker">KORNHALLS SPELHÖRNA / 01</small><h1 id="title">Duv-Diarré</h1>
  <div id="brief"></div><div id="view" hidden></div>
  <button id="go" autofocus>Nytt spel →</button>
  <nav id="nav"><button data-view="scores">Topplista</button><button data-view="feats">Bedrifter</button><button data-view="settings">Inställningar</button><button data-view="help">Så spelar du</button></nav>
- <a href="../">Till Spelhörnan</a></section></div>
+ <a href="../">Till Kornhalls spelhörna</a></section></div>
 <script src="./js/core.js"></script><script src="./js/audio.js"></script><script src="./js/city.js"></script><script src="./js/world.js"></script>
 <script src="./js/game.js"></script><script src="./js/gl.js"></script><script src="./js/render.js"></script><script src="./js/main.js"></script>
 </html>

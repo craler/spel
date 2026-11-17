@@ -25,7 +25,7 @@ function finish(heading,cause,action){
  const listed=points>0&&(scores.length<10||points>scores.at(-1).points);
  const row=(k,v)=>'<div><dt>'+k+'</dt><dd>'+v+'</dd></div>',mins=Math.floor(elapsed/60),secs=String(Math.floor(elapsed%60)).padStart(2,'0');
  panel(heading,'<p class="cause">'+cause+'</p><p class="score">'+number(points)+'<small> poäng</small>'+(record?'<em>NYTT REKORD</em>':'')+'</p>'+
-  '<dl class="stats">'+row('Stjärnor','★'.repeat(wanted)||'–')+row('Träffar',hits)+row('Bilar',carsHit)+row('Bästa kombo','×'+bestCombo)+row('Snodd mat',foodEaten)+row('I luften',mins+':'+secs)+'</dl>'+
+  '<dl class="stats">'+row('Stjärnor','★'.repeat(wanted)||'–')+row('Träffar',hits)+row('Bilar',carsHit)+row('Bästa kombo','×'+bestCombo)+row('Stjärnmål',run.stars)+row('I luften',mins+':'+secs)+'</dl>'+
   '<p class="rank">Titel: <b>'+rankOf(points)+'</b>'+(record?'':' · rekord '+number(best))+'</p>'+
   (listed?'<form id="save"><label for="name">Du kom in på topplistan! Skriv ditt namn:</label><div><input id="name" maxlength="12" autocomplete="off" spellcheck="false" value="'+esc(lastName)+'"><button>Spara</button></div></form>':'')+
   '<div id="board">'+(scores.length?scoreList(-1,5):'')+'</div>'+featList(),action);
@@ -86,7 +86,7 @@ function updateThreats(dt){
   const flat=Math.hypot(o.x-bird.x,o.z-bird.z),dy=Math.abs(o.y-bird.y);
   if(o.kind==='net'||o.kind==='bignet'){
    o.r=o.kind==='net'?Math.min(1.6,.3+o.age*2.8):Math.min(4.6,1.4+o.age*14);
-   if(flat<o.r&&dy<(o.kind==='net'?1:1.7)){snare(o.kind==='net'?1.4:2.3);return false;}
+   if(Math.hypot(flat,dy)<o.r*(o.kind==='net'?1:.9)){snare(o.kind==='net'?1.4:2.3);return false;}
    return true;
   }
   if(Math.hypot(flat,dy)<.83){
@@ -124,7 +124,7 @@ const feats=[
  ['alarm','Billarmet','Sätt igång tre billarm på en flygning',()=>run.alarms>=3],
  ['statue','Kulturfiende','Pricka statyn på torget',()=>run.statue>=1],
  ['wedding','Objuden gäst','Pricka både bruden och brudgummen',()=>run.wedding>=2],
- ['food','Gourmand','Sno mat fem gånger på en flygning',()=>foodEaten>=5],
+ ['stars','Stjärnjägaren','Pricka fem stjärnmål på en flygning',()=>run.stars>=5],
  ['hawk','Hökdansen','Få höken att missa',()=>run.dodges>=1],
  ['max','Maxkaos','Nå fem stjärnor',()=>wanted>=5],
  ['tank','Pansarknäckare','Slå ut en stridsvagn',()=>run.tanks>=1],
@@ -187,11 +187,12 @@ function award(base,label,p,targetY=0,pos){
  hits++;feedLine(label,amount,tags.join(' · '));
  if(pos)popups.push({x:pos[0],y:pos[1],z:pos[2],text:'+'+amount,t:elapsed,gold:mult>1});
  marker=elapsed;markerGold=mult>1;hitTick(base>=25||mult>1,1+.035*Math.min(10,combo-1));
- if(base>=40){slowmo=.35;shake=Math.max(shake,.35);} // the big ones get a beat of slow motion
+ if(base>=30&&p)run.stars++;
+ if(base>=40&&p){slowmo=.35;shake=Math.max(shake,.35);} // the bird's own big hits get a beat of slow motion
  addPoints(amount);
 }
 function reset(){
- resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;brokeUmb.clear();eaten.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0};tanks=[];tankWait=0;
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  rig=null;crash=null;document.body.classList.remove('crashed');$('crash-banner').hidden=true;
@@ -235,8 +236,8 @@ function drop(){
   p.vx+=Math.cos(bird.angle)*lateral+Math.cos(fan)*wide;p.vz+=-Math.sin(bird.angle)*lateral+Math.sin(fan)*wide;p.vy+=.32*Math.sin(n*1.4);
  }
  p.big=big;p.r=big?.19:.055+.05*hash(n,2,6);p.dark=n%4===0;
- p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.5;
- if(tank<1/60-1e-8){emptyTank=true;banner('SLUT PÅ BAJS','Ät vid de gula pilarna','hurt',2);}
+ p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.3;
+ if(tank<1/60-1e-8){emptyTank=true;banner('SLUT PÅ BAJS','Det fylls på av sig självt','hurt',1.6);}
  for(let k=0;k<2;k++){const a=(n*2+k)*2.39996,drift=.65+hash(n,k,1)*1.5;
   mist.push({x:p.x,y:p.y,z:p.z,vx:p.vx+Math.cos(a)*drift,vy:p.vy*.85+Math.sin(a),vz:p.vz+Math.sin(a)*drift,age:0,life:.65+hash(k,n,3)*.8});}
 }
@@ -247,7 +248,10 @@ function simulate(dt){
  if(b.snare>0){b.snare-=dt*(pitch>0?1.6:1);steer*=.3;pitch=Math.min(pitch,0);b.vy-=13*dt;b.speed=Math.max(9,b.speed-9*dt);}
  if(!dive&&b.fold>.65&&b.wasDiving)tone(200,430,.25,'sine',.03);
  // The wings fold and open over a moment, not instantly.
- b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*(dive?4.5:3)));b.bank=mix(b.bank,steer,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold);
+ b.wasDiving=dive;b.fold=mix(b.fold,+dive,1-Math.exp(-dt*(dive?4.5:3)));
+ // Every lost feather makes the bird harder to fly: it rolls about, turns slower and climbs worse.
+ const ragged=3-feathers,wobble=ragged*(.16*Math.sin(elapsed*4.7)+.1*Math.sin(elapsed*11.3));
+ b.bank=mix(b.bank,steer+wobble,1-Math.exp(-dt*5));b.angle+=b.bank*dt*(1.52-.44*b.fold)*(1-.12*ragged);
  // Ramp into the dive. A short tap makes a small range adjustment.
  const desiredSteep=pitch<0?1:0;
  b.steep+=clamp(desiredSteep-b.steep,-dt*(pitch>0?2.4:1.45),dt*1.1);
@@ -256,7 +260,7 @@ function simulate(dt){
  const targetClimb=pitch>0&&!dive?1:0;
  b.climb=mix(b.climb,targetClimb,1-Math.exp(-dt*(targetClimb?.92:2.7)));
  const stallSoftness=clamp((b.climb-.87)/.13,0,1);
- const wantedVy=19*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82;
+ const wantedVy=ragged*1.4*Math.sin(elapsed*6.1)+(19-2.6*ragged)*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82;
  // Tucked, the bird simply falls: gravity builds the speed up against air drag, towards about 50 m/s.
  // Opening the wings turns that fall into level flight in a smooth pull-out.
  const acceleration=dive?-27*b.fold-.53*b.vy:(wantedVy-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
@@ -275,6 +279,11 @@ function simulate(dt){
  b.x+=Math.sin(b.angle)*forwardSpeed()*dt;b.z+=Math.cos(b.angle)*forwardSpeed()*dt;
  trafficFactor=mix(trafficFactor,1+.61*wanted,1-Math.exp(-dt*1.5));trafficClock+=dt*trafficFactor;traffic();
  if(solid(b.x,b.y,b.z,.28)){startCrash();return;}
+ for(let i=Math.floor(b.x/tile)-1;i<=Math.floor(b.x/tile)+1;i++)for(let j=Math.floor(b.z/tile)-1;j<=Math.floor(b.z/tile)+1;j++)for(const [tx,tz,s,seed] of block(i,j).trees){
+  const dx=b.x-tx,dz=b.z-tz;if(Math.abs(dx)>4.5||Math.abs(dz)>4.5)continue;
+  const cy=4.3*s*(.9+.25*seed),d=Math.hypot(dx,b.y-cy,dz)||1; // the crown is roughly a ball; the trunk a post
+  if(d<2.05*s+.2||(Math.hypot(dx,dz)<.3*s+.25&&b.y<2.6*s)){startCrash({n:[dx/d,(b.y-cy)/d,dz/d],depth:0,cause:'Trädet vann.'});return;}
+ }
  if(b.y<3){const tank=tanks.find(t=>tankContact(t,b.x,b.y,b.z,.28));if(tank){startCrash({n:[0,1,0],depth:0,vehicle:true,cause:'Stridsvagnen vann.'});return;}}
  for(const q of balloons()){ // hot-air balloons are solid
   const d=Math.hypot(b.x-q.x,b.y-q.y-7,b.z-q.z);
@@ -288,7 +297,7 @@ function simulate(dt){
  elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort);
  if(b.effort>.5&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
  if(held('Space'))drop();
- gather(dt);updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateTanks(dt);updateFood();if(state!=='play')return;
+ gather(dt);updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateTanks(dt);if(state!=='play')return;
  const floating=balloons();
  drops=drops.filter(p=>{
   const prev=p.age;p.age+=dt;const end=p.end;
@@ -392,6 +401,9 @@ function startCrash(surface=contact(.28)){
   spin:clamp(force*.20,2,11)*(surface.n[1]?1:-1),rollSpeed:side*clamp(force*.14,1.2,7),
   pitch:0,roll:0,wings:[-1,1].map(dir=>({arm,wrist,tip:wrist,vt:dir*side*force*.31,va:dir*side*force*.21,vw:-dir*side*force*.25}))};
  if(!rig)setCamera(1/60);
+ slowmo=.7;shake=1.2; // a beat of slow motion on impact, and a cloud of feathers
+ for(let n=0;n<34;n++){const a=Math.random()*tau,u=Math.random()*2-1,q=Math.sqrt(1-u*u),v=2+6*Math.random();
+  plume.push({x:b.x,y:b.y,z:b.z,vx:Math.cos(a)*q*v+Math.sin(b.angle)*speed*.25,vy:u*v+2,vz:Math.sin(a)*q*v+Math.cos(b.angle)*speed*.25,age:0,spin:6+9*Math.random(),seed:Math.random()*tau});}
  bounce(surface,true);state='crash';keys.clear();crashVoice=voice(0,.8);if(!crashVoice)tone(155,35,.34,'triangle');document.body.classList.add('crashed');
 }
 // A wingtip hitting pavement or a facade kicks the wrist and the shoulder
@@ -410,7 +422,16 @@ function tipContact(w,side,c){
  }
  w.touching=atSurface;
 }
+let plume=[];
+// Loose feathers: thrown out fast, stopped by the air almost at once, then rocking slowly down.
+function updatePlume(dt){
+ for(const f of plume){
+  f.age+=dt;const drag=Math.exp(-dt*3);f.vx*=drag;f.vz*=drag;f.vy=mix(f.vy,-1.1,1-Math.exp(-dt*2.5));
+  f.x+=(f.vx+.9*Math.sin(f.age*2.3+f.seed))*dt;f.y=Math.max(.05,f.y+f.vy*dt);f.z+=(f.vz+.9*Math.cos(f.age*1.9+f.seed))*dt;
+ }
+}
 function advanceCrash(dt){
+ updatePlume(dt);
  const c=crash;
  c.age+=dt;
  // Wall clock controls the titles; gravity and the loose joints use slowed time.

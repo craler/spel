@@ -21,11 +21,12 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offse
 #meter{height:8px;margin:7px 0 5px;border-radius:99px;background:#0009;box-shadow:0 0 0 1px #fff3;overflow:hidden}
 #meter-fill{width:0;height:100%;border-radius:99px;background:linear-gradient(90deg,#f4a644,#ffe363);transition:width .18s ease-out}
 #status{left:20px;bottom:18px}
-#feathers{display:flex;gap:8px;margin:0 0 11px 3px}
-#feathers i{width:13px;height:30px;border-radius:70% 70% 45% 45%/75% 75% 25% 25%;background:linear-gradient(100deg,#fff 46%,#c9ced6 50%,#fff 54%);box-shadow:0 2px 6px #0008;transform:rotate(16deg);transition:opacity .3s,transform .3s}
-#feathers i.lost{opacity:.2;transform:rotate(16deg) scale(.8)}
-#reserve{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:800;letter-spacing:.18em}
-#tank{width:150px;height:10px;border-radius:99px;background:#0009;box-shadow:0 0 0 1px #fff3;overflow:hidden}
+#feathers{display:flex;gap:6px;margin:4px 0 12px}
+#feathers svg{width:24px;height:44px;fill:#fff;stroke:none;filter:drop-shadow(0 2px 3px #000a);transform:rotate(14deg);transition:opacity .3s,transform .3s}
+#feathers .q{fill:none;stroke:#7d8798;stroke-width:1.3;stroke-linecap:round}
+#feathers svg.lost{opacity:.22;transform:rotate(14deg) scale(.8)}
+#reserve{display:flex;align-items:center;gap:12px;font-size:14px;font-weight:900;letter-spacing:.14em}
+#tank{width:min(260px,34vw);height:20px;border-radius:99px;background:#0009;box-shadow:0 0 0 1px #fff3;overflow:hidden}
 #tank i{display:block;width:100%;height:100%;border-radius:99px;background:#f4f1e6}
 #reserve.low{animation:pulse .6s infinite alternate}#reserve.low #tank i{background:var(--gold)}
 @keyframes pulse{to{opacity:.45}}

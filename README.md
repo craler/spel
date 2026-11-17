@@ -1,8 +1,8 @@
 # spel
 
-Spelhörnan: små webbspel som körs direkt i webbläsaren, utan byggsteg. Startsidan `index.html` listar spelen.
+Kornhalls spelhörna: små webbspel som körs direkt i webbläsaren, utan byggsteg. Startsidan `index.html` listar spelen.
 
-## Fågelbajs (`fagelbajs/`)
+## Duv-Diarré (`fagelbajs/`)
 
 Flyg en duva över staden, pricka folk och bilar, bygg kaos och klara dig undan jakten.
 

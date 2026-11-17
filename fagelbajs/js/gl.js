@@ -154,7 +154,7 @@ void main(){
 }`;
 const WATER_VS=`#version 300 es
 layout(location=0) in vec2 aPos;uniform mat4 uVP;uniform vec3 uCentre;out vec3 vW;
-void main(){vW=vec3(aPos.x*1700.+uCentre.x,-1.5,aPos.y*1700.+uCentre.z);gl_Position=uVP*vec4(vW,1.);}`;
+void main(){vW=vec3(aPos.x*1700.+uCentre.x,-2.6,aPos.y*1700.+uCentre.z);gl_Position=uVP*vec4(vW,1.);}`;
 // Water: small moving waves bend the surface, which mirrors the sky more the flatter you look at it, with sun glints.
 const WATER_FS=`#version 300 es
 precision highp float;

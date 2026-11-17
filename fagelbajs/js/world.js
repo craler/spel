@@ -63,7 +63,13 @@ let hawk=null;
 // ---- High-value targets (gold stars): they move, which is what makes them worth more.
 function jogger(i,j,k){return k===7&&hash(i,j,91)<.4;}
 // Boats drift down the canal, under the bridges and on into the next block.
-function boatAt(b){return {x:b.x+21+1.5*Math.sin(elapsed*.3+b.j),z:b.z+wrap(elapsed*2.2+9,tile),yaw:0};}
+// Two lanes, one each way, with their own speed and spacing per canal. The same formula in every block, so a boat
+// that slips under a bridge comes out on the other side.
+function boatsAt(b){
+ const a=hash(b.i,1,3),c=hash(b.i,2,3);
+ return [{x:b.x+19+.6*Math.sin(elapsed*.4+b.j),z:b.z+wrap(elapsed*(1.6+a)+a*tile,tile),yaw:0},
+         {x:b.x+23+.6*Math.sin(elapsed*.3+b.j),z:b.z+tile-wrap(elapsed*(1.3+c)+c*tile,tile),yaw:Math.PI}];
+}
 function balloons(){
  const out=[],S=168,ci=Math.round(bird.x/S),cj=Math.round(bird.z/S);
  for(let i=ci-1;i<=ci+1;i++)for(let j=cj-1;j<=cj+1;j++){
@@ -82,14 +88,17 @@ function gather(dt=0){
   }
   const b=block(i,j),extra=(id,x,y,z,yaw,c,base,label,shout)=>people.push({x,y,z,id,i,j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:i+j,fixed:true,base,label,shout,star:true,umb:false});
   if(b.cleaner){const [cx,cz,top,s]=b.cleaner;extra('win'+i+','+j,cx,2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s)),cz,0,'#e87a1e',60,'FÖNSTERPUTSAREN','MIN HINK!');} // rides a lift up and down the facade
-  if(b.type===3){const q=boatAt(b);extra('boat'+i+','+j,q.x,WATER+.3,q.z,q.yaw,'#e8e4da',45,'BÅTTUREN','MAN ÖVER BORD!');}
+  if(b.type===3)for(const [n,q] of boatsAt(b).entries())extra('boat'+n+','+i+','+j,q.x,WATER+.3,q.z,q.yaw,n?'#3f7fa8':'#e8e4da',45,'BÅTTUREN','MAN ÖVER BORD!');
   // People who stay put: café guests, picnickers, the wedding party.
   for(const [n,f] of block(i,j).folk.entries())people.push({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,
    yaw:hash(i,j,n+300)*tau,running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false});
  }
  if(runners.size>520){for(const [id,r] of runners)if(Math.hypot(r.x-bird.x,r.z-bird.z)>145)runners.delete(id);}
 }
+// How far each car has fallen behind its place in the stream because it had to stop.
+const lag=new Map();let lastClock=0;
 function traffic(){
+ const moved=Math.max(0,trafficClock-lastClock)*5.2;lastClock=trafficClock;
  cars=[];
  // Each car owns a persistent lane and identity as the visible blocks scroll.
  for(const across of [false,true]){
@@ -102,7 +111,7 @@ function traffic(){
    const first=Math.floor((alongPos-100-offset)/spacing);
    for(let n=first;n<=first+5;n++){
     const id='car:'+across+','+lane+','+n;if(wrecks.has(id))continue;
-    const along=n*spacing+offset+6*hash(lane,n,5+across)-3,side=lane*tile+direction*1.45;
+    const along=n*spacing+offset+6*hash(lane,n,5+across)-3-direction*(lag.get(id)||0),side=lane*tile+direction*1.45;
     cars.push({id,across,lane,along,direction,x:across?along:side,z:across?side:along,yaw:(across?Math.PI/2:0)+(direction<0?Math.PI:0),
      speed:Math.abs(speed)*trafficFactor,bus:hash(lane,n,11)<.09,cab:hash(lane,n,11)>=.09&&hash(lane,n,7+across)<.16,hatch:hash(lane,n,3)<.45,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
    }
@@ -113,7 +122,22 @@ function traffic(){
  for(let i=px-2;i<=px+2;i++)for(let j=pz-2;j<=pz+2;j++)for(const [n,p] of block(i,j).parked.entries()){
   const id='park:'+i+','+j+','+n;if(!wrecks.has(id))cars.push({id,parked:true,x:p.x,z:p.z,yaw:p.yaw,speed:0,cab:false,hatch:n%2===0,color:p.c});
  }
- // Pile-ups: a car that reaches a wreck in its own lane joins it. Wrecks are towed after a while.
+ // Drivers brake: a car stops behind a wreck or a stopped car, and gives way to cross traffic already in the junction.
+ // Once the way is clear it drives a little faster until it is back in its place. Only a car that had no room to stop crashes.
+ const moving=cars.filter(c=>!c.parked),blockers=[...moving,...wrecks.values()];
+ for(const c of moving){
+  const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),held=lag.get(c.id)||0;let stop=false;
+  for(const o of blockers){
+   if(o===c)continue;
+   const dx=o.x-c.x,dz=o.z-c.z,ahead=dx*fx+dz*fz;
+   if(ahead<=0||ahead>(o.bus||c.bus?13:8.5)||Math.abs(dx*fz-dz*fx)>2.1)continue;
+   if(wrecks.has(o.id)||o.stopped||(o.across===c.across&&o.lane===c.lane)||(c.across&&!o.across)){stop=true;break;}
+  }
+  c.stopped=stop;
+  if(stop)lag.set(c.id,held+moved);else if(held>0){const left=held-moved*.6;if(left>0)lag.set(c.id,left);else lag.delete(c.id);}
+ }
+ if(lag.size>300)for(const id of lag.keys())if(!moving.some(c=>c.id===id))lag.delete(id);
+ // Wrecks are towed after a while.
  for(const w of [...wrecks.values()]){
   if(elapsed-w.pileTime>24){wrecks.delete(w.id);continue;}
   if(w.parked)continue;
@@ -138,31 +162,12 @@ function crashCar(c,parent){
  wrecks.set(c.id,c);crunch();if(Math.hypot(c.x-bird.x,c.z-bird.z)<30)shake=Math.max(shake,.4);
  if(parent){carsHit++;run.chain=Math.max(run.chain,c.chain);award(15*c.chain,'KEDJEKROCK ×'+c.chain,null,0,[c.x,2.5,c.z]);}
 }
-// The tank only trickles back by itself, and faster before the chase begins.
-// Food on café tables, market stalls and picnic blankets fills it at once.
+// The tank refills by itself as soon as the bird stops spraying.
 function recharge(dt,pressed){
  if(!pressed||emptyTank){
   refillWait-=dt;
-  if(refillWait<=0){tank=Math.min(1,tank+dt*(wanted?.085:.2));if(tank>=.25)emptyTank=false;}
+  if(refillWait<=0){tank=Math.min(1,tank+dt*.26);if(tank>=.25)emptyTank=false;}
  }
-}
-function foodReady(f){return elapsed-(eaten.get(f.id)??-99)>25;}
-function nearbyFood(){
- const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile),list=[];
- for(let i=ix-2;i<=ix+2;i++)for(let j=iz-2;j<=iz+2;j++)for(const f of block(i,j).food)if(foodReady(f))list.push(f);
- return list;
-}
-// Where to go when the tank is empty: the closest food, or failing that the closest park or square.
-function nearestFood(){
- let best=null,d=1e9;
- for(const f of nearbyFood()){const q=Math.hypot(f.x-bird.x,f.z-bird.z);if(q<d){d=q;best=f;}}
- if(best)return best;
- const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile);
- for(let i=ix-6;i<=ix+6;i++)for(let j=iz-6;j<=iz+6;j++){
-  if(!blockType(i,j))continue;
-  const x=i*tile+21,z=j*tile+21,q=Math.hypot(x-bird.x,z-bird.z);if(q<d){d=q;best={x,y:1,z};}
- }
- return best;
 }
 // Fresh droppings on the ground are slippery: cars spin out on a big patch, people on a small one.
 function slips(){
@@ -180,15 +185,6 @@ function slips(){
   for(const s of patch)s.used=true;
   scored.add(h.id);fallen.set(h.id,elapsed);hits++;feedLine('HALKADE',5);addPoints(5);
   popups.push({x:h.x,y:2.2,z:h.z,text:'+5',t:elapsed});bubble(h.x,2.1,h.z,'HOPPSAN!');yelp();
- }
-}
-function updateFood(){
- for(const f of nearbyFood()){
-  if(Math.hypot(f.x-bird.x,f.z-bird.z)<2.3&&Math.abs(f.y-bird.y)<2.6){
-   eaten.set(f.id,elapsed);tank=1;emptyTank=false;foodEaten++;
-   feedLine('MUMS',5);addPoints(5);popups.push({x:f.x,y:f.y+1.2,z:f.z,text:'+5',t:elapsed});
-   tone(520,880,.12);tone(880,1320,.12,'sine',.05,.1);
-  }
  }
 }
 // One hit from fruit or the hawk costs a feather; only the last one brings the bird down.
@@ -229,11 +225,11 @@ function updateHawk(dt){
   h.x+=(gx+L[0]*s-h.x)*f;h.y+=(alt-h.y)*f;h.z+=(gz+L[2]*s-h.z)*f;
   const g=ease(6);h.vx=mix(h.vx,(h.x-ox)/dt,g);h.vy=mix(h.vy,(h.y-oy)/dt,g);h.vz=mix(h.vz,(h.z-oz)/dt,g);
   h.tuck=mix(h.tuck,0,ease(4));h.size=mix(h.size,lock?3.4:2.3,ease(2.2));h.dread=mix(h.dread,lock?1-.55*k:.14,ease(5));h.flap+=dt*3.4;
-  if(!lock&&h.t<=0&&b.y>15){h.mode='lock';h.t=1.6;screech();}
+  if(!lock&&h.t<=0&&b.y>15){h.mode='lock';h.t=1.6-.5*clamp((b.y-45)/30,0,1);screech();} // high up there is less warning
   else if(lock&&b.y<13){h.mode='circle';h.t=3;}
   else if(lock&&h.t<=0){
    // Commit to an intercept point. From here it can only bend its line a little.
-   const speed=fierce?50:44,T=Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z)/speed,v=forwardSpeed();
+   const speed=(fierce?50:44)+8*clamp((b.y-45)/30,0,1),T=Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z)/speed,v=forwardSpeed();
    const tx=b.x+Math.sin(b.angle)*v*T-h.x,ty=b.y+b.vy*T*.5-h.y,tz=b.z+Math.cos(b.angle)*v*T-h.z,l=Math.hypot(tx,ty,tz)||1;
    h.vx=tx/l*speed;h.vy=ty/l*speed;h.vz=tz/l*speed;h.mode='stoop';h.t=4.5;h.miss=99;whoosh();
   }
@@ -241,7 +237,7 @@ function updateHawk(dt){
   const speed=Math.hypot(h.vx,h.vy,h.vz),d=Math.hypot(b.x-h.x,b.y-h.y,b.z-h.z),T=d/speed,v=forwardSpeed();
   const tx=b.x+Math.sin(b.angle)*v*T-h.x,ty=b.y+b.vy*T*.5-h.y,tz=b.z+Math.cos(b.angle)*v*T-h.z,l=Math.hypot(tx,ty,tz)||1;
   // In the last half second it is committed: a bird that is turning hard when it arrives slips past.
-  const cos=steer(tx/l,ty/l,tz/l,T<(fierce?.4:.55)?0:fierce?.3:.22);
+  const cos=steer(tx/l,ty/l,tz/l,T<(fierce?.4:.55)?0:(fierce?.3:.22)+.14*clamp((b.y-45)/30,0,1));
   h.x+=h.vx*dt;h.y+=h.vy*dt;h.z+=h.vz*dt;h.tuck=mix(h.tuck,1,ease(6));h.dread=1;h.size=mix(h.size,2.6,ease(3));h.miss=Math.min(h.miss,d);
   if(d<1.9&&shield<=0){hurt('HÖKEN SLOG TILL',{n:[h.vx/speed,h.vy/speed,h.vz/speed],depth:0,cause:'Höken tog dig.'});leave();}
   else if((cos<0&&d>3)||h.y<14||h.t<=0||solid(h.x,h.y,h.z)){
