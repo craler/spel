@@ -403,7 +403,16 @@ function buildMoving(){
  }
  for(const t of tanks){
   const alive=t.hp>0,paint=alive?olive:charred;
-  M.tank.add(t.x,0,t.z,t.yaw,1,1,1,paint);M.turret.add(t.x,0,t.z,alive?t.turret:t.turret+.5,1,1,1,paint);
+  const kick=t.recoil*t.recoil,bob=alive?.025*Math.sin(elapsed*13+t.id*9)*Math.min(1,t.speed/4):0,rel=t.turret-t.yaw;
+  const pitch=t.pitch-.06*kick*Math.cos(rel),tx=t.x-Math.sin(t.turret)*.3*kick,tz=t.z-Math.cos(t.turret)*.3*kick;
+  M.tank.add(t.x,bob,t.z,t.yaw,1,1,1,paint,0,0,0,pitch);M.turret.add(tx,bob,tz,alive?t.turret:t.turret+.5,1,1,1,paint,0,0,0,pitch*Math.cos(rel));
+  const since=elapsed-t.fired;
+  if(t.muzzle&&since<1.6){const [mx,my,mz]=t.muzzle; // flash, then a cloud of smoke that rolls away from the muzzle
+   if(since<.09)M.ball.add(mx,my,mz,t.turret,.9,.6,1.3,amber,2);
+   for(let i=0;i<5;i++){const f=since/1.6,q=(.4+1.6*f)*(1-.12*i);M.ball.add(mx+Math.sin(t.turret)*i*.5*(1+f),my+f*1.8+i*.1,mz+Math.cos(t.turret)*i*.5*(1+f),0,q,q,q,smoke);}
+  }
+  if(alive&&t.exhaust>.05)for(let i=0;i<3;i++){const f=(elapsed*1.4+i/3)%1,q=(.25+.5*f)*t.exhaust; // diesel smoke from the back deck
+   M.ball.add(t.x-Math.sin(t.yaw)*3.1+.4*Math.sin(i*2),1.6+f*2.4,t.z-Math.cos(t.yaw)*3.1,0,q,q,q,charred);}
   for(const [dx,dz] of t.splats)M.ball.add(t.x+clamp(dx,-1.4,1.4),Math.hypot(dx,dz)<1.2?2.32:1.6,t.z+clamp(dz,-3,3),0,.34,.07,.3,splatCol,-1);
   if(!alive)for(let i=0;i<4;i++){const f=(t.dead*.5+i/4)%1,q=.5+1.2*f;M.ball.add(t.x+.5*Math.sin(f*6+i),2.4+f*6,t.z,0,q,q,q,smoke);}
  }

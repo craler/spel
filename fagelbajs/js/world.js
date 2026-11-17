@@ -254,21 +254,40 @@ function updateTanks(dt){
  if(tankWait<=0&&tanks.filter(t=>t.hp>0).length<2){
   // Arrive at a crossing a couple of blocks ahead of the bird, so flying straight on does not shake them off.
   const tx=Math.round((bird.x+Math.sin(bird.angle)*105)/tile)*tile,tz=Math.round((bird.z+Math.cos(bird.angle)*105)/tile)*tile,sx=Math.sign(tx-bird.x)||1;
-  tanks.push({x:tx,z:tz,ax:0,dir:-sx,yaw:-sx*Math.PI/2,turret:0,hp:14,cool:3,aim:0,dead:0,splats:[],id:Math.random()});
+  tanks.push({x:tx,z:tz,ax:0,dir:-sx,yaw:-sx*Math.PI/2,turret:0,hp:14,cool:3,aim:0,dead:0,splats:[],id:Math.random(),speed:0,mode:'drive',plan:null,pitch:0,roll:0,recoil:0,fired:-9,muzzle:null,exhaust:0});
   if(tankWait>-90)banner('STRIDSVAGNAR','Sväng när de siktar','alert',3.2);
   tankWait=9;
  }
  for(const t of tanks){
-  if(t.hp<=0){t.dead+=dt;continue;}
-  // Drive along the street; at each crossing turn towards the bird if that is the shorter way.
-  const along=t.ax?'z':'x',cross=t.ax?'x':'z',before=t[along],node=Math.round(before/tile)*tile;
-  t[along]+=t.dir*9*dt;
-  if((before-node)*(t[along]-node)<=0){
-   const ahead=bird[along]-node,side=bird[cross]-t[cross];
-   if(Math.abs(side)>Math.abs(ahead)||ahead*t.dir<-8){t[along]=node;t.ax=1-t.ax;t.dir=Math.sign(side)||1;}
+  t.recoil*=Math.exp(-dt*3.5);
+  if(t.hp<=0){t.dead+=dt;t.speed=Math.max(0,t.speed-6*dt);t.pitch=mix(t.pitch,0,1-Math.exp(-dt*3));continue;}
+  // Forty tonnes do not turn on a coin: the tank brakes before a crossing where it means to turn,
+  // stops, pivots on its tracks to the new street and then pulls away again. Straight on it keeps its speed.
+  const top=9,accel=3.2,brake=5.5,before=t.speed;
+  if(t.mode==='pivot'){
+   const d=wrap(t.goalYaw-t.yaw+Math.PI,tau)-Math.PI,turn=clamp(d,-1.05*dt,1.05*dt)*clamp(Math.abs(d)/.25,.35,1);
+   t.yaw+=turn;t.roll=mix(t.roll,-turn/dt*.03,1-Math.exp(-dt*6));
+   if(Math.abs(d)<.015){t.yaw=t.goalYaw;t.mode='drive';t.roll=0;}
+  }else{
+   const along=t.ax?'z':'x',cross=t.ax?'x':'z',pos=t[along];
+   const node=t.dir>0?(Math.floor((pos+.01)/tile)+1)*tile:(Math.ceil((pos-.01)/tile)-1)*tile,dist=(node-pos)*t.dir;
+   if(!t.plan||t.plan.node!==node){ // decide what to do at the next crossing: turn towards the bird if that is the shorter way
+    const ahead=bird[along]-node,side=bird[cross]-t[cross];
+    t.plan=Math.abs(side)>Math.abs(ahead)+6||ahead*t.dir<-8?{node,turn:true,ax:1-t.ax,dir:Math.sign(side)||1}:{node,turn:false};
+   }
+   const target=t.plan.turn?Math.min(top,Math.max(.9,Math.sqrt(2*brake*Math.max(0,dist-.4)))):top;
+   t.speed=t.speed<target?Math.min(target,t.speed+accel*dt):Math.max(target,t.speed-brake*dt);
+   const step=t.speed*dt;
+   if(t.plan.turn&&dist<=step+.02){
+    t[along]=node;t.speed=0;t.ax=t.plan.ax;t.dir=t.plan.dir;t.plan=null;t.mode='pivot';
+    t.goalYaw=t.ax?(t.dir>0?0:Math.PI):t.dir*Math.PI/2;
+   }else t[along]+=t.dir*step;
+   t.yaw+=clamp(wrap((t.ax?(t.dir>0?0:Math.PI):t.dir*Math.PI/2)-t.yaw+Math.PI,tau)-Math.PI,-dt*.8,dt*.8);
+   t.roll=mix(t.roll,0,1-Math.exp(-dt*4));
   }
-  const heading=t.ax?(t.dir>0?0:Math.PI):t.dir*Math.PI/2;
-  t.yaw+=clamp(wrap(heading-t.yaw+Math.PI,tau)-Math.PI,-dt*1.6,dt*1.6);
+  // The hull squats back when it pulls away and dips forward when it brakes; firing rocks it back.
+  const a=(t.speed-before)/Math.max(dt,1e-4);t.pitch=mix(t.pitch,clamp(-a*.009,-.05,.05),1-Math.exp(-dt*5));
+  t.exhaust=a>.5||t.mode==='pivot'?Math.min(1,t.exhaust+dt*3):Math.max(0,t.exhaust-dt*1.2);
   for(const c of cars)if(!c.parked&&!wrecks.has(c.id)&&tankContact(t,c.x,1,c.z,1))crashCar(c); // nothing stops a tank
   const dx=bird.x-t.x,dz=bird.z-t.z,far=Math.hypot(dx,dz);
   t.turret+=clamp(wrap(Math.atan2(dx,dz)-t.turret+Math.PI,tau)-Math.PI,-dt*2.2,dt*2.2);
@@ -279,7 +298,7 @@ function updateTanks(dt){
     const speed=62,T=Math.hypot(far,bird.y-2.8)/speed,v=forwardSpeed();
     const tx=bird.x+Math.sin(bird.angle)*v*T-t.x,ty=bird.y+bird.vy*T*.5-2.8,tz=bird.z+Math.cos(bird.angle)*v*T-t.z,l=Math.hypot(tx,ty,tz)||1;
     thrown.push({kind:'shell',x:t.x+tx/l*3.5,y:2.8+ty/l*3.5,z:t.z+tz/l*3.5,vx:tx/l*speed,vy:ty/l*speed,vz:tz/l*speed,age:0,windup:0,fuse:Math.max(.15,T-.13),spin:0});
-    cannon(far);
+    cannon(far);t.recoil=1;t.fired=elapsed;t.muzzle=[t.x+tx/l*4.4,2.8+ty/l*4.4,t.z+tz/l*4.4];
     if(far<60)shake=Math.max(shake,.35);
    }
   }else if(t.cool<=0&&far<140&&bird.y>4){t.aim=1.2;t.cool=5.5;}
