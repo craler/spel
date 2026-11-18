@@ -155,7 +155,11 @@ function renderBird(){
   const eye=(radius,color,offset)=>{
    const pts=Array.from({length:8},(_,i)=>[side*(.123+offset),.308+radius*Math.sin(i*tau/8),.348+radius*Math.cos(i*tau/8)]);
    face(pts,color);
-  };eye(.024,'#ffbf56',0);eye(.012,'#362c49',.0015);
+  };
+  if(crash&&crash.age>.25){ // dead: a pale eye crossed out
+   eye(.026,'#ece6da',0);const cx=side*.127,y=.308,z=.348,r=.022,t=.006;
+   face([[cx,y+r,z-r+t],[cx,y+r-t,z-r],[cx,y-r,z+r-t],[cx,y-r+t,z+r]],'#1c1622');face([[cx,y+r,z+r-t],[cx,y+r-t,z+r],[cx,y-r,z-r+t],[cx,y-r+t,z-r]],'#1c1622');
+  }else{eye(.024,'#ffbf56',0);eye(.012,'#362c49',.0015);}
  }
  // Separate overlapping tail feathers with a dark terminal band and pale tips.
  const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl+.16*br; // fanned wide as an air brake

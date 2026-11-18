@@ -12,7 +12,7 @@ const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+
 function controlsPicture(){
  if(touchMode)return '<div class="pads"><div><i class="pad"></i><span>Spaken styr</span></div><div><i class="round">DYK</i><span>Störtdyk</span></div><div><i class="round">BAJSA</i><span>Bajsa</span></div></div>';
  return '<div class="keyboard"><div><div class="row">'+keycap('↑',reversePitch?'stig':'sjunk')+'</div><div class="row">'+keycap('←','vänster')+keycap('↓',reversePitch?'sjunk':'stig')+keycap('→','höger')+'</div></div>'+
-  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div><div>'+keycap('C','kamera')+keycap('X','upp/ner')+'</div></div><p class="hint">WASD fungerar också · Esc pausar</p>';
+  '<div>'+keycap('Shift','störtdyk',1)+keycap('Space','bajsa',1)+'</div><div>'+keycap('C','kamera')+keycap('X','upp/ner')+keycap('Q','broms')+'</div></div><p class="hint">WASD fungerar också · Esc pausar</p>';
 }
 // X swaps which of W and S climbs, in the air or in the menus, and remembers the choice.
 function flipPitch(){

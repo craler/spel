@@ -329,7 +329,10 @@ function simulate(dt){
  const wantedVy=ragged*1.4*Math.sin(elapsed*6.1)+(19-2.6*ragged)*Math.sin(1.31*b.climb)*upLimit*(1-.60*stallSoftness)-40*diveCurve+b.flare*.82+b.brake*clamp(b.speed-8,0,30)*.3;
  // Tucked, the bird simply falls: gravity builds the speed up against air drag, towards about 50 m/s.
  // Opening the wings turns that fall into level flight in a smooth pull-out.
- const acceleration=dive?-27*b.fold-.53*b.vy:(wantedVy-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
+ // The steep dive (arrow) sinks about as fast as the tuck, not faster: its downward pull is capped like a fall,
+ // and the brake (Q) takes much of the sink out of it.
+ const sink=wantedVy-40*diveCurve*(-.12-.6*b.brake),pull=(sink-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
+ const acceleration=dive?-27*b.fold-.53*b.vy:Math.max(pull,-16*(1-.5*b.brake)-.0*b.vy);
  b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
  // Gliding is mostly still wings, broken now and then by a short burst of flapping. Climbing is hard work.
@@ -460,6 +463,12 @@ function bounce(surface,first){
   for(const [i,w] of crash.wings.entries()){const impulse=Math.min(7,-incoming*.65)*(i?1:-1);w.vw+=impulse;w.vt-=impulse*1.4;}
  }
 }
+// The height of whatever the bird would lie on here: a roof, a car roof or the street.
+function supportAt(x,z){
+ let h=0;for(const [a,b,w,d,top] of buildings(Math.floor(x/tile),Math.floor(z/tile)))if(x>a&&x<a+w&&z>b&&z<b+d&&top<bird.y+1)h=Math.max(h,top);
+ for(const c of cars)if(carContact(c,x,.5,z))h=Math.max(h,c.bus?3:1.48);
+ return h;
+}
 function startCrash(surface=contact(.28)){
  const b=bird;
  if(!surface)return;
@@ -533,6 +542,16 @@ function advanceCrash(dt){
    w.vw+=((w.arm-.46-w.wrist)*21-1.55*w.vw)*step;w.wrist=clamp(w.wrist+w.vw*step,-1.9,1.72);
    w.vt+=((w.wrist-.31-w.tip)*16-1.5*w.vt)*step;w.tip=clamp(w.tip+w.vt*step,-2.2,1.97);tipContact(w,side,c);
   }
+ }
+ // Once it has hit the ground and slowed down, it settles: on its back, wings spread flat, resting on the
+ // surface below (street, roof or car roof) instead of hovering or poking through it.
+ const sp=Math.hypot(...c.velocity);
+ if(!c.rest&&c.age>.9&&Math.abs(c.velocity[1])<2.5){const y=supportAt(bird.x,bird.z);if(bird.y-y<.6)c.rest={y};}
+ if(c.rest){
+  const k=1-Math.exp(-dt*5),near=(v,t)=>t+Math.round((v-t)/tau)*tau,bank=(bird.vb??bird.bank)*1.02,fp=flightPitch();
+  c.roll=mix(c.roll,near(c.roll,Math.PI-bank),k);c.pitch=mix(c.pitch,near(c.pitch,-fp),k);
+  c.spin=c.rollSpeed=0;c.velocity=[0,0,0];bird.y=mix(bird.y,c.rest.y+.25,k);
+  for(const w of c.wings){w.arm=mix(w.arm,.3,k);w.wrist=mix(w.wrist,.12,k);w.tip=mix(w.tip,.02,k);w.va=w.vw=w.vt=0;}
  }
  const pos=[bird.x,bird.y,bird.z],blend=1-Math.exp(-dt*9);
  for(const [i,axis] of ['x','y','z'].entries()){

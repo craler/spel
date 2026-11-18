@@ -297,13 +297,16 @@ function updateTanks(dt){
   if(t.aim>0){
    t.aim-=dt;
    if(t.aim<=0){ // fire at where the bird will be; the shell cannot turn
-    const speed=62,T=Math.hypot(far,bird.y-2.8)/speed,v=forwardSpeed();
-    const tx=bird.x+Math.sin(bird.angle)*v*T-t.x,ty=bird.y+bird.vy*T*.5-2.8,tz=bird.z+Math.cos(bird.angle)*v*T-t.z,l=Math.hypot(tx,ty,tz)||1;
+    // Lead the bird along the curve it is actually flying, including its turn and its climb or sink.
+    const speed=78,v=forwardSpeed();let T=Math.hypot(far,bird.y-2.8)/speed,px=0,pz=0;
+    for(let k=0;k<3;k++){const a=bird.angle+(bird.turn||0)*T*.85;px=bird.x+(Math.abs(bird.turn||0)>.05?(Math.cos(bird.angle)-Math.cos(a))/(bird.turn)*v*.85+Math.sin(bird.angle)*v*T*.15:Math.sin(bird.angle)*v*T);
+     pz=bird.z+(Math.abs(bird.turn||0)>.05?(Math.sin(a)-Math.sin(bird.angle))/(bird.turn)*v*.85+Math.cos(bird.angle)*v*T*.15:Math.cos(bird.angle)*v*T);T=Math.hypot(px-t.x,bird.y-2.8,pz-t.z)/speed;}
+    const tx=px-t.x,ty=bird.y+bird.vy*T*.8-2.8,tz=pz-t.z,l=Math.hypot(tx,ty,tz)||1;
     thrown.push({kind:'shell',x:t.x+tx/l*3.5,y:2.8+ty/l*3.5,z:t.z+tz/l*3.5,vx:tx/l*speed,vy:ty/l*speed,vz:tz/l*speed,age:0,windup:0,fuse:Math.max(.15,T-.13),spin:0});
     cannon(far);t.recoil=1;t.fired=elapsed;t.muzzle=[t.x+tx/l*4.4,2.8+ty/l*4.4,t.z+tz/l*4.4];
     if(far<60)shake=Math.max(shake,.35);
    }
-  }else if(t.cool<=0&&far<140&&bird.y>4){t.aim=1.2;t.cool=5.5;}
+  }else if(t.cool<=0&&far<150&&bird.y>4){t.aim=.85;t.cool=4.2;}
  }
  tanks=tanks.filter(t=>(t.hp>0||t.dead<25)&&Math.hypot(t.x-bird.x,t.z-bird.z)<210);
 }
