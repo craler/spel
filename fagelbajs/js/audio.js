@@ -11,7 +11,9 @@ function pick(name,n){let k;do{k=1+Math.floor(Math.random()*n);}while(n>1&&k===l
 // ---- Volume per kind of sound, set with the sliders under Inställningar → Ljudnivåer. 1 = as designed.
 const volKinds=[['master','Allt'],['bajs','Bajs'],['traff','Träff (splatt)'],['hitmarker','Träffmarkör'],['nedslag','Nedslag på marken'],['stad','Stadsbrus'],
  ['trafik','Bilar'],['vind','Vind och vissling'],['vingar','Vingslag'],['hok','Hök'],['kanon','Kanon'],['billarm','Billarm'],['ovrigt','Övriga effekter']];
-const vol=Object.fromEntries(volKinds.map(([k])=>[k,1]));
+// The tuned mix (Jonas, 18 Nov). A player's own slider settings, if any, are kept on top of it.
+const volDefault={master:.95,bajs:.95,traff:.2,hitmarker:1,nedslag:.5,stad:1.05,trafik:1,vind:1.05,vingar:1.1,hok:.8,kanon:.85,billarm:.95,ovrigt:.9};
+const vol={...volDefault};
 try{Object.assign(vol,JSON.parse(localStorage.getItem('fagelbajs.vol')||'{}'));}catch{}
 function saveVol(){try{localStorage.setItem('fagelbajs.vol',JSON.stringify(vol));}catch{}if(master)master.gain.setTargetAtTime(muted?0:.85*vol.master,sound.currentTime,.03);}
 const volOf=name=>/^poop/.test(name)?vol.bajs:/^hitsplat/.test(name)?vol.traff:name==='hit1'?vol.hitmarker:/^landsplat/.test(name)?vol.nedslag:/^hawk/.test(name)?vol.hok:/^tank/.test(name)?vol.kanon:name==='city'?vol.stad:vol.ovrigt;

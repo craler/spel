@@ -26,7 +26,7 @@ const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><but
 const views={
  looks:()=>lookView(),
  volumes:()=>['Ljudnivåer','<div class="vols">'+volKinds.map(([k,name])=>'<label><span>'+name+'</span><input type="range" min="0" max="2" step="0.05" value="'+vol[k]+'" data-vol="'+k+'"><b>'+Math.round(vol[k]*100)+'%</b></label>').join('')+
-  '</div><p class="cause">Dra i reglaget så hörs ett exempel. Skicka raden nedan till Claude när det låter bra:</p><code id="volcode">'+volLine()+'</code><button class="back" data-volreset="1">Återställ alla till 100 %</button>'],
+  '</div><p class="cause">Dra i reglaget så hörs ett exempel. Skicka raden nedan till Claude när det låter bra:</p><code id="volcode">'+volLine()+'</code><button class="back" data-volreset="1">Återställ till standard</button>'],
  scores:()=>{if(Date.now()-sharedAt>10000)fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
   return ['Topplista',board().length?scoreList():'<p class="cause">Inga flygningar än.</p>'];},
  feats:()=>['Bedrifter',featList(true)],
@@ -161,4 +161,4 @@ document.querySelector('.panel').addEventListener('input',e=>{
  r.nextElementSibling.textContent=Math.round(vol[k]*100)+'%';$('volcode').textContent=volLine();
 });
 document.querySelector('.panel').addEventListener('change',e=>{const r=e.target.closest('input[data-vol]');if(r)audition(r.dataset.vol);});
-document.querySelector('.panel').addEventListener('click',e=>{if(!e.target.closest('button[data-volreset]'))return;for(const [k] of volKinds)vol[k]=1;saveVol();openView('volumes');});
+document.querySelector('.panel').addEventListener('click',e=>{if(!e.target.closest('button[data-volreset]'))return;Object.assign(vol,volDefault);saveVol();openView('volumes');});
