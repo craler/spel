@@ -1,7 +1,9 @@
 'use strict';
 // ---- Utseende: things for the dove to wear, unlocked by playing and kept in this browser.
 // Not live yet: the menu page and the looks only appear with ?looks=1 in the address, for trying them out.
-const looksLive=/[?&]looks=1/.test(location.search);
+const looksLive=true;
+// On the test site (raw.githack.com) there is a button that unlocks everything, for trying the looks out.
+const testSite=/githack|localhost/.test(location.host);let unlockAll=false;try{unlockAll=testSite&&localStorage.getItem('fagelbajs.unlockAll')==='yes';}catch{}
 // Lifetime progress, saved on this device: points over all flights, the most stars reached, events completed.
 let stats={total:0,maxStars:0,events:0};
 try{Object.assign(stats,JSON.parse(localStorage.getItem('fagelbajs.stats')||'{}'));}catch{}
@@ -18,7 +20,7 @@ const lookList=[
  {id:'guld',name:'Guldbajs',slot:'poop',need:'10 000 poäng totalt',have:()=>[stats.total,10000]},
 ];
 let worn={};try{worn=JSON.parse(localStorage.getItem('fagelbajs.look')||'{}');}catch{}
-const unlocked=l=>{const [a,b]=l.have();return a>=b;};
+const unlocked=l=>{if(unlockAll)return true;const [a,b]=l.have();return a>=b;};
 function wearing(slot){if(!looksLive)return null;const id=worn[slot],l=lookList.find(l=>l.id===id);return l&&unlocked(l)?id:null;}
 function wear(id){
  const l=lookList.find(l=>l.id===id);if(!l||!unlocked(l))return;
@@ -189,11 +191,12 @@ const lookIcon={
  guld:'<path d="M14 38c-6 0-6-8 1-8-3-6 4-9 7-6 1-6 9-5 9 1 7-1 8 8 2 9z" fill="#e8b830"/><circle cx="21" cy="31" r="2" fill="#fff6c8"/>',
 };
 function lookView(){return ['Utseende','<div class="looks">'+lookList.map(l=>{
- const [a,b]=l.have(),open=a>=b,on=worn[l.slot]===l.id&&open;
+ const [a,b]=l.have(),open=unlocked(l),on=worn[l.slot]===l.id&&open;
  return '<div class="look'+(open?'':' locked')+(on?' on':'')+'"><svg viewBox="0 0 48 48">'+lookIcon[l.id]+'</svg><b>'+l.name+'</b>'+
   (open?'<button data-look="'+l.id+'">'+(on?'Ta av':'Ta på')+'</button>':'<small>🔒 '+l.need+'</small>'+(b>1?'<i><em style="width:'+Math.min(100,100*a/b)+'%"></em></i><small>'+number(Math.min(a,b))+' / '+number(b)+'</small>':''))+'</div>';
-}).join('')+'</div><p class="cause">Sparas på den här enheten.</p>'];}
+}).join('')+'</div><p class="cause">Sparas på den här enheten.</p>'+(testSite?'<button class="back" data-unlockall="1">'+(unlockAll?'Testläge: lås igen':'Testläge: lås upp allt')+'</button>':'')];}
 document.querySelector('.panel').addEventListener('click',e=>{const b=e.target.closest('button[data-look]');if(b){wear(b.dataset.look);openView('looks');}});
+document.querySelector('.panel').addEventListener('click',e=>{if(!e.target.closest('button[data-unlockall]'))return;unlockAll=!unlockAll;try{localStorage.setItem('fagelbajs.unlockAll',unlockAll?'yes':'no');}catch{}applyLook();openView('looks');});
 if(looksLive){const b=document.createElement('button');b.dataset.view='looks';b.textContent='Utseende';$('nav').append(b);}
 // Progress is counted at the end of every flight, and when an event is completed.
 function countFlight(){stats.total+=points;stats.maxStars=Math.max(stats.maxStars,wanted);saveStats();}
