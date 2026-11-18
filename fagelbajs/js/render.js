@@ -416,6 +416,7 @@ function buildStatics(){
  }
  for(const m of statics)m.upload();
 }
+let gooMat=-1; // -1 wet and glossy, -2 polished gold
 const gooShade=['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'].map(rgb);
 // A thick, tapering strand of goo between two points, turned to face the camera and shaded as wet.
 function strand(p,q,w0,w1,col){
@@ -425,9 +426,9 @@ function strand(p,q,w0,w1,col){
  goo.fan([[p[0]-u[0]*a,p[1]-u[1]*a,p[2]-u[2]*a],[p[0]+u[0]*a,p[1]+u[1]*a,p[2]+u[2]*a],[m[0]+u[0]*c,m[1]+u[1]*c,m[2]+u[2]*c],[m[0]-u[0]*c,m[1]-u[1]*c,m[2]-u[2]*c]],col);
  goo.fan([[m[0]-u[0]*c,m[1]-u[1]*c,m[2]-u[2]*c],[m[0]+u[0]*c,m[1]+u[1]*c,m[2]+u[2]*c],[q[0]+u[0]*b,q[1]+u[1]*b,q[2]+u[2]*b],[q[0]-u[0]*b,q[1]-u[1]*b,q[2]-u[2]*b]],col);
 }
-const splatCol=rgb('#f4f1e6'), smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
+const splatCol=[...rgb('#f4f1e6')], smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
- spot.on=0;for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
+ spot.on=0;goo.mat=gooMat;for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  for(const h of people){
   if(Math.abs(h.x-camera.x)>130||Math.abs(h.z-camera.z)>130)continue;
@@ -440,22 +441,22 @@ function buildMoving(){
   M.people[Math.floor(hash(h.phase,9,2)*M.people.length)].add(h.x,h.y+(down?.13*t:0),h.z,h.yaw,size,size,size,rgb(h.c),0,elapsed*pace+h.phase,stride,lean,arms);
   if(down){ // a white cap of it on the head and shoulders
    const fx=Math.sin(h.yaw)*Math.sin(lean),fz=Math.cos(h.yaw)*Math.sin(lean),up=Math.cos(lean);
-   M.ball.add(h.x+fx*1.72,h.y+.2+1.76*up,h.z+fz*1.72,0,.21,.14,.21,splatCol,-1);
-   M.ball.add(h.x+fx*1.4,h.y+.24+1.42*up,h.z+fz*1.4,h.yaw,.3,.09,.17,splatCol,-1);
+   M.ball.add(h.x+fx*1.72,h.y+.2+1.76*up,h.z+fz*1.72,0,.21,.14,.21,splatCol,gooMat);
+   M.ball.add(h.x+fx*1.4,h.y+.24+1.42*up,h.z+fz*1.4,h.yaw,.3,.09,.17,splatCol,gooMat);
   }else if(h.umb)M.umbrella.add(h.x,h.y,h.z,h.phase,1,1,1,rgb(parasolPaint[Math.floor(h.phase*7)%parasolPaint.length]));
-  if(h.bride&&!down)M.ball.add(h.x,h.y+.55,h.z,0,.42,.55,.42,splatCol,-1);
+  if(h.bride&&!down)M.ball.add(h.x,h.y+.55,h.z,0,.42,.55,.42,splatCol,gooMat);
  }
  for(const c of cars){
   (c.bus?M.bus:c.cab?M.cab:c.hatch?M.hatch:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
-  if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol,-1);
+  if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol,gooMat);
   const alarm=alarms.get(c.id);
   if(alarm!==undefined){ // hit while parked: a white cap on the roof and, for a while, flashing indicators
-   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol,-1);
+   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol,gooMat);
    if(elapsed-alarm<9&&(elapsed-alarm)%.9<.5)for(const sx of [-1,1])for(const sz of [-1,1]){
     const lx=sx*.8,lz=sz*1.95,sn=Math.sin(c.yaw),cs=Math.cos(c.yaw);M.ball.add(c.x+lx*cs+lz*sn,.72,c.z-lx*sn+lz*cs,0,.14,.1,.14,amber,2);}
   }
   if(wrecks.has(c.id)){
-   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol,-1);M.ball.add(c.x+Math.sin(c.yaw)*.9,1.2,c.z+Math.cos(c.yaw)*.9,c.yaw,.4,.25,.1,splatCol,-1);
+   M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol,gooMat);M.ball.add(c.x+Math.sin(c.yaw)*.9,1.2,c.z+Math.cos(c.yaw)*.9,c.yaw,.4,.25,.1,splatCol,gooMat);
    smokeColumn(c.x+Math.sin(c.yaw)*(c.bus?4.6:1.6),c.bus?2.4:1.05,c.z+Math.cos(c.yaw)*(c.bus?4.6:1.6),elapsed-c.hitTime,hash(c.x,c.z,4),c.bus?1.4:1);
   }
  }
@@ -469,7 +470,7 @@ function buildMoving(){
   else if(o.kind==='egg')M.ball.add(x,y,z,turn,.19*k,.25*k,.19*k,rgb('#f6efe2'),-1);
   else if(o.kind==='cabbage'){M.ball.add(x,y,z,turn,.32*k,.29*k,.32*k,rgb('#7fb04a'));M.ball.add(x+.08,y+.1,z,turn,.24*k,.2*k,.26*k,rgb('#a9d06a'));}
   else{M.ball.add(x,y,z,turn,.13*k,.1*k,.3*k,rgb('#6a3f24'));M.ball.add(x,y-.08*k,z,turn,.14*k,.04*k,.32*k,rgb('#1c1a19'));M.ball.add(x-Math.sin(turn)*.2*k,y+.1*k,z-Math.cos(turn)*.2*k,turn,.12*k,.13*k,.12*k,rgb('#6a3f24'));}
-  if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.ball.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol,-1);}
+  if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.ball.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol,gooMat);}
  }
  if(bird.snare>0)drawNet(bird.x,bird.y+.25,bird.z,1,true);
  // Star targets with their props: window cleaners on a lift, rowing boats on the canal, hot-air balloons.
@@ -487,7 +488,7 @@ function buildMoving(){
   for(const sx of [-.35,.35])M.ball.add(q.x+sx+sway,q.y-.85,q.z+.1*sx,0,.17,.19,.17,rgb(sx<0?'#dba27e':'#8a5a3c'));
   if((elapsed*.35+q.hue*5)%1<.35)M.ball.add(q.x+sway*.5,q.y+.1,q.z,0,.22,.5+.2*Math.sin(elapsed*30),.22,amber,2);
   for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]])ribbon([q.x+sx*.8+sway,q.y-1.1,q.z+sz*.8],[q.x+sx*.62,q.y+.45,q.z+sz*.62],.03);
-  if(scored.has(q.id))M.ball.add(q.x,q.y+13.2,q.z,0,3,.5,3,splatCol,-1);
+  if(scored.has(q.id))M.ball.add(q.x,q.y+13.2,q.z,0,3,.5,3,splatCol,gooMat);
  }
  for(const t of tanks){
   const alive=t.hp>0,paint=alive?olive:charred;
@@ -501,10 +502,10 @@ function buildMoving(){
   }
   if(alive&&t.exhaust>.05)for(let i=0;i<3;i++){const f=(elapsed*1.4+i/3)%1,q=(.25+.5*f)*t.exhaust; // diesel smoke from the back deck
    M.ball.add(t.x-Math.sin(t.yaw)*3.1+.4*Math.sin(i*2),1.6+f*2.4,t.z-Math.cos(t.yaw)*3.1,0,q,q,q,charred);}
-  for(const [dx,dz] of t.splats)M.ball.add(t.x+clamp(dx,-1.4,1.4),Math.hypot(dx,dz)<1.2?2.32:1.6,t.z+clamp(dz,-3,3),0,.34,.07,.3,splatCol,-1);
+  for(const [dx,dz] of t.splats)M.ball.add(t.x+clamp(dx,-1.4,1.4),Math.hypot(dx,dz)<1.2?2.32:1.6,t.z+clamp(dz,-3,3),0,.34,.07,.3,splatCol,gooMat);
   if(!alive)smokeColumn(t.x,2.3,t.z,t.dead,t.id,2.2);
  }
- for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splatCol,-1);}
+ for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splatCol,gooMat);}
  // The spray: wet, glossy blobs stretched along their fall, in mixed shades with darker bits,
  // joined by thick strands that thin out and snap as they fall apart. While it flows, a strand hangs from the vent.
  let prior=null;
@@ -512,34 +513,34 @@ function buildMoving(){
  for(const d of drops){
   const p=at(d,d.age),vx=d.vx,vy=d.vy-gravity*d.age,vz=d.vz,sp=Math.hypot(vx,vy,vz)||1;
   const stretch=1+clamp(sp*.035,0,1.6)*(d.big?.6:1),wob=1+.22*Math.sin(d.age*26+d.seed),tilt=Math.atan2(-vy,Math.hypot(vx,vz)||1e-3);
-  M.ball.add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,gooShade[d.seed%gooShade.length],-1,0,0,tilt);
+  M.ball.add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,gooShade[d.seed%gooShade.length],gooMat,0,0,tilt);
   if(d.dark)M.ball.add(p[0]+.4*d.r,p[1]+.2*d.r,p[2]+.3*d.r,d.seed,d.r*.5,d.r*.45,d.r*.6,bits,-1);
   if(prior&&prior.age-d.age<.1&&d.age<1.1)strand(at(prior,prior.age),p,prior.r*.75*(1-prior.age*.8),d.r*.75*(1-d.age*.8),gooShade[d.seed%gooShade.length]);
   prior=d;
  }
- if(flowing&&drops.length){const d=drops.at(-1);strand(vent,at(d,d.age),.07,d.r*.7,gooShade[0]);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,gooShade[0],-1);}
- for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.ball.add(s.x,s.y,s.z,0,r,r*1.5,r,gooShade[Math.floor(s.life*20)%gooShade.length],-1);}
+ if(flowing&&drops.length){const d=drops.at(-1);strand(vent,at(d,d.age),.07,d.r*.7,gooShade[0]);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,gooShade[0],gooMat);}
+ for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.ball.add(s.x,s.y,s.z,0,r,r*1.5,r,gooShade[Math.floor(s.life*20)%gooShade.length],gooMat);}
  for(const s of stains){
   if(Math.abs(s.x-camera.x)>130||Math.abs(s.z-camera.z)>130)continue;
   const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau,col=gooShade[Math.floor(s.seed*97)%gooShade.length];
   if(s.wall!==undefined){
-   M.splatWall.add(s.x,s.y,s.z,s.wall,r,r,1,col,-1);
+   M.splatWall.add(s.x,s.y,s.z,s.wall,r,r,1,col,gooMat);
    const len=Math.min(s.drip,age*.45,s.y-.1),off=r*.5*(s.seed-.5);
    if(len>.05){const dx=s.x+Math.cos(s.wall)*off,dz=s.z-Math.sin(s.wall)*off,w=.09+.09*s.seed;
-    M.drip.add(dx,s.y-r*.3,dz,s.wall,w,len,1,col,-1);
-    M.dome.add(dx+Math.sin(s.wall)*.02,s.y-r*.3-len*.8-.05,dz+Math.cos(s.wall)*.02,s.wall,w*.55,w*.7,w*.45,col,-1);} // a fat drop at the end of the run
+    M.drip.add(dx,s.y-r*.3,dz,s.wall,w,len,1,col,gooMat);
+    M.dome.add(dx+Math.sin(s.wall)*.02,s.y-r*.3-len*.8-.05,dz+Math.cos(s.wall)*.02,s.wall,w*.55,w*.7,w*.45,col,gooMat);} // a fat drop at the end of the run
   }else{
-   M.splat.add(s.x,s.y+.04,s.z,turn,r,1,r*(.8+.4*s.seed),col,-1);
+   M.splat.add(s.x,s.y+.04,s.z,turn,r,1,r*(.8+.4*s.seed),col,gooMat);
    // A raised, glistening heap in the middle, a dark streak through it, and a few droplets flung out around it.
    const heap=Math.min(1,age*9)*r;
-   M.dome.add(s.x+.08*r*Math.cos(turn),s.y+.03,s.z+.08*r*Math.sin(turn),turn,heap*.34,heap*(.07+.06*s.seed),heap*.27,col,-1);
+   M.dome.add(s.x+.08*r*Math.cos(turn),s.y+.03,s.z+.08*r*Math.sin(turn),turn,heap*.34,heap*(.07+.06*s.seed),heap*.27,col,gooMat);
    M.dome.add(s.x+.15*r*Math.cos(turn+1),s.y+.05,s.z+.15*r*Math.sin(turn+1),turn,heap*.2,heap*.08,heap*.09,bits,-1);M.dome.add(s.x-.2*r*Math.cos(turn+2),s.y+.04,s.z-.2*r*Math.sin(turn+2),turn+1,heap*.12,heap*.05,heap*.06,bits,-1);
    if(r>.4&&!fast)for(let k=0;k<3;k++){const a=turn+k*2.1+s.seed*3,dd=r*(1.25+.5*hash(k,s.seed,3));
-    M.dome.add(s.x+Math.cos(a)*dd,s.y+.03,s.z+Math.sin(a)*dd,0,r*.07,r*.05,r*.07,col,-1);}
+    M.dome.add(s.x+Math.cos(a)*dd,s.y+.03,s.z+Math.sin(a)*dd,0,r*.07,r*.05,r*.07,col,gooMat);}
   }
  }
  for(let i=Math.floor(bird.x/tile)-2;i<=Math.floor(bird.x/tile)+2;i++)for(let j=Math.floor(bird.z/tile)-2;j<=Math.floor(bird.z/tile)+2;j++){
-  const b=block(i,j);if(b.statue&&scored.has('st'+b.key)){M.ball.add(b.statue[0],5.2,b.statue[1],0,.36,.2,.36,splatCol,-1);M.ball.add(b.statue[0],4.3,b.statue[1]+.3,0,.3,.5,.12,splatCol,-1);}
+  const b=block(i,j);if(b.statue&&scored.has('st'+b.key)){M.ball.add(b.statue[0],5.2,b.statue[1],0,.36,.2,.36,splatCol,gooMat);M.ball.add(b.statue[0],4.3,b.statue[1]+.3,0,.3,.5,.12,splatCol,gooMat);}
  }
  // The hawk is drawn at its real size; a much larger copy goes only into the shadow map.
  if(sky.night)nightLights();
@@ -849,12 +850,21 @@ function renderReplay(dt){
   text('● REPRIS',x,40,15,'#ff5d4f',al,900);text('BÄSTA TRÄFFEN: '+clip.label+' +'+clip.amount,x,64,17,'#ffd24a',al,900);
  });
 }
+// While the Utseende page is open, the camera slowly circles the bird beside the menu, so what you put on shows at once.
+function previewLooks(){return looksLive&&state!=='play'&&state!=='crash'&&!$('view').hidden&&$('view').dataset.name==='looks';}
+function previewCamera(){
+ const T=birdPoint([0,.1,-.05]),a=bird.angle+2.2+Math.sin(performance.now()/1000*.4)*1.1,d=2.5;
+ const cx=T[0]+Math.sin(a)*d,cz=T[2]+Math.cos(a)*d,cy=T[1]+.55;scale=Math.min(width,height)*.9;
+ const side=width>760?Math.atan(.27*width/scale):0,yaw=Math.atan2(T[0]-cx,T[2]-cz)-side,pitch=Math.atan2(cy-T[1],Math.hypot(T[0]-cx,T[2]-cz))-(width>760?0:-.25);
+ camera={x:cx,y:cy,z:cz,s:Math.sin(yaw),c:Math.cos(yaw),cp:Math.cos(pitch),sp:Math.sin(pitch),cr:1,sr:0,near:.05};
+}
 function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt),playing=state==='play';
  if(!crash||!rig)setCamera(dt);
+ if(previewLooks())previewCamera();
  draw3D();
  ctx.clearRect(0,0,width,height);
- if(!crash&&state!=='menu'){
+ if(!crash&&state!=='menu'&&!previewLooks()){
   drawThreats();
   // Gold stars mark the targets that are worth going out of your way for.
   const star=(x,y,z)=>{const far=Math.hypot(x-bird.x,z-bird.z);if(far>150)return;const m=point([x,y,z]);if(m)text('★',m[0],m[1],14+7*clamp(1-far/90,0,1),'#ffd24a');};

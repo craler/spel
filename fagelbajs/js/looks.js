@@ -14,7 +14,6 @@ const lookList=[
  {id:'brillor',name:'Solglasögon',slot:'eyes',need:'Nå tre stjärnor',have:()=>[Math.min(stats.maxStars,3),3]},
  {id:'pannband',name:'Ninjapannband',slot:'head',need:'Bedriften Kombokung (kombo ×8)',have:()=>[+done.has('combo'),1]},
  {id:'hatt',name:'Hög hatt',slot:'head',need:'Bedriften Objuden gäst',have:()=>[+done.has('wedding'),1]},
- {id:'rosa',name:'Rosa duva',slot:'body',need:'Klara en händelse',have:()=>[Math.min(stats.events,1),1]},
  {id:'krona',name:'Krona',slot:'head',need:'Nå fem stjärnor',have:()=>[Math.min(stats.maxStars,5),5]},
  {id:'mantel',name:'Röd mantel',slot:'back',need:'Flyg tio gånger',have:()=>[Math.min(flights,10),10]},
  {id:'guld',name:'Guldbajs',slot:'poop',need:'10 000 poäng totalt',have:()=>[stats.total,10000]},
@@ -31,7 +30,8 @@ const normalGoo=['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'],goldGoo=['#f
 const plumeNormal={back:'#7c8aab',belly:'#a9b3c9',head:'#6a7697',rump:'#9aa6c0'},plumePink={back:'#c98bb0',belly:'#efc4dc',head:'#b8739e',rump:'#e0a8c8'};
 function applyLook(){
  const pal=wearing('body')==='rosa'?plumePink:plumeNormal;for(const k in pal)plumeCol[k]=rgb(pal[k]);
- const goo=(wearing('poop')==='guld'?goldGoo:normalGoo).map(rgb);gooShade.splice(0,gooShade.length,...goo);
+ const gold=wearing('poop')==='guld',goo=(gold?goldGoo:normalGoo).map(rgb);gooShade.splice(0,gooShade.length,...goo);
+ gooMat=gold?-2:-1;splatCol.splice(0,3,...rgb(gold?'#f2c84a':'#f4f1e6'));
 }
 // Wing and tail feathers get the body tint too, keeping their light and dark.
 function tintFeather(col){if(wearing('body')!=='rosa')return col;const l=.3*col[0]+.59*col[1]+.11*col[2];return [l*1.5,l*.78,l*1.12];}
@@ -105,11 +105,11 @@ function drawLook(face,plain,toHead,toBody){
   const crown=[];for(const y of [yb-.012,yb,yb+.005,yb+.03,yb+.031,yb+.07,yb+.11,yb+.14,yb+.145]){
    const r=y>=yb+.143?.06:R(y);crown.push(Array.from({length:n},(_,i)=>{const a=i/n*tau;return [cx+Math.cos(a)*r,y,cz+Math.sin(a)*r];}));}
   crown.push(Array.from({length:n},()=>[cx,yb+.148,cz]));
-  surface(crown,true,(j)=>j>=2&&j<=3?silk:j>=7?black:felt,toHead,goo);
+  surface(crown,true,(j)=>j>=2&&j<=3?silk:j>=7?black:felt,toHead);
   const brim=[];for(let j=0;j<=9;j++){const t=j/9,r=mix(.088,.172,t),row=[];
    for(let i=0;i<n;i++){const a=i/n*tau,curl=.03*Math.cos(a)**2*t*t;row.push([cx+Math.cos(a)*r,yb+.004+curl+(j===9?-.006:0),cz+Math.sin(a)*r*1.02]);}brim.push(row);}
   brim.push(brim.at(-1).map(p=>[p[0],p[1]-.008,p[2]]));brim.push(brim[0].map(p=>[p[0],p[1]-.006,p[2]]));
-  surface(brim,true,()=>black,toHead,goo);
+  surface(brim,true,()=>felt,toHead);
   const bz=cz+R(yb+.017)+.002,frame=(x0,x1,y0,y1)=>surface([[[x0,y0,bz],[x1,y0,bz]],[[x0,y1,bz],[x1,y1,bz]]],false,()=>gold,toHead,goo);
   frame(-.022,.022,yb+.026,yb+.032);frame(-.022,.022,yb+.003,yb+.009);frame(-.022,-.016,yb+.003,yb+.032);frame(.016,.022,yb+.003,yb+.032);
  }
@@ -139,12 +139,7 @@ function drawLook(face,plain,toHead,toBody){
   surface([row(-.017,.007),row(-.014,.012),row(0,.014),row(.014,.012),row(.017,.007)],true,(j)=>j===0||j===4?dark:red,toHead);
   const back=rimPt(yc(Math.PI),Math.PI,.018);
   lathe(Array.from({length:7},(_,k)=>{const a=k/6*Math.PI;return [Math.sin(a)*.02,Math.cos(a)*.018];}),back,()=>red,toHead,{n:14,sz:.8});
-  for(const s of [-1,1]){
-   const P=[];for(let j=0;j<=16;j++){const t=j/16,flap=.035*t*Math.sin(elapsed*13+t*8+s),lift=.02*t*Math.sin(elapsed*9+t*6);
-    const cxp=back[0]+s*(.014+.06*t)+flap*.6,cyp=back[1]-.1*t+lift,czp=back[2]-.24*t,w=.022*(1-.2*t),tw=.6*t+.4*Math.sin(elapsed*7+t*5+s)*t;
-    P.push([[cxp-w*Math.sin(tw),cyp+w*Math.cos(tw),czp],[cxp+w*Math.sin(tw),cyp-w*Math.cos(tw),czp]]);}
-   surface(P,false,(j)=>j%4<2?red:shadeOf(red,.9),toHead);
-  }
+  for(const s of [-1,1])ribbonEnd('band'+s,toHead([back[0]+s*.012,back[1],back[2]-.01]),12,.026,.022,red,dark);
  }
  if(wearing('eyes')==='brillor'){
   // Ordinary black sunglasses: a thick frame across the face just above the beak, two dark glossy lenses
@@ -172,10 +167,7 @@ function drawLook(face,plain,toHead,toBody){
     for(let i=0;i<n;i++){const a=i/n*tau;row.push(headPt(z+dz+tilt*Math.sin(a),a,doff));}P.push(row);}
    surface(P.map(r=>r),true,(c,i)=>(Math.floor(i/4)+k)%2?cream:blue,toBody);
   }
-  const top=headPt(.2,-Math.PI/2+.35,.03),sway=Math.sin(elapsed*5)*.015;
-  const E=[];for(let j=0;j<=10;j++){const t=j/10,w=.034;E.push([[top[0]-w+sway*t,top[1]-.2*t,top[2]+.02-.06*t],[top[0]+w+sway*t,top[1]-.2*t,top[2]+.02-.06*t]]);}
-  surface(E,false,(j)=>Math.floor(j/2)%2?cream:blue,toBody);
-  for(let f=0;f<6;f++){const x=top[0]-.03+f*.012+sway;surface([[[x,top[1]-.2,top[2]-.04],[x+.005,top[1]-.2,top[2]-.04]],[[x+.002,top[1]-.24,top[2]-.05],[x+.007,top[1]-.24,top[2]-.05]]],false,()=>cream,toBody);}
+  for(const [n,side] of [[0,.42],[1,.62]]){const pin=toBody(headPt(.205,-Math.PI/2+side,.035));ribbonEnd('scarf'+n,pin,13,.036,.034,n?cream:blue,n?blue:cream,true);}
  }
 }
 // Small pictures for the menu.
@@ -204,7 +196,7 @@ function countFlight(){stats.total+=points;stats.maxStars=Math.max(stats.maxStar
 // ---- Röd mantel: a cape that is real cloth. A grid of points joined by springs (Verlet), pinned across the
 // shoulders, pulled by gravity and by the air streaming past the bird, with a little flutter that grows with speed.
 // Points that end up inside the bird's body are pushed back out, so the cape drapes over the back and tail.
-const cape={cols:8,rows:14,pts:null,acc:0};
+const cape={cols:8,rows:17,pts:null,acc:0,pins:null};
 function toBirdLocal([X,Y,Z]){ // the inverse of birdPoint()
  const b=bird,bank=(b.vb??b.bank)*1.02,pitch=flightPitch(),sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
  const dx=X-b.x,dy=Y-b.y,dz=Z-b.z,bx=dx*cy-dz*sy,bz=dx*sy+dz*cy,by=dy*cp-bz*sp,z=dy*sp+bz*cp;
@@ -212,37 +204,33 @@ function toBirdLocal([X,Y,Z]){ // the inverse of birdPoint()
 }
 function capePin(i){const t=i/(cape.cols-1),a=mix(.62,Math.PI-.62,t);return birdPoint(headPt(.08,a,.022));}
 function resetCape(){
- cape.pts=[];for(let j=0;j<cape.rows;j++)for(let i=0;i<cape.cols;i++){const p=capePin(i),q=toBirdLocal(p),w=birdPoint([q[0]*(1+j*.07),q[1]+.03,q[2]-j*.075]);cape.pts.push({p:w,o:w.slice()});}
+ cape.pts=[];for(let j=0;j<cape.rows;j++)for(let i=0;i<cape.cols;i++){const p=capePin(i),q=toBirdLocal(p),w=birdPoint([q[0]*(1+j*.022),q[1]+.03,q[2]-j*.075]);cape.pts.push({p:w,o:w.slice()});}
  cape.rest=[];for(let i=0;i<cape.cols-1;i++){const a=capePin(i),b=capePin(i+1);cape.rest.push(Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]));}
 }
 function updateCape(dt){
  if(wearing('back')!=='mantel'){cape.pts=null;return;}
- if(!cape.pts||Math.hypot(cape.pts[0].p[0]-capePin(0)[0],cape.pts[0].p[1]-capePin(0)[1],cape.pts[0].p[2]-capePin(0)[2])>3)resetCape();
- const C=cape.cols,R=cape.rows,P=cape.pts,seg=.075,h=1/180,speed=Math.hypot(forwardSpeed(),bird.vy);
- cape.acc=Math.min(cape.acc+dt,.1);
- while(cape.acc>=h){cape.acc-=h;
+ const pins=Array.from({length:cape.cols},(_,i)=>capePin(i));
+ if(!cape.pts||Math.hypot(...[0,1,2].map(k=>cape.pts[0].p[k]-pins[0][k]))>3){resetCape();cape.pins=pins;}
+ const C=cape.cols,R=cape.rows,P=cape.pts,seg=.075,h=1/240,speed=Math.hypot(forwardSpeed(),bird.vy),air=airAt(),from=cape.pins||pins;
+ cape.acc=Math.min(cape.acc+dt,.06);const steps=Math.floor(cape.acc/h);cape.acc-=steps*h;
+ for(let s=1;s<=steps;s++){const f=s/steps;
   for(let j=0;j<R;j++)for(let i=0;i<C;i++){
-   const q=P[j*C+i];if(j===0){const pin=capePin(i);q.o=q.p;q.p=pin;continue;}
+   const q=P[j*C+i];if(j===0){q.o=q.p;q.p=[0,1,2].map(k=>mix(from[i][k],pins[i][k],f));q.pin=true;continue;} // the shoulders glide with the bird between frames
    const v=[(q.p[0]-q.o[0])/h,(q.p[1]-q.o[1])/h,(q.p[2]-q.o[2])/h];
-   // still air with gusts: the drag pulls the cloth towards the air's speed, so the faster the bird the flatter it streams
-   const t=elapsed*7+j*.9+i*1.7,gust=1.2+.22*speed,wind=[gust*Math.sin(t),gust*.6*Math.sin(t*1.3+i),gust*Math.cos(t*.8+j)];
-   const k=7,a=[(wind[0]-v[0])*k,(wind[1]-v[1])*k-9.8,(wind[2]-v[2])*k];
-   const n=[q.p[0]+(q.p[0]-q.o[0])*.995+a[0]*h*h,q.p[1]+(q.p[1]-q.o[1])*.995+a[1]*h*h,q.p[2]+(q.p[2]-q.o[2])*.995+a[2]*h*h];
-   q.o=q.p;q.p=n;
+   // gusts vary smoothly over the cloth, so it billows in waves instead of shivering point by point
+   const t=performance.now()/1000*4-j*.35,g=.4+.1*speed,w=[air[0]+g*Math.sin(t+i*.25),air[1]+g*.8*Math.sin(t*1.2+i*.2),air[2]+g*Math.cos(t*.8)];
+   const k=5,a=[(w[0]-v[0])*k,(w[1]-v[1])*k-9.8,(w[2]-v[2])*k];
+   q.o=q.p;q.p=[q.p[0]+v[0]*h*.996+a[0]*h*h,q.p[1]+v[1]*h*.996+a[1]*h*h,q.p[2]+v[2]*h*.996+a[2]*h*h];
   }
-  const link=(A,B,L)=>{const d=[B.p[0]-A.p[0],B.p[1]-A.p[1],B.p[2]-A.p[2]],l=Math.hypot(...d)||1e-6,f=(l-L)/l;
-   const wa=A.pin?0:B.pin?1:.5,wb=1-wa;for(let k=0;k<3;k++){A.p[k]+=d[k]*f*wa;B.p[k]-=d[k]*f*wb;}};
-  for(let i=0;i<C;i++)P[i].pin=true;
-  for(let it=0;it<4;it++){
-   for(let j=0;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i],w=cape.rest[Math.min(i,C-2)]*(1+j*.075); // the cape widens towards the hem
+  const link=(A,B,L)=>{const d=[B.p[0]-A.p[0],B.p[1]-A.p[1],B.p[2]-A.p[2]],l=Math.hypot(...d)||1e-6,c=(l-L)/l,wa=A.pin?0:B.pin?1:.5;
+   for(let k=0;k<3;k++){A.p[k]+=d[k]*c*wa;B.p[k]-=d[k]*c*(1-wa);}};
+  for(let it=0;it<5;it++){
+   for(let j=0;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i],w=cape.rest[Math.min(i,C-2)]*(1+j*.022);
     if(i<C-1)link(q,P[j*C+i+1],w);if(j<R-1)link(q,P[(j+1)*C+i],seg);if(j<R-1&&i<C-1)link(q,P[(j+1)*C+i+1],Math.hypot(w,seg));if(j<R-2)link(q,P[(j+2)*C+i],seg*2);}
-   // touching the bird: anything inside the body is pushed out to just above its surface
-   for(let j=1;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i],l=toBirdLocal(q.p);
-    if(l[2]<-.49||l[2]>.2)continue;const [,cy,w,hh]=ringAt(l[2]),m=.025,e=(l[0]/(w+m))**2+((l[1]-cy)/(hh+m))**2;
-    if(e<1){const s=1/Math.sqrt(Math.max(e,1e-4));q.p=birdPoint([l[0]*s,cy+(l[1]-cy)*s,l[2]]);}}
-   for(const q of P)if(q.p[1]<.03)q.p[1]=.03;
+   for(let j=1;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i];pushOutOfBird(q,.04);if(q.p[1]<.03)q.p[1]=.03;}
   }
  }
+ cape.pins=pins;
 }
 function drawCape(){
  if(wearing('back')!=='mantel'||!cape.pts)return;
@@ -250,4 +238,42 @@ function drawCape(){
  const grid=[];for(let j=0;j<R;j++)grid.push(cape.pts.slice(j*C,j*C+C).map(q=>q.p));
  surface(grid,false,(j)=>j===R-1?gold:j===0?deep:red,p=>p);
  const collar=[grid[0],grid[0].map((p,i)=>{const l=toBirdLocal(p);return birdPoint([l[0]*1.05,l[1]+.03,l[2]+.015]);})];surface(collar,false,()=>gold,p=>p,goo);
+}
+
+// ---- Loose cloth ends (scarf ends, headband tails): a chain of points hanging from a pin, simulated like the cape:
+// gravity, drag against the air the bird flies through, gusts that grow with speed, and kept out of the body.
+const chains={};let clothDt=1/60; // set every frame by the main loop: game time while flying, real time in the menus
+function airAt(){ // the air's velocity: still while flying (the bird moves through it), a steady breeze in the menu preview
+ return state==='play'||state==='crash'?[0,0,0]:[-Math.sin(bird.angle)*9,0,-Math.cos(bird.angle)*9];
+}
+function pushOutOfBird(q,margin){
+ const l=toBirdLocal(q.p);let out=null;
+ if(l[2]>=-.49&&l[2]<=.444){const [,cy,w,h]=ringAt(l[2]),e=(l[0]/(w+margin))**2+((l[1]-cy)/(h+margin))**2;if(e<1){const k=1/Math.sqrt(Math.max(e,1e-4));out=[l[0]*k,cy+(l[1]-cy)*k,l[2]];}}
+ else if(l[2]<-.49&&l[2]>-.8&&Math.abs(l[0])<.22&&l[1]<.06+margin&&l[1]>-.04)out=[l[0],.06+margin,l[2]]; // the tail fan
+ if(out){const n=birdPoint(out),d=[n[0]-q.p[0],n[1]-q.p[1],n[2]-q.p[2]];for(let k=0;k<3;k++){q.p[k]+=d[k];q.o[k]+=d[k]*.85;}} // move it out without kicking it
+}
+function stepChain(ch,pin,seg,dt,speed){
+ const n=ch.p.length,h=1/240,air=airAt();ch.acc=Math.min(ch.acc+dt,.06);const from=ch.pin||pin;let steps=Math.floor(ch.acc/h);ch.acc-=steps*h;
+ for(let s=1;s<=steps;s++){const f=s/steps,P=[mix(from[0],pin[0],f),mix(from[1],pin[1],f),mix(from[2],pin[2],f)];
+  for(let i=1;i<n;i++){const q=ch.p[i],v=[(q.p[0]-q.o[0])/h,(q.p[1]-q.o[1])/h,(q.p[2]-q.o[2])/h];
+   const t=performance.now()/1000*5+i*.45+ch.seed,g=.5+.12*speed,w=[air[0]+g*Math.sin(t),air[1]+g*.7*Math.sin(t*1.3),air[2]+g*Math.cos(t*.9)],k=6;
+   const a=[(w[0]-v[0])*k,(w[1]-v[1])*k-9.8,(w[2]-v[2])*k];q.o=q.p;q.p=[q.p[0]+v[0]*h*.997+a[0]*h*h,q.p[1]+v[1]*h*.997+a[1]*h*h,q.p[2]+v[2]*h*.997+a[2]*h*h];}
+  ch.p[0].o=ch.p[0].p;ch.p[0].p=P;
+  for(let it=0;it<5;it++){for(let i=0;i<n-1;i++){const A=ch.p[i],B=ch.p[i+1],d=[B.p[0]-A.p[0],B.p[1]-A.p[1],B.p[2]-A.p[2]],l=Math.hypot(...d)||1e-6,c=(l-seg)/l,wa=i===0?0:.5;
+    for(let k=0;k<3;k++){A.p[k]+=d[k]*c*wa;B.p[k]-=d[k]*c*(1-wa);}}
+   for(let i=1;i<n;i++){pushOutOfBird(ch.p[i],.022);if(ch.p[i].p[1]<.03)ch.p[i].p[1]=.03;}}
+ }
+ ch.pin=pin;
+}
+function ribbonEnd(id,pin,n,seg,width,col,edge,flat){
+ let ch=chains[id];
+ if(!ch||Math.hypot(ch.p[0].p[0]-pin[0],ch.p[0].p[1]-pin[1],ch.p[0].p[2]-pin[2])>1){ch=chains[id]={p:Array.from({length:n},(_,i)=>{const p=[pin[0],pin[1]-i*seg,pin[2]];return {p,o:p.slice()};}),acc:0,seed:Math.random()*9};}
+ stepChain(ch,pin,seg,clothDt,Math.hypot(forwardSpeed(),bird.vy));
+ const o=birdPoint([0,0,0]),up=birdPoint([0,1,0]).map((v,i)=>v-o[i]),right=birdPoint([1,0,0]).map((v,i)=>v-o[i]),G=[];
+ for(let i=0;i<n;i++){const a=ch.p[Math.max(0,i-1)].p,b=ch.p[Math.min(n-1,i+1)].p,d=[b[0]-a[0],b[1]-a[1],b[2]-a[2]];
+  let w=flat?right:[d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]];const l=Math.hypot(...w)||1,s=width*(1-.25*i/n)/l,p=ch.p[i].p;
+  G.push([[p[0]-w[0]*s,p[1]-w[1]*s,p[2]-w[2]*s],[p[0]+w[0]*s,p[1]+w[1]*s,p[2]+w[2]*s]]);}
+ surface(G,false,(j)=>j>=n-1||(flat&&j>=n-2)?edge:col,p=>p);
+ if(flat){const last=G.at(-1),dn=[0,-.045,0];for(let f=0;f<=5;f++){const t=f/5,p=[mix(last[0][0],last[1][0],t),mix(last[0][1],last[1][1],t),mix(last[0][2],last[1][2],t)];
+  surface([[p,[p[0]+.004,p[1],p[2]]],[[p[0],p[1]-.045,p[2]],[p[0]+.004,p[1]-.045,p[2]]]],false,()=>edge,q=>q);}} // fringe
 }

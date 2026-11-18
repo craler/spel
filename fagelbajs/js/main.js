@@ -119,7 +119,7 @@ applyLook();homeMenu();
 function frame(now){
  const real=Math.min(.05,(now-prev)/1000),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
  // While paused the picture stands still, so it is drawn once and then left alone.
- if(state==='pause'&&pausedDrawn){requestAnimationFrame(frame);return;}
+ if(state==='pause'&&pausedDrawn&&!previewLooks()){requestAnimationFrame(frame);return;}
  if(state==='pause')pausedDrawn=true;
  // The resolution steps down when frames are slow and back up after a long run of quick ones.
  // Only flying counts: a menu or a hidden tab says nothing about how the game itself runs.
@@ -133,9 +133,10 @@ function frame(now){
  }
  if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);if(state==='play')record();} // people and traffic move once per frame, on the second step
  else if(state==='crash')advanceCrash(dt);
- else if(state==='menu')wingPhase+=dt*3;
- if(looksLive&&state!=='pause')updateCape(state==='play'||state==='crash'?dt:real);
- if(state==='end'&&killClip)renderReplay(real);else render(dt);showTips();requestAnimationFrame(frame);
+ else if(state==='menu'||previewLooks())wingPhase+=dt*3;
+ clothDt=state==='play'||state==='crash'?dt:real;
+ if(looksLive&&(state!=='pause'||previewLooks()))updateCape(clothDt);
+ if(state==='end'&&killClip&&!previewLooks())renderReplay(real);else render(dt);showTips();requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 

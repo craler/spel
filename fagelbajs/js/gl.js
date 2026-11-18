@@ -106,6 +106,7 @@ void main(){
  vec3 g=normalize(vN),n=dot(g,uEye-vW)<0.?-g:g,alb=vC.rgb,em=vec3(0);float spec=0.;
  if(vC.a>.5&&vC.a<1.5)alb=facade(vC.rgb,vL,g,vS,vSeed,spec,em);
  else if(vC.a>1.5){em=alb*1.6;alb=vec3(0);}
+ else if(vC.a<-1.5){spec=3.;alb*=.75;em=alb*.12;} // polished metal: a strong highlight on a darker base
  else if(vC.a<-.5){spec=.8;}
  o=vec4(tone(fogged(lit(alb,n,vW,spec)+em,vW)),vA);
 }`;
@@ -313,7 +314,7 @@ function triBatch(mat=0){
   },
   fan(pts,col){for(let i=2;i<pts.length;i++)this.tri(pts[0],pts[i-1],pts[i],col);},
   upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.data.subarray(0,this.n*STRIDE),gl.DYNAMIC_DRAW);},
-  draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.vertexAttrib4f(4,0,0,0,0);gl.vertexAttrib3f(5,1,1,1);gl.vertexAttrib4f(6,1,1,1,mat);gl.vertexAttrib4f(7,0,0,0,0);gl.drawArrays(gl.TRIANGLES,0,this.n);}
+  draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.vertexAttrib4f(4,0,0,0,0);gl.vertexAttrib3f(5,1,1,1);gl.vertexAttrib4f(6,1,1,1,this.mat??mat);gl.vertexAttrib4f(7,0,0,0,0);gl.drawArrays(gl.TRIANGLES,0,this.n);}
  };
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.vbo);attribs([[0,3,0],[1,3,3],[2,4,6],[3,2,10]],STRIDE,0);gl.bindVertexArray(null);
  return b;
