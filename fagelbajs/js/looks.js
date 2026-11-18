@@ -14,6 +14,7 @@ const lookList=[
  {id:'hatt',name:'Hög hatt',slot:'head',need:'Bedriften Objuden gäst',have:()=>[+done.has('wedding'),1]},
  {id:'rosa',name:'Rosa duva',slot:'body',need:'Klara en händelse',have:()=>[Math.min(stats.events,1),1]},
  {id:'krona',name:'Krona',slot:'head',need:'Nå fem stjärnor',have:()=>[Math.min(stats.maxStars,5),5]},
+ {id:'mantel',name:'Röd mantel',slot:'back',need:'Flyg tio gånger',have:()=>[Math.min(flights,10),10]},
  {id:'guld',name:'Guldbajs',slot:'poop',need:'10 000 poäng totalt',have:()=>[stats.total,10000]},
 ];
 let worn={};try{worn=JSON.parse(localStorage.getItem('fagelbajs.look')||'{}');}catch{}
@@ -83,7 +84,7 @@ function drawLook(face,plain,toHead,toBody){
   const red=C('#cf3a2e'),seam=C('#8f2018'),under=C('#5a1a14'),J=24,I=48,z0=.222,z1=.43;
   const cut=z=>mix(.318,.352,(z-z0)/(z1-z0)),lo=z=>{const [,cy,,h]=ringAt(z);return Math.asin(clamp((cut(z)-cy)/(h+.01),-1,.97));},puff=(z,a)=>.009+.026*Math.sin(a)**2*Math.sin(Math.PI*clamp((z-z0+.02)/(z1-z0+.03),0,1));
   const P=[];for(let j=0;j<=J;j++){const z=z0+(z1-z0)*j/J,row=[];
-   for(let i=0;i<=I;i++){const t=i/I,a=mix(lo(z),Math.PI-lo(z),t),edge=Math.min(t,1-t);row.push(headPt(z,a,edge<.015?.004:puff(z,a)));}P.push(row);}
+   for(let i=0;i<=I;i++){const t=i/I,a=mix(lo(z),Math.PI-lo(z),t),edge=Math.min(t,1-t);row.push(headPt(z,a,edge<.015?.009:puff(z,a)+.004));}P.push(row);}
   const seams=[.5,.31,.69];
   surface(P,false,(j,i)=>{const t=i/I,s=seams.some(q=>Math.abs(t-q)<.012);return s?seam:shadeOf(red,.82+.18*Math.sin(Math.PI*t));},toHead);
   const top=headPt(.318,Math.PI/2,puff(.318,Math.PI/2)+.004);ball(top,.012,seam,toHead);
@@ -115,7 +116,7 @@ function drawLook(face,plain,toHead,toBody){
   // six points topped with pearls, and red velvet rising inside.
   const gold=C('#e6b33a'),deep=C('#b8862a'),velvet=C('#7d0f1e'),gems=['#d01f26','#2f6fbf','#2e9b5a'].map(C),n=60,y0=.384;
   const ring=(y,off)=>Array.from({length:n},(_,i)=>{const p=rimPt(y0,i/n*tau,off,.322);return [p[0],y,p[2]];});
-  surface([ring(y0-.006,.003),ring(y0,.012),ring(y0+.004,.015),ring(y0+.036,.015),ring(y0+.04,.012),ring(y0+.042,.006)],true,(j)=>j===1||j===4?gold:j===0||j===5?deep:shadeOf(gold,.92),toHead,goo);
+  surface([ring(y0-.006,.007),ring(y0,.014),ring(y0+.004,.015),ring(y0+.036,.015),ring(y0+.04,.012),ring(y0+.042,.006)],true,(j)=>j===1||j===4?gold:j===0||j===5?deep:shadeOf(gold,.92),toHead,goo);
   const dome=[];for(let k=0;k<=6;k++){const t=k/6;dome.push(ring(y0+.04+.05*Math.sin(t*Math.PI/2),.012*(1-t*t)).map(p=>[mix(p[0],0,t*t),p[1],mix(p[2],.322,t*t)]));}
   surface(dome,true,()=>velvet,toHead);
   for(let k=0;k<6;k++){
@@ -133,8 +134,8 @@ function drawLook(face,plain,toHead,toBody){
   // the head all the way round, a knot at the back and two long tails streaming in the wind.
   const red=C('#d01f26'),dark=C('#9a141a'),n=72,yc=phi=>.352+.006*Math.cos(phi);
   const row=(dy,off)=>Array.from({length:n},(_,i)=>{const phi=i/n*tau;return rimPt(yc(phi)+dy,phi,off);});
-  surface([row(-.017,.003),row(-.014,.008),row(0,.01),row(.014,.008),row(.017,.003)],true,(j)=>j===0||j===4?dark:red,toHead);
-  const back=rimPt(yc(Math.PI),Math.PI,.012);
+  surface([row(-.017,.007),row(-.014,.012),row(0,.014),row(.014,.012),row(.017,.007)],true,(j)=>j===0||j===4?dark:red,toHead);
+  const back=rimPt(yc(Math.PI),Math.PI,.018);
   lathe(Array.from({length:7},(_,k)=>{const a=k/6*Math.PI;return [Math.sin(a)*.02,Math.cos(a)*.018];}),back,()=>red,toHead,{n:14,sz:.8});
   for(const s of [-1,1]){
    const P=[];for(let j=0;j<=16;j++){const t=j/16,flap=.035*t*Math.sin(elapsed*13+t*8+s),lift=.02*t*Math.sin(elapsed*9+t*6);
@@ -146,7 +147,7 @@ function drawLook(face,plain,toHead,toBody){
  if(wearing('eyes')==='brillor'){
   // Ordinary black sunglasses: a thick frame across the face just above the beak, two dark glossy lenses
   // that wrap a little round the sides, a bridge, and arms running back over the head's sides.
-  const frame=C('#111214'),lens=C('#16202a'),glint=C('#55667c'),y=.338,off=.012;
+  const frame=C('#111214'),lens=C('#16202a'),glint=C('#55667c'),y=.338,off=.016;
   const at=(phi,dy,o)=>{const p=rimPt(y,phi,o,.33);return [p[0],y+dy,p[2]];};
   // Lens outline in (u across 0..1 from the nose outwards, v up -1..1): a wayfarer, straight on top, rounded below.
   const top=u=>.024+.003*u,bot=u=>-.02-.006*Math.sin(Math.PI*Math.min(1,u*1.1)),rnd=u=>Math.min(1,Math.sin(Math.PI*u)*2.4);
@@ -156,7 +157,7 @@ function drawLook(face,plain,toHead,toBody){
    surface(grid(off,.006),false,()=>frame,toHead,goo);                     // the frame, a little bigger than the lens
    surface(grid(off+.004,-.001),false,(k,i)=>k===1&&i>2&&i<9?glint:k<=2?C('#22303e'):lens,toHead,goo); // the lens, with a sheen across the top
    surface([phis.map(phi=>at(phi,top(0)+.008,off+.007)),phis.map(phi=>at(phi,top(0)+.008,off-.002)),phis.map(phi=>at(phi,top(0)-.002,off+.007))],false,()=>frame,toHead,goo); // heavy top bar
-   const arm=[];for(let k=0;k<=10;k++){const phi=s*mix(.66,2.2,k/10);arm.push([at(phi,.027,.006),at(phi,.017,.006)]);}surface(arm,false,()=>frame,toHead,goo);
+   const arm=[];for(let k=0;k<=10;k++){const phi=s*mix(.66,2.2,k/10);arm.push([at(phi,.027,.009),at(phi,.017,.009)]);}surface(arm,false,()=>frame,toHead,goo);
   }
   surface([[at(-.08,.022,off+.005),at(.08,.022,off+.005)],[at(-.08,.013,off+.004),at(.08,.013,off+.004)]],false,()=>frame,toHead,goo); // the bridge over the nose
  }
@@ -184,6 +185,7 @@ const lookIcon={
  hatt:'<path d="M14 8h20v26H14z" fill="#1d1e22"/><path d="M14 26h20v4H14z" fill="#a8252b"/><path d="M6 34h36v4H6z" fill="#16171a"/>',
  rosa:'<ellipse cx="22" cy="28" rx="15" ry="11" fill="#e0a8c8"/><circle cx="34" cy="17" r="8" fill="#c98bb0"/><path d="M41 17l6 2-6 2z" fill="#58445a"/>',
  krona:'<path d="M8 36V16l8 8 8-14 8 14 8-8v20z" fill="#e8b830"/><circle cx="24" cy="10" r="3" fill="#e8323a"/>',
+ mantel:'<path d="M14 8h20l8 34c-6-3-11 2-18-2-7 4-12-1-18 2z" fill="#c8102e"/><path d="M14 8h20v4H14z" fill="#e8b830"/>',
  guld:'<path d="M14 38c-6 0-6-8 1-8-3-6 4-9 7-6 1-6 9-5 9 1 7-1 8 8 2 9z" fill="#e8b830"/><circle cx="21" cy="31" r="2" fill="#fff6c8"/>',
 };
 function lookView(){return ['Utseende','<div class="looks">'+lookList.map(l=>{
@@ -195,3 +197,54 @@ document.querySelector('.panel').addEventListener('click',e=>{const b=e.target.c
 if(looksLive){const b=document.createElement('button');b.dataset.view='looks';b.textContent='Utseende';$('nav').append(b);}
 // Progress is counted at the end of every flight, and when an event is completed.
 function countFlight(){stats.total+=points;stats.maxStars=Math.max(stats.maxStars,wanted);saveStats();}
+
+// ---- Röd mantel: a cape that is real cloth. A grid of points joined by springs (Verlet), pinned across the
+// shoulders, pulled by gravity and by the air streaming past the bird, with a little flutter that grows with speed.
+// Points that end up inside the bird's body are pushed back out, so the cape drapes over the back and tail.
+const cape={cols:8,rows:14,pts:null,acc:0};
+function toBirdLocal([X,Y,Z]){ // the inverse of birdPoint()
+ const b=bird,bank=(b.vb??b.bank)*1.02,pitch=flightPitch(),sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
+ const dx=X-b.x,dy=Y-b.y,dz=Z-b.z,bx=dx*cy-dz*sy,bz=dx*sy+dz*cy,by=dy*cp-bz*sp,z=dy*sp+bz*cp;
+ return [bx*cb-by*sb,bx*sb+by*cb,z];
+}
+function capePin(i){const t=i/(cape.cols-1),a=mix(.62,Math.PI-.62,t);return birdPoint(headPt(.08,a,.022));}
+function resetCape(){
+ cape.pts=[];for(let j=0;j<cape.rows;j++)for(let i=0;i<cape.cols;i++){const p=capePin(i),q=toBirdLocal(p),w=birdPoint([q[0]*(1+j*.07),q[1]+.03,q[2]-j*.075]);cape.pts.push({p:w,o:w.slice()});}
+ cape.rest=[];for(let i=0;i<cape.cols-1;i++){const a=capePin(i),b=capePin(i+1);cape.rest.push(Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]));}
+}
+function updateCape(dt){
+ if(wearing('back')!=='mantel'){cape.pts=null;return;}
+ if(!cape.pts||Math.hypot(cape.pts[0].p[0]-capePin(0)[0],cape.pts[0].p[1]-capePin(0)[1],cape.pts[0].p[2]-capePin(0)[2])>3)resetCape();
+ const C=cape.cols,R=cape.rows,P=cape.pts,seg=.075,h=1/180,speed=Math.hypot(forwardSpeed(),bird.vy);
+ cape.acc=Math.min(cape.acc+dt,.1);
+ while(cape.acc>=h){cape.acc-=h;
+  for(let j=0;j<R;j++)for(let i=0;i<C;i++){
+   const q=P[j*C+i];if(j===0){const pin=capePin(i);q.o=q.p;q.p=pin;continue;}
+   const v=[(q.p[0]-q.o[0])/h,(q.p[1]-q.o[1])/h,(q.p[2]-q.o[2])/h];
+   // still air with gusts: the drag pulls the cloth towards the air's speed, so the faster the bird the flatter it streams
+   const t=elapsed*7+j*.9+i*1.7,gust=1.2+.22*speed,wind=[gust*Math.sin(t),gust*.6*Math.sin(t*1.3+i),gust*Math.cos(t*.8+j)];
+   const k=7,a=[(wind[0]-v[0])*k,(wind[1]-v[1])*k-9.8,(wind[2]-v[2])*k];
+   const n=[q.p[0]+(q.p[0]-q.o[0])*.995+a[0]*h*h,q.p[1]+(q.p[1]-q.o[1])*.995+a[1]*h*h,q.p[2]+(q.p[2]-q.o[2])*.995+a[2]*h*h];
+   q.o=q.p;q.p=n;
+  }
+  const link=(A,B,L)=>{const d=[B.p[0]-A.p[0],B.p[1]-A.p[1],B.p[2]-A.p[2]],l=Math.hypot(...d)||1e-6,f=(l-L)/l;
+   const wa=A.pin?0:B.pin?1:.5,wb=1-wa;for(let k=0;k<3;k++){A.p[k]+=d[k]*f*wa;B.p[k]-=d[k]*f*wb;}};
+  for(let i=0;i<C;i++)P[i].pin=true;
+  for(let it=0;it<4;it++){
+   for(let j=0;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i],w=cape.rest[Math.min(i,C-2)]*(1+j*.075); // the cape widens towards the hem
+    if(i<C-1)link(q,P[j*C+i+1],w);if(j<R-1)link(q,P[(j+1)*C+i],seg);if(j<R-1&&i<C-1)link(q,P[(j+1)*C+i+1],Math.hypot(w,seg));if(j<R-2)link(q,P[(j+2)*C+i],seg*2);}
+   // touching the bird: anything inside the body is pushed out to just above its surface
+   for(let j=1;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i],l=toBirdLocal(q.p);
+    if(l[2]<-.49||l[2]>.2)continue;const [,cy,w,hh]=ringAt(l[2]),m=.025,e=(l[0]/(w+m))**2+((l[1]-cy)/(hh+m))**2;
+    if(e<1){const s=1/Math.sqrt(Math.max(e,1e-4));q.p=birdPoint([l[0]*s,cy+(l[1]-cy)*s,l[2]]);}}
+   for(const q of P)if(q.p[1]<.03)q.p[1]=.03;
+  }
+ }
+}
+function drawCape(){
+ if(wearing('back')!=='mantel'||!cape.pts)return;
+ const C=cape.cols,R=cape.rows,red=rgb('#c0122c'),deep=rgb('#7e0a1c'),gold=rgb('#e0b23a');
+ const grid=[];for(let j=0;j<R;j++)grid.push(cape.pts.slice(j*C,j*C+C).map(q=>q.p));
+ surface(grid,false,(j)=>j===R-1?gold:j===0?deep:red,p=>p);
+ const collar=[grid[0],grid[0].map((p,i)=>{const l=toBirdLocal(p);return birdPoint([l[0]*1.05,l[1]+.03,l[2]+.015]);})];surface(collar,false,()=>gold,p=>p,goo);
+}

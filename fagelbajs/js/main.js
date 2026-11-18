@@ -131,6 +131,7 @@ function frame(now){
  if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);if(state==='play')record();} // people and traffic move once per frame, on the second step
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu')wingPhase+=dt*3;
+ if(looksLive&&state!=='pause')updateCape(state==='play'||state==='crash'?dt:real);
  if(state==='end'&&killClip)renderReplay(real);else render(dt);showTips();requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

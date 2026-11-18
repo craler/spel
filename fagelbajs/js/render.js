@@ -100,12 +100,12 @@ function smoothBody(toWorld){
  if(bodyFeathers&&!fast)featherCoat(R,grid,N,cols);
 }
 // Contour feathers over the skin: small rounded vanes laid like roof tiles, each pointing back towards the tail,
-// lifted a little at the tip and darker at its edge, staggered row by row. The head gets none: there the plumage is too fine.
+// lifted a little at the tip and darker at its edge, staggered row by row.
 let bodyFeathers=true;
 function featherCoat(R,grid,N,cols){
  const shade=(c,k)=>[c[0]*k,c[1]*k,c[2]*k];
  for(let j=2;j<R.length-1;j++){
-  if(R[j][0]>.33)continue;
+  if(R[j][0]>.19)continue; // the head is smooth: its plumage is too fine, and hats sit on it
   for(let i=(j%2);i<SEG;i+=1){
    const P=grid[j][i],n=N[j][i],B=grid[j-1][i],bx=B[0]-P[0],by=B[1]-P[1],bz=B[2]-P[2],bl=Math.hypot(bx,by,bz)||1,b=[bx/bl,by/bl,bz/bl];
    const sd=[n[1]*b[2]-n[2]*b[1],n[2]*b[0]-n[0]*b[2],n[0]*b[1]-n[1]*b[0]],size=.045+.35*Math.min(R[j][2],R[j][3])*.4,len=size*1.5,w=size*.62;
@@ -161,7 +161,7 @@ function renderBird(){
    face([[cx,y+r,z-r+t],[cx,y+r-t,z-r],[cx,y-r,z+r-t],[cx,y-r+t,z+r]],'#1c1622');face([[cx,y+r,z+r-t],[cx,y+r-t,z+r],[cx,y-r,z-r+t],[cx,y-r+t,z-r]],'#1c1622');
   }else{eye(.024,'#ffbf56',0);eye(.012,'#362c49',.0015);}
  }
- drawLook(face,(pts,color)=>poly(pts.map(world),color),p=>world(head(p)),world); // worn things keep their own colours
+ drawLook(face,(pts,color)=>poly(pts.map(world),color),p=>world(head(p)),world);if(looksLive)drawCape(); // worn things keep their own colours
  // Separate overlapping tail feathers with a dark terminal band and pale tips.
  const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl+.16*br; // fanned wide as an air brake
  for(let k=-3;k<=3;k++){
