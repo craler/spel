@@ -331,8 +331,8 @@ function simulate(dt){
  // Opening the wings turns that fall into level flight in a smooth pull-out.
  // The steep dive (arrow) sinks about as fast as the tuck, not faster: its downward pull is capped like a fall,
  // and the brake (Q) takes much of the sink out of it.
- const sink=wantedVy-40*diveCurve*(-.12-.6*b.brake),pull=(sink-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
- const acceleration=dive?-27*b.fold-.53*b.vy:Math.max(pull,-16*(1-.5*b.brake)-.0*b.vy);
+ const sink=wantedVy-40*diveCurve*(-.04-.6*b.brake),pull=(sink-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
+ const acceleration=dive?-27*b.fold-.53*b.vy:Math.max(pull,-21*(1-.5*b.brake));
  b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
  // Gliding is mostly still wings, broken now and then by a short burst of flapping. Climbing is hard work.
