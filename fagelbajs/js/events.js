@@ -14,9 +14,10 @@ let events=[],eventSerial=0,lastEventAt=null,eventGap=0,lastKind='';
 function resetEvents(){if(events.length)staticKey='';events=[];lastEventAt=null;eventGap=150;}
 function startEvent(){
  const bi=Math.floor(bird.x/tile),bj=Math.floor(bird.z/tile),fx=Math.sin(bird.angle),fz=Math.cos(bird.angle),cands=[];
- for(let i=bi-6;i<=bi+6;i++)for(let j=bj-6;j<=bj+6;j++){
+ for(let i=bi-7;i<=bi+7;i++)for(let j=bj-7;j<=bj+7;j++){
   const d=Math.max(Math.abs(i-bi),Math.abs(j-bj));if(d<2||blockType(i,j)!==2)continue;
   const x=i*tile+21,z=j*tile+21;if(events.some(e=>Math.hypot(e.x-x,e.z-z)<220))continue; // keep well away from the others
+  if(inSight(x,z))continue; // it sets up where you cannot see it happen
   const dx=x-bird.x,dz=z-bird.z,ahead=(dx*fx+dz*fz)/Math.hypot(dx,dz);if(ahead<-.2)continue;
   cands.push([i,j,ahead-d*.1+Math.random()*.8]);
  }
@@ -27,19 +28,28 @@ function startEvent(){
  banner(e.title,'Hinn dit! '+e.goal+' träffar ger +'+e.bonus,'alert',3.4);tone(520,780,.18,'triangle',.07);tone(780,1040,.2,'triangle',.07,.16);
  return true;
 }
+// Is any part of this square on screen and near enough to make out? Far away the haze hides it.
+function inSight(x,z){
+ if(Math.hypot(x-camera.x,z-camera.z)>260)return false;
+ for(const [dx,dz] of [[-15,-15],[15,-15],[-15,15],[15,15],[0,0]])for(const y of [0,8]){
+  const v=cameraPoint([x+dx,y,z+dz]);if(v[2]<.6)continue;const m=screen(v);
+  if(m[0]>-40&&m[0]<width+40&&m[1]>-40&&m[1]<height+40)return true;
+ }
+ return false;
+}
 function updateEvent(dt){
  if(state!=='play')return;
  if(!lastEventAt)lastEventAt=[bird.x,bird.z];
- if(events.length<2&&Math.hypot(bird.x-lastEventAt[0],bird.z-lastEventAt[1])>=eventGap){
+ if(events.filter(e=>!e.over).length<2&&Math.hypot(bird.x-lastEventAt[0],bird.z-lastEventAt[1])>=eventGap){
   if(startEvent()){lastEventAt=[bird.x,bird.z];eventGap=230+170*Math.random();}else eventGap+=40;
  }
- for(const e of events){e.left-=dt;e.age+=dt;}
- for(const e of events.filter(e=>e.left<=0)){if(!e.done)feedLine(e.title.split(' ')[0]+' ÖVER');staticKey='';}
- events=events.filter(e=>e.left>0);
+ // When the time is up it counts as over at once, but the square only goes back to normal once it is out of sight.
+ for(const e of events){e.left-=dt;e.age+=dt;if(e.left<=0&&!e.over){e.over=true;if(!e.done)feedLine(e.title.split(' ')[0]+' ÖVER');}}
+ const gone=events.filter(e=>e.over&&!inSight(e.x,e.z));if(gone.length){staticKey='';events=events.filter(e=>!gone.includes(e));}
 }
 // Called for every hit on a person or a vehicle; counts it for the event it belongs to.
 function eventHit(id){
- const e=events.find(e=>String(id).startsWith('ev'+e.serial+':'));if(!e||e.done)return;
+ const e=events.find(e=>String(id).startsWith('ev'+e.serial+':'));if(!e||e.done||e.over)return;
  e.hits++;
  if(e.hits>=e.goal){
   e.done=true;e.left=Math.min(e.left,5);addPoints(e.bonus);feedLine(e.title.split(' ')[0]+' KLARAD',e.bonus);
@@ -117,7 +127,7 @@ function propsOf(e){
  }
 }
 // On the 2D layer: what is on, how far along it is and how long is left, and an arrow towards it when it is out of view.
-function drawEventHud(){for(const [n,e] of events.entries())hudOf(e,n);}
+function drawEventHud(){for(const [n,e] of events.filter(e=>!e.over).entries())hudOf(e,n);}
 function hudOf(e,row){
  const line=e.title+' · '+e.hits+'/'+e.goal+' · '+Math.ceil(e.left)+' s';
  text(line,width/2,96+row*20,15,e.done?'#6dff85':'#ffd24a','center',900);

@@ -97,6 +97,24 @@ function smoothBody(toWorld){
  const last=R.length-1,end=(pt,j,flip)=>{const n=[pt[0]-grid[j][0][0],0,0];for(let i=0;i<SEG;i++){const k=(i+1)%SEG;
   dyn.smooth(flip?[pt,grid[j][k],grid[j][i]]:[pt,grid[j][i],grid[j][k]],[N[j][i],N[j][flip?k:i],N[j][flip?i:k]],[cols[j][i],cols[j][i],cols[j][k]]);}};
  end(tip,last,false);end(tail,0,true);
+ if(bodyFeathers&&!fast)featherCoat(R,grid,N,cols);
+}
+// Contour feathers over the skin: small rounded vanes laid like roof tiles, each pointing back towards the tail,
+// lifted a little at the tip and darker at its edge, staggered row by row. The head gets none: there the plumage is too fine.
+let bodyFeathers=true;
+function featherCoat(R,grid,N,cols){
+ const shade=(c,k)=>[c[0]*k,c[1]*k,c[2]*k];
+ for(let j=2;j<R.length-1;j++){
+  if(R[j][0]>.33)continue;
+  for(let i=(j%2);i<SEG;i+=1){
+   const P=grid[j][i],n=N[j][i],B=grid[j-1][i],bx=B[0]-P[0],by=B[1]-P[1],bz=B[2]-P[2],bl=Math.hypot(bx,by,bz)||1,b=[bx/bl,by/bl,bz/bl];
+   const sd=[n[1]*b[2]-n[2]*b[1],n[2]*b[0]-n[0]*b[2],n[0]*b[1]-n[1]*b[0]],size=.045+.35*Math.min(R[j][2],R[j][3])*.4,len=size*1.5,w=size*.62;
+   const at=(u,v,lift)=>[P[0]+b[0]*u+sd[0]*v+n[0]*lift,P[1]+b[1]*u+sd[1]*v+n[1]*lift,P[2]+b[2]*u+sd[2]*v+n[2]*lift];
+   const root=at(-len*.25,0,.002),tipP=at(len,0,.014),l1=at(len*.45,-w,.008),r1=at(len*.45,w,.008),l2=at(len*.85,-w*.6,.012),r2=at(len*.85,w*.6,.012);
+   const c=cols[j][i],k=.97+.08*hash(i,j,7),cc=shade(c,k),edge=shade(c,k*.87);
+   dyn.smooth([root,l1,r1],[n,n,n],[cc,edge,edge]);dyn.smooth([l1,l2,r2],[n,n,n],[edge,edge,edge]);dyn.smooth([l1,r2,r1],[n,n,n],[edge,edge,edge]);dyn.smooth([l2,tipP,r2],[n,n,n],[edge,shade(c,k*.8),edge]);
+  }
+ }
 }
 // The body follows its flight path through a soft spring (see simulate), so going from level flight into a dive
 // or a climb eases in and out instead of snapping. Braking rears the bird up.
@@ -108,7 +126,8 @@ function rawPitch(){
  return Math.max(pathAngle*.82,
   bird.climb>.01?1.33*bird.climb:-Math.PI/2);
 }
-function pitchTarget(){return rawPitch()+(bird.brake||0)*.95;}
+// Braking rears the nose up, but never past about 75 degrees: braking in a climb points straight up, it does not flip over backwards.
+function pitchTarget(){const raw=rawPitch(),b=bird.brake||0;return b>0?Math.min(raw+b*.95,Math.max(raw,1.3)):raw;}
 function renderBird(){
  const b=bird,br=crash?0:b.brake||0,fl=Math.max(b.fold*(crash?Math.exp(-crash.age*2):1),b.snare>0&&!crash?.96:0),bank=(b.vb??b.bank)*1.02+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
@@ -432,8 +451,7 @@ function buildMoving(){
   }
   if(wrecks.has(c.id)){
    M.ball.add(c.x,1.5,c.z,0,.6,.07,.5,splatCol,-1);M.ball.add(c.x+Math.sin(c.yaw)*.9,1.2,c.z+Math.cos(c.yaw)*.9,c.yaw,.4,.25,.1,splatCol,-1);
-   for(let i=0;i<3;i++){const t=((elapsed-c.hitTime)*.6+i/3)%1;
-    M.ball.add(c.x+Math.sin(c.yaw)*1.7+.25*Math.sin(t*5+i),1+t*3,c.z+Math.cos(c.yaw)*1.7,0,.25+.5*t,.25+.5*t,.25+.5*t,smoke);}
+   smokeColumn(c.x+Math.sin(c.yaw)*(c.bus?4.6:1.6),c.bus?2.4:1.05,c.z+Math.cos(c.yaw)*(c.bus?4.6:1.6),elapsed-c.hitTime,hash(c.x,c.z,4),c.bus?1.4:1);
   }
  }
  for(const o of thrown){
@@ -479,7 +497,7 @@ function buildMoving(){
   if(alive&&t.exhaust>.05)for(let i=0;i<3;i++){const f=(elapsed*1.4+i/3)%1,q=(.25+.5*f)*t.exhaust; // diesel smoke from the back deck
    M.ball.add(t.x-Math.sin(t.yaw)*3.1+.4*Math.sin(i*2),1.6+f*2.4,t.z-Math.cos(t.yaw)*3.1,0,q,q,q,charred);}
   for(const [dx,dz] of t.splats)M.ball.add(t.x+clamp(dx,-1.4,1.4),Math.hypot(dx,dz)<1.2?2.32:1.6,t.z+clamp(dz,-3,3),0,.34,.07,.3,splatCol,-1);
-  if(!alive)for(let i=0;i<4;i++){const f=(t.dead*.5+i/4)%1,q=.5+1.2*f;M.ball.add(t.x+.5*Math.sin(f*6+i),2.4+f*6,t.z,0,q,q,q,smoke);}
+  if(!alive)smokeColumn(t.x,2.3,t.z,t.dead,t.id,2.2);
  }
  for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splatCol,-1);}
  // The spray: wet, glossy blobs stretched along their fall, in mixed shades with darker bits,
@@ -568,6 +586,29 @@ function nightLights(){
   if(!wrecks.has(c.id))headBeams(c,L,W,y);
  }
 }
+// Smoke as soft, see-through puffs that always face the camera: thick and dark where it leaves the wreck, then
+// rising, swelling, drifting off with the wind, turning paler and thinning out. A small engine fire flickers at
+// its foot for the first seconds.
+function puff(x,y,z,r,alpha,col){
+ const c=camera,R=[c.c,0,-c.s],U=[c.sp*c.s,c.cp,c.sp*c.c],n=[-c.cp*c.s,c.sp,-c.cp*c.c],N=10,m=[x,y,z];
+ const p=a=>[x+(R[0]*Math.cos(a)+U[0]*Math.sin(a))*r,y+(R[1]*Math.cos(a)+U[1]*Math.sin(a))*r,z+(R[2]*Math.cos(a)+U[2]*Math.sin(a))*r];
+ const q=a=>{const k=.6;return [x+(R[0]*Math.cos(a)+U[0]*Math.sin(a))*r*k,y+(R[1]*Math.cos(a)+U[1]*Math.sin(a))*r*k,z+(R[2]*Math.cos(a)+U[2]*Math.sin(a))*r*k];};
+ for(let i=0;i<N;i++){const a0=i/N*tau,a1=(i+1)/N*tau; // a dense core and a soft rim
+  veil.smooth([m,q(a0),q(a1)],[n,n,n],[col,col,col],[alpha,alpha*.9,alpha*.9]);veil.smooth([q(a0),p(a0),p(a1)],[n,n,n],[col,col,col],[alpha*.9,.001,.001]);veil.smooth([q(a0),p(a1),q(a1)],[n,n,n],[col,col,col],[alpha*.9,.001,alpha*.9]);}
+}
+const smokeDark=rgb('#4a4a50'),smokePale=rgb('#d2d2d8'),fire=rgb('#ff8a1e');
+function smokeColumn(x,y,z,age,seed,size=1){
+ if(Math.abs(x-camera.x)>140||Math.abs(z-camera.z)>140)return;
+ const strength=clamp(age/.4,0,1)*clamp(1.4-age/22,0,1);if(strength<=0)return;
+ for(let i=0;i<16;i++){
+  const t=((age*.26+i/16+hash(seed,i,1)*.06)%1),wind=t*t*4.5*size,rise=t*7*size;
+  const r=(.45+t*2.2)*size*(.8+.4*hash(seed,i,2)),a=Math.min(.95,1.1*Math.pow(1-t,1.2)*Math.min(1,t*6))*strength;
+  const col=t<.15?smokeDark:mixColor(smokeDark,smokePale,Math.min(1,(t-.15)/.5));
+  puff(x+wind+.4*Math.sin(t*6+i),y+rise,z+wind*.4+.3*Math.cos(t*5+i),r,a,col);
+ }
+ if(age<7){const f=1-age/7,fl=.7+.3*Math.sin(elapsed*31+seed*9)*Math.sin(elapsed*17);M.ball.add(x,y-.15,z,0,.3*f*fl*size,.45*f*fl*size,.3*f*fl*size,fire,2);}
+}
+function mixColor(a,b,t){return [mix(a[0],b[0],t),mix(a[1],b[1],t),mix(a[2],b[2],t)];}
 function drawHeli(){
  const h=heli;M.heli.add(h.x,h.y,h.z,h.yaw,1,1,1,WHITE,0,0,0,h.tilt);
  // The rotors spin far too fast for the eye: each is a see-through disc with two dark smeared blade streaks
