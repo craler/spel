@@ -137,3 +137,8 @@ body.touch #tip{bottom:84px}body.touch .keys{display:none}
 .look.on{box-shadow:0 0 0 2px var(--gold)}.look.on button{background:#ffffff26;color:#fff}
 .look.locked svg{opacity:.35;filter:grayscale(1)}.look.locked b{color:#aeb6c2}
 .look i{display:block;width:80%;height:5px;border-radius:3px;background:#ffffff1f;overflow:hidden}.look i em{display:block;height:100%;background:var(--gold)}
+
+/* Ljudnivåer */
+.vols{display:grid;gap:6px;margin:4px 0 8px}.vols label{display:grid;grid-template-columns:1fr 1.2fr 44px;align-items:center;gap:10px;font-size:13.5px}
+.vols input{width:100%;accent-color:var(--gold)}.vols b{text-align:right;font-variant-numeric:tabular-nums}
+#volcode{display:block;padding:8px 10px;border-radius:8px;background:#ffffff12;font-size:12px;line-height:1.5;user-select:text;-webkit-user-select:text;word-break:break-word}

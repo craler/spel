@@ -25,10 +25,12 @@ function homeMenu(){panel('Duv-Diarré',controlsPicture()+(best?'<p class="best"
 const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><button data-set="'+id+'">'+value+'</button></div>';
 const views={
  looks:()=>lookView(),
+ volumes:()=>['Ljudnivåer','<div class="vols">'+volKinds.map(([k,name])=>'<label><span>'+name+'</span><input type="range" min="0" max="2" step="0.05" value="'+vol[k]+'" data-vol="'+k+'"><b>'+Math.round(vol[k]*100)+'%</b></label>').join('')+
+  '</div><p class="cause">Dra i reglaget så hörs ett exempel. Skicka raden nedan till Claude när det låter bra:</p><code id="volcode">'+volLine()+'</code><button class="back" data-volreset="1">Återställ alla till 100 %</button>'],
  scores:()=>{if(Date.now()-sharedAt>10000)fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
   return ['Topplista',board().length?scoreList():'<p class="cause">Inga flygningar än.</p>'];},
  feats:()=>['Bedrifter',featList(true)],
- settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',qualityNames[quality]+(quality==='auto'?(fast?' (snabb just nu)':' (snygg just nu)'):''),'graphics')+(smoothEdges===fast?'<p class="cause">Kantutjämningen ändras när sidan laddas om.</p>':'')],
+ settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+setting('Ljudnivåer','Ställ in →','volumes')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',qualityNames[quality]+(quality==='auto'?(fast?' (snabb just nu)':' (snygg just nu)'):''),'graphics')+(smoothEdges===fast?'<p class="cause">Kantutjämningen ändras när sidan laddas om.</p>':'')],
  help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
 };
 function openView(name){
@@ -36,13 +38,14 @@ function openView(name){
  $('brief').hidden=true;v.hidden=false;v.dataset.name=name;
  v.innerHTML='<h2>'+title+'</h2>'+body+'<button class="back" data-view="back">← Tillbaka</button>';
 }
-function setAudio(){if(master)master.gain.setTargetAtTime(muted?0:.85,sound.currentTime,.035);$('audio').textContent=muted?'Ljud av':'Ljud på';}
+function setAudio(){if(master)master.gain.setTargetAtTime(muted?0:.85*vol.master,sound.currentTime,.035);$('audio').textContent=muted?'Ljud av':'Ljud på';}
 document.querySelector('.panel').addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b)return;
  if(b.dataset.view==='back'){$('view').hidden=true;$('brief').hidden=false;if(state==='menu')homeMenu();}
  else if(b.dataset.view)openView(b.dataset.view);
  else if(b.dataset.set){
   const what=b.dataset.set;
+  if(what==='volumes'){openView('volumes');return;}
   if(what==='pitch'){reversePitch=!reversePitch;try{localStorage.setItem('fagelbajs.upClimbs',reversePitch?'yes':'no');}catch{}}
   if(what==='sound'){muted=!muted;setAudio();}
   if(what==='camera')view();
@@ -135,3 +138,26 @@ function frame(now){
  if(state==='end'&&killClip)renderReplay(real);else render(dt);showTips();requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ---- Ljudnivåer: one slider per kind of sound. Moving one plays an example of it.
+function volLine(){return volKinds.map(([k])=>k+' '+Math.round(vol[k]*100)).join(' · ');}
+const volSample={bajs:()=>play('poop1',.75),traff:()=>play('hitsplat1',.85),hitmarker:()=>play('hit1',.16),nedslag:()=>play('landsplat1',.35),hok:()=>play('hawk1',.8),
+ kanon:()=>cannon(30),vingar:()=>wingBeat(),billarm:()=>tone(415,416,.4,'sawtooth',.05*vol.billarm),ovrigt:()=>crunch(),master:()=>play('hitsplat2',.8)};
+let volPlayed=0,volQuiet=null;
+function audition(k){
+ try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}
+ if(performance.now()-volPlayed<250)return;volPlayed=performance.now();
+ if(volSample[k])volSample[k]();
+ if(k==='stad'||k==='trafik'||k==='vind'){ // continuous sounds: a two second taste at this level
+  const n=k==='stad'?(cityNodes||(sfx.city&&(cityNodes=play('city',0,1,true)))):null;
+  if(n){setParam(n.gain.gain,.5*vol.stad,.1);clearTimeout(volQuiet);volQuiet=setTimeout(()=>setParam(n.gain.gain,0,.4),2000);}
+  if(k==='vind'&&wind){setParam(wind.gain.gain,.1*vol.vind,.1);clearTimeout(volQuiet);volQuiet=setTimeout(()=>setParam(wind.gain.gain,0,.3),1500);}
+  if(k==='trafik')tone(55,60,.8,'sawtooth',.06*vol.trafik);
+ }
+}
+document.querySelector('.panel').addEventListener('input',e=>{
+ const r=e.target.closest('input[data-vol]');if(!r)return;const k=r.dataset.vol;vol[k]=+r.value;saveVol();
+ r.nextElementSibling.textContent=Math.round(vol[k]*100)+'%';$('volcode').textContent=volLine();
+});
+document.querySelector('.panel').addEventListener('change',e=>{const r=e.target.closest('input[data-vol]');if(r)audition(r.dataset.vol);});
+document.querySelector('.panel').addEventListener('click',e=>{if(!e.target.closest('button[data-volreset]'))return;for(const [k] of volKinds)vol[k]=1;saveVol();openView('volumes');});

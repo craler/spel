@@ -8,7 +8,15 @@ const sfx={};let sfxAsked=false,pooping=null,cityNodes=null,lastLand=0;
 // A random one of name1..nameN that has loaded, never the same one twice in a row.
 const lastPick={};
 function pick(name,n){let k;do{k=1+Math.floor(Math.random()*n);}while(n>1&&k===lastPick[name]);lastPick[name]=k;return sfx[name+k]?name+k:name+1;}
+// ---- Volume per kind of sound, set with the sliders under Inställningar → Ljudnivåer. 1 = as designed.
+const volKinds=[['master','Allt'],['bajs','Bajs'],['traff','Träff (splatt)'],['hitmarker','Träffmarkör'],['nedslag','Nedslag på marken'],['stad','Stadsbrus'],
+ ['trafik','Bilar'],['vind','Vind och vissling'],['vingar','Vingslag'],['hok','Hök'],['kanon','Kanon'],['billarm','Billarm'],['ovrigt','Övriga effekter']];
+const vol=Object.fromEntries(volKinds.map(([k])=>[k,1]));
+try{Object.assign(vol,JSON.parse(localStorage.getItem('fagelbajs.vol')||'{}'));}catch{}
+function saveVol(){try{localStorage.setItem('fagelbajs.vol',JSON.stringify(vol));}catch{}if(master)master.gain.setTargetAtTime(muted?0:.85*vol.master,sound.currentTime,.03);}
+const volOf=name=>/^poop/.test(name)?vol.bajs:/^hitsplat/.test(name)?vol.traff:name==='hit1'?vol.hitmarker:/^landsplat/.test(name)?vol.nedslag:/^hawk/.test(name)?vol.hok:/^tank/.test(name)?vol.kanon:name==='city'?vol.stad:vol.ovrigt;
 function play(name,volume=1,rate=1,loop=false){
+ volume*=volOf(name);
  if(!sfx[name]||!master||muted)return null;
  const src=sound.createBufferSource(),gain=sound.createGain();
  src.buffer=sfx[name];src.playbackRate.value=rate;src.loop=loop;gain.gain.value=volume;src.connect(gain);gain.connect(master);src.start();
@@ -23,15 +31,15 @@ function setParam(param,value,tc){
 }
 function tone(from,to,duration,type='sine',gain=.08,delay=0){
  if(!sound||muted)return;
- const t=sound.currentTime+delay, osc=sound.createOscillator(), vol=sound.createGain();
+ const t=sound.currentTime+delay, osc=sound.createOscillator(), vg=sound.createGain();
  osc.type=type;osc.frequency.setValueAtTime(from,t);osc.frequency.exponentialRampToValueAtTime(to,t+duration);
- vol.gain.setValueAtTime(.001,t);vol.gain.exponentialRampToValueAtTime(gain,t+Math.min(.012,duration*.4));vol.gain.exponentialRampToValueAtTime(.001,t+duration);
- osc.connect(vol);vol.connect(sound.destination);osc.start(t);osc.stop(t+duration);
+ const g0=Math.max(.0011,gain*vol.ovrigt*vol.master);vg.gain.setValueAtTime(.001,t);vg.gain.exponentialRampToValueAtTime(g0,t+Math.min(.012,duration*.4));vg.gain.exponentialRampToValueAtTime(.001,t+duration);
+ osc.connect(vg);vg.connect(sound.destination);osc.start(t);osc.stop(t+duration);
 }
 function setupAudio(){
  if(!sound)return;
  if(!master){
-  master=sound.createGain();master.gain.value=muted?0:.85;master.connect(sound.destination);
+  master=sound.createGain();master.gain.value=muted?0:.85*vol.master;master.connect(sound.destination);
   noiseBuf=sound.createBuffer(1,sound.sampleRate*2,sound.sampleRate);const data=noiseBuf.getChannelData(0);
   for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
   const source=sound.createBufferSource(),filter=sound.createBiquadFilter(),gain=sound.createGain();
@@ -55,13 +63,13 @@ function voice(index,volume,rate=1){
 function wingBeat(){
  if(!bank)return;
  const next=lastWing?1+((lastWing-1+1+Math.floor(Math.random()*7))%8):1+Math.floor(Math.random()*8);
- lastWing=next;voice(next,.43,.94+.12*Math.random());
+ lastWing=next;voice(next,.43*vol.vingar,.94+.12*Math.random());
 }
 function windLevel(){
  if(!wind)return;
  const rush=clamp((Math.hypot(bird.vy,forwardSpeed())-8)/45,.12,1);
  const v=state==='play'?Math.max(bird.fold*rush,bird.steep*(.17+.42*rush)):0;
- setParam(wind.gain.gain,v*.145,.1);
+ setParam(wind.gain.gain,v*.145*vol.vind,.1);
  setParam(wind.filter.frequency,280+v*1900,.13);
 }
 // A short burst of filtered noise whose filter sweeps from one frequency to another:
@@ -71,7 +79,7 @@ function burst({type='lowpass',from=2000,to=from,q=1,gain=.2,attack=.004,dur=.12
  const t=sound.currentTime+delay,src=sound.createBufferSource(),f=sound.createBiquadFilter(),g=sound.createGain();
  src.buffer=noiseBuf;f.type=type;f.Q.value=q;
  f.frequency.setValueAtTime(from,t);f.frequency.exponentialRampToValueAtTime(Math.max(20,to),t+dur);
- g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(gain,t+attack);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(Math.max(.0002,gain*vol.ovrigt),t+attack);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
  src.connect(f);f.connect(g);g.connect(master);src.start(t,Math.random()*1.5,dur+.05);
 }
 // The spray itself: a raspberry (an unsteady low pulse) under a wet hiss, running for as long as it flows.
@@ -157,7 +165,7 @@ function dread(level){
   for(const f of [49,49.6,73.7]){const o=sound.createOscillator();o.type='sawtooth';o.frequency.value=f;o.connect(lp);o.start();}
   droneNodes={g,lp};
  }
- setParam(droneNodes.g.gain,.085*level,.25);setParam(droneNodes.lp.frequency,150+280*level,.3);
+ setParam(droneNodes.g.gain,.085*level*vol.hok,.25);setParam(droneNodes.lp.frequency,150+280*level,.3);
 }
 // A startled yelp: a voice-like sweep through a vowel filter, pitched differently every time.
 function yelp(){
@@ -178,7 +186,7 @@ function alarmHorn(level){
   for(const f of [415,523]){const o=sound.createOscillator();o.type='sawtooth';o.frequency.value=f;o.connect(lp);o.start();}
   hornNodes={g,lp};
  }
- setParam(hornNodes.g.gain,level,.012);
+ setParam(hornNodes.g.gain,level*vol.billarm,.012);
  setParam(hornNodes.lp.frequency,500+1400*Math.min(1,level*12),.05); // far away it is also duller
 }
 // The dive: a thin whistle that climbs and swells with speed while the wings are tucked.
@@ -192,14 +200,14 @@ function whistle(level){
  }
  const t=sound.currentTime,f=480+1700*level;
  setParam(whistleNodes.a.frequency,f,.07);setParam(whistleNodes.b.frequency,f*1.503,.07);
- setParam(whistleNodes.g.gain,.13*level*level,.06);
+ setParam(whistleNodes.g.gain,.13*level*level*vol.vind,.06);
 }
 // The city itself: a low hum that fades with altitude and the odd car horn somewhere below.
 function ambience(playing,dt){
  if(!master)return;
  if(sfx.city){ // a recorded street, looping, quieter the higher the bird flies
   if(!cityNodes){cityNodes=play('city',0,1,true);if(humNodes)setParam(humNodes.g.gain,0,.3);}
-  if(cityNodes)setParam(cityNodes.gain.gain,playing?.5*clamp(1.1-bird.y/75,.3,1):0,.5);
+  if(cityNodes)setParam(cityNodes.gain.gain,playing?.5*clamp(1.1-bird.y/75,.3,1)*vol.stad:0,.5);
   return;
  }
  if(!humNodes){
@@ -208,7 +216,7 @@ function ambience(playing,dt){
   src.connect(lp);lp.connect(g);g.connect(master);src.start();humNodes={g};
  }
  const near=clamp(1.1-bird.y/75,.25,1);
- setParam(humNodes.g.gain,playing?.11*near:0,.4);
+ setParam(humNodes.g.gain,playing?.11*near*vol.stad:0,.4);
  if(!playing)return;
  nextHorn-=dt;
  if(nextHorn<=0){
@@ -261,7 +269,7 @@ function carEngines(playing){
   const near=(1-d/range)**2,heavy=p.tank||c.bus,base=p.tank?28:c.bus?34:40+14*hash(c.lane||0,c.along|0,3),rev=base*(1+.5*Math.min(1,speed/9))*doppler;
   setParam(e.osc.frequency,rev,.08);setParam(e.sub.frequency,rev*.5,.08);
   setParam(e.lp.frequency,(heavy?260:360)+500*near*doppler,.1);setParam(e.bp.frequency,(500+400*Math.min(1,speed/9))*doppler,.1);
-  setParam(e.g.gain,(heavy?.16:.11)*near*(.35+.65*Math.min(1,speed/5)),.08);
+  setParam(e.g.gain,vol.trafik*(heavy?.16:.11)*near*(.35+.65*Math.min(1,speed/5)),.08);
   if(e.pan.pan)setParam(e.pan.pan,clamp((dx*Math.cos(bird.angle)-dz*Math.sin(bird.angle))/Math.max(4,d),-.9,.9),.08);
  }
 }
