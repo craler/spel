@@ -333,7 +333,11 @@ function simulate(dt){
  // and the brake (Q) takes much of the sink out of it.
  const sink=wantedVy-40*diveCurve*(-.04-.6*b.brake),pull=(sink-b.vy)*mix(2.7,3.4,clamp(-b.vy/30,0,1));
  const acceleration=dive?-27*b.fold-.53*b.vy:Math.max(pull,-21*(1-.5*b.brake));
- b.vy=clamp(b.vy+acceleration*dt,-51,27);b.y+=b.vy*dt;
+ b.vy=clamp(b.vy+acceleration*dt,-51,27);
+ // Tipping into the arrow dive must not cost speed: what the nose gives up going forwards goes into the drop at once.
+ if(!dive&&b.steep>.02&&b.snare<=0){const h=forwardSpeed(),keep=Math.min(40,Math.max(b.cruise||0,Math.hypot(h,b.vy)));const need=-Math.sqrt(Math.max(0,keep*keep-h*h))*(1-.7*b.brake);if(b.vy>need)b.vy=need;b.cruise=keep;}
+ else b.cruise=Math.hypot(forwardSpeed(),b.vy);
+ b.y+=b.vy*dt;
  b.flare*=Math.exp(-dt*1.2);
  // Gliding is mostly still wings, broken now and then by a short burst of flapping. Climbing is hard work.
  b.nextFlap-=dt;b.burst=Math.max(0,b.burst-dt);

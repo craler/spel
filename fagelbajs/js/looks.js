@@ -58,50 +58,121 @@ function strip(p,dir,side,len,w,col,xf,wave){
  const P=[];for(let j=0;j<=8;j++){const t=j/8,f=wave(t);P.push([-1,1].map(s=>[p[0]+dir[0]*len*t+side[0]*s*w*(1-.3*t)+f[0],p[1]+dir[1]*len*t+side[1]*s*w*(1-.3*t)+f[1],p[2]+dir[2]*len*t+side[2]*s*w*(1-.3*t)+f[2]]));}
  surface(P,false,()=>col,xf);
 }
+// ---- Fitting to the head. The head is a run of elliptical rings along the beak axis (bodyRings in render.js);
+// these read its shape so that what the dove wears hugs it instead of floating at a guessed size.
+function ringAt(z){
+ const R=bodyRings;if(z<=R[0][0])return R[0];if(z>=R.at(-1)[0])return R.at(-1);
+ let k=0;while(R[k+1][0]<z)k++;const t=(z-R[k][0])/(R[k+1][0]-R[k][0]);return R[k].map((v,i)=>mix(v,R[k+1][i],t));
+}
+function inHead(x,y,z){if(z<.17||z>.444)return false;const [,cy,w,h]=ringAt(z);return (x/w)**2+((y-cy)/h)**2<1;}
+// A point on the head's surface: ring at z, angle a round it (pi/2 = the crown of the head), pushed out by off.
+function headPt(z,a,off){const [,cy,w,h]=ringAt(z);return [(w+off)*Math.cos(a),cy+(h+off)*Math.sin(a),z];}
+// Where a horizontal slice at height y leaves the head, in the direction phi (0 = towards the beak), pushed out by off.
+function rimPt(y,phi,off,cz=.33){
+ const dx=Math.sin(phi),dz=Math.cos(phi);let lo=0,hi=.22;
+ if(!inHead(0,y,cz))return [0,y,cz];
+ for(let k=0;k<22;k++){const m=(lo+hi)/2;if(inHead(dx*m,y,cz+dz*m))lo=m;else hi=m;}
+ return [dx*(lo+off),y,cz+dz*(lo+off)];
+}
 function drawLook(face,plain,toHead,toBody){
  if(!looksLive)return;
- const C=s=>rgb(s),head=wearing('head');
- if(head==='keps'){ // a baseball cap: six panels with seams, a button on top, a curved peak and a small white badge
-  const red=C('#d23b2f'),seam=C('#a52a22');
-  lathe(Array.from({length:8},(_,k)=>{const a=k/7*Math.PI/2;return [.128*Math.sin(a)+.0001,.085*Math.cos(a)];}),[0,.37,.325],(j,i)=>i%5===0&&j>0?seam:red,toHead,{n:30});
-  const peak=[];for(let j=0;j<=6;j++){const t=j/6,row=[];for(let i=0;i<=8;i++){const u=i/8*2-1,w=.115*(1-.25*t);row.push([u*w,.378-.02*t-.03*u*u,.43+t*.16-.04*u*u]);}peak.push(row);}
-  surface(peak,false,()=>C('#b8302a'),toHead);
-  ball([0,.458,.315],.013,C('#a52a22'),toHead);ball([0,.41,.425],.014,C('#f4f0e6'),toHead);
+ const C=s=>rgb(s),head=wearing('head'),shadeOf=(c,k)=>[c[0]*k,c[1]*k,c[2]*k];
+ if(head==='keps'){
+  // A baseball cap moulded over the skull: six panels with stitched seams, a puffed crown, a rolled lip,
+  // a button on top and a stiff curved peak with a darker underside.
+  const red=C('#cf3a2e'),seam=C('#8f2018'),under=C('#5a1a14'),J=24,I=48,z0=.222,z1=.43;
+  const cut=z=>mix(.318,.352,(z-z0)/(z1-z0)),lo=z=>{const [,cy,,h]=ringAt(z);return Math.asin(clamp((cut(z)-cy)/(h+.01),-1,.97));},puff=(z,a)=>.009+.026*Math.sin(a)**2*Math.sin(Math.PI*clamp((z-z0+.02)/(z1-z0+.03),0,1));
+  const P=[];for(let j=0;j<=J;j++){const z=z0+(z1-z0)*j/J,row=[];
+   for(let i=0;i<=I;i++){const t=i/I,a=mix(lo(z),Math.PI-lo(z),t),edge=Math.min(t,1-t);row.push(headPt(z,a,edge<.015?.004:puff(z,a)));}P.push(row);}
+  const seams=[.5,.31,.69];
+  surface(P,false,(j,i)=>{const t=i/I,s=seams.some(q=>Math.abs(t-q)<.012);return s?seam:shadeOf(red,.82+.18*Math.sin(Math.PI*t));},toHead);
+  const top=headPt(.318,Math.PI/2,puff(.318,Math.PI/2)+.004);ball(top,.012,seam,toHead);
+  // the peak: two skins and a rounded front edge
+  const y0=cut(z1)-.006;
+  const peak=(dy,col)=>{const Q=[];for(let j=0;j<=10;j++){const t=j/10,row=[];for(let i=0;i<=16;i++){const u=i/16*2-1,w=.112*(1-.2*t*t);
+   row.push([u*w,y0+.004+dy-.028*t*t-.018*u*u,z1-.045+t*.17-.035*u*u*t]);}Q.push(row);}surface(Q,false,()=>col,toHead);return Q;};
+  const Tp=peak(.004,red);peak(-.002,under);
+  surface([Tp.at(-1),Tp.at(-1).map(p=>[p[0],p[1]-.006,p[2]+.002])],false,()=>shadeOf(red,.8),toHead);
  }
- if(head==='hatt'){ // a top hat: curled brim, a slightly flared crown, a red silk band with a gold buckle
-  const black=C('#17181b'),silk=C('#a8252b');
-  lathe([[0,.235],[.098,.235],[.104,.228],[.1,.12],[.097,.07],[.099,.045],[.103,.03],[.165,.022],[.178,.03],[.18,.022],[.168,.01],[.1,.012]],[0,.385,.33],(j)=>j>=5&&j<=6?silk:black,toHead,{n:28,sz:1.05,batch:goo});
-  surface([[[-.025,.075,.435],[.025,.075,.435]],[[-.025,.04,.437],[.025,.04,.437]]].map(r=>r.map(p=>[p[0],p[1]+.385,p[2]])),false,()=>C('#e8b830'),toHead,goo);
+ if(head==='hatt'){
+  // A top hat resting on the crown of the head: slightly flared crown, red silk band with a gold buckle,
+  // a brim that curls up at the sides with a rolled edge. Glossy.
+  const black=C('#141518'),felt=C('#1f2024'),silk=C('#a3222a'),gold=C('#e0b23a'),cx=0,cz=.322,yb=.392,n=56;
+  const R=(y)=>.088+.009*Math.max(0,(y-yb-.03)/.11);
+  const crown=[];for(const y of [yb-.012,yb,yb+.005,yb+.03,yb+.031,yb+.07,yb+.11,yb+.14,yb+.145]){
+   const r=y>=yb+.143?.06:R(y);crown.push(Array.from({length:n},(_,i)=>{const a=i/n*tau;return [cx+Math.cos(a)*r,y,cz+Math.sin(a)*r];}));}
+  crown.push(Array.from({length:n},()=>[cx,yb+.148,cz]));
+  surface(crown,true,(j)=>j>=2&&j<=3?silk:j>=7?black:felt,toHead,goo);
+  const brim=[];for(let j=0;j<=9;j++){const t=j/9,r=mix(.088,.172,t),row=[];
+   for(let i=0;i<n;i++){const a=i/n*tau,curl=.03*Math.cos(a)**2*t*t;row.push([cx+Math.cos(a)*r,yb+.004+curl+(j===9?-.006:0),cz+Math.sin(a)*r*1.02]);}brim.push(row);}
+  brim.push(brim.at(-1).map(p=>[p[0],p[1]-.008,p[2]]));brim.push(brim[0].map(p=>[p[0],p[1]-.006,p[2]]));
+  surface(brim,true,()=>black,toHead,goo);
+  const bz=cz+R(yb+.017)+.002,frame=(x0,x1,y0,y1)=>surface([[[x0,y0,bz],[x1,y0,bz]],[[x0,y1,bz],[x1,y1,bz]]],false,()=>gold,toHead,goo);
+  frame(-.022,.022,yb+.026,yb+.032);frame(-.022,.022,yb+.003,yb+.009);frame(-.022,-.016,yb+.003,yb+.032);frame(.016,.022,yb+.003,yb+.032);
  }
- if(head==='krona'){ // a gold crown: a band set with jewels, five points with pearls, red velvet inside
-  const gold=C('#e8b830'),jewel=['#d01f26','#2f6fbf','#2e8b57'];
-  lathe([[.096,.07],[.099,.045],[.097,.0]],[0,.365,.33],()=>gold,toHead,{n:30,batch:goo});
-  lathe([[0,.085],[.055,.078],[.083,.055],[.09,.03]],[0,.365,.33],()=>C('#8a1020'),toHead,{n:20});
-  for(let k=0;k<5;k++){const a=k/5*tau+.3,x=Math.cos(a)*.097,z=.33+Math.sin(a)*.097;
-   surface([[[x-Math.sin(a)*.03,.435,z+Math.cos(a)*.03],[x+Math.sin(a)*.03,.435,z-Math.cos(a)*.03]],[[x,.495,z],[x,.495,z]]],false,()=>gold,toHead,goo);
-   ball([x,.5,z],.011,C('#f8f4ea'),toHead,goo);ball([Math.cos(a+.63)*.1,.39,.33+Math.sin(a+.63)*.1],.013,C(jewel[k%3]),toHead,goo);}
- }
- if(head==='pannband'){ // a red headband across the forehead, knotted behind with two long tails in the wind
-  const red=C('#d01f26');
-  lathe([[.131,.018],[.134,0],[.131,-.018]],[0,.345,.335],()=>red,toHead,{n:30,tilt:-.28});
-  ball([0,.385,.205],.022,C('#a8161c'),toHead);
-  for(const s of [-1,1])strip([s*.012,.385,.2],[s*.25,-.35,-.9].map(v=>v/1.0),[1,0,0],.26,.016,red,toHead,t=>[s*.03*t*Math.sin(elapsed*12+t*7),.025*t*Math.sin(elapsed*9+t*5+s),0]);
- }
- if(wearing('eyes')==='brillor'){ // aviator-style shades: curved dark lenses with a sheen, a thin gold frame, a bridge and arms
-  for(const sx of [-1,1]){
-   const lens=[];for(let j=0;j<=4;j++){const row=[];for(let i=0;i<=14;i++){const a=i/14*tau,rr=j/4;row.push([sx*(.138+.012*(1-rr*rr)),.31+.042*rr*Math.sin(a),.362+.055*rr*Math.cos(a)]);}lens.push(row);}
-   surface(lens,false,(j)=>C(j<2?'#2a3340':'#11161d'),toHead,goo);
-   lathe([[.004,.004],[.006,0],[.004,-.004]],[0,0,0],()=>C('#c9a04a'),p=>{const a=Math.atan2(p[2],p[0]);return toHead([sx*.139,.31+.044*Math.sin(a)+p[1]*.0,.362+.057*Math.cos(a)]);},{n:16});
-   surface([[[sx*.139,.33,.31],[sx*.139,.336,.31]],[[sx*.128,.33,.22],[sx*.128,.336,.22]]],false,()=>C('#c9a04a'),toHead);
+ if(head==='krona'){
+  // A gold crown that follows the shape of the head: a band with rolled rims and jewels in gold settings,
+  // six points topped with pearls, and red velvet rising inside.
+  const gold=C('#e6b33a'),deep=C('#b8862a'),velvet=C('#7d0f1e'),gems=['#d01f26','#2f6fbf','#2e9b5a'].map(C),n=60,y0=.384;
+  const ring=(y,off)=>Array.from({length:n},(_,i)=>{const p=rimPt(y0,i/n*tau,off,.322);return [p[0],y,p[2]];});
+  surface([ring(y0-.006,.003),ring(y0,.012),ring(y0+.004,.015),ring(y0+.036,.015),ring(y0+.04,.012),ring(y0+.042,.006)],true,(j)=>j===1||j===4?gold:j===0||j===5?deep:shadeOf(gold,.92),toHead,goo);
+  const dome=[];for(let k=0;k<=6;k++){const t=k/6;dome.push(ring(y0+.04+.05*Math.sin(t*Math.PI/2),.012*(1-t*t)).map(p=>[mix(p[0],0,t*t),p[1],mix(p[2],.322,t*t)]));}
+  surface(dome,true,()=>velvet,toHead);
+  for(let k=0;k<6;k++){
+   const phi=k/6*tau+.0,L=rimPt(y0,phi-.42,.015,.322),Rr=rimPt(y0,phi+.42,.015,.322),M=rimPt(y0,phi,.02,.322),tip=[M[0]*1.08,y0+.105,mix(M[2],.322,-.08)];
+   const pts=[];for(let j=0;j<=6;j++){const t=j/6,row=[];for(let i=0;i<=8;i++){const u=i/8,b=[mix(L[0],Rr[0],u),y0+.04,mix(L[2],Rr[2],u)],w=Math.pow(1-Math.abs(u*2-1),.6);
+    row.push([mix(b[0],tip[0],t*w+(1-w)*t*.2),mix(b[1],tip[1],t*w),mix(b[2],tip[2],t*w+(1-w)*t*.2)]);}pts.push(row);}
+   surface(pts,false,(j)=>shadeOf(gold,.85+.15*j/6),toHead,goo);
+   ball([tip[0],tip[1]+.01,tip[2]],.011,C('#f6f1e6'),toHead,goo);
+   const g=rimPt(y0,phi,.018,.322);ball([g[0],y0+.02,g[2]],.0125,gems[k%3],toHead,goo);
+   lathe([[.0165,.003],[.0175,0],[.0165,-.003]],[0,0,0],()=>gold,p=>toHead([g[0]+p[0]*Math.cos(phi),y0+.02+p[2],g[2]-p[0]*Math.sin(phi)]),{n:14,batch:goo});
   }
  }
- if(wearing('neck')==='halsduk'){ // a chunky knitted scarf in blue and cream stripes, wrapped twice, one end hanging and swinging
-  const blue=C('#2f6fbf'),cream=C('#ece6d6');
-  for(const k of [0,1]){const y=.19+k*.042;
-   lathe([[.15+.012*k,.026],[.168+.01*k,.0],[.15+.012*k,-.026]].map(([r,h])=>[r,h]),[0,y,.215-.01*k],(j,i)=>(Math.floor(i/3)+k)%2?cream:blue,toBody,{n:36,sz:1.05});}
-  const sway=Math.sin(elapsed*5)*.02;
-  strip([.07,.17,.33],[.15,-.8,-.25],[1,0,.2],.26,.03,blue,toBody,t=>[sway*t,0,.02*Math.sin(elapsed*7+t*4)*t]);
-  for(let f=0;f<5;f++)surface([[[.1+f*.012,-.04,.27],[.104+f*.012,-.04,.27]],[[.1+f*.012,-.08,.26],[.104+f*.012,-.08,.26]]],false,()=>cream,toBody);
+ if(head==='pannband'){
+  // A red ninja headband tied round the head just above the eyes: a cloth band with soft folded edges that follows
+  // the head all the way round, a knot at the back and two long tails streaming in the wind.
+  const red=C('#d01f26'),dark=C('#9a141a'),n=72,yc=phi=>.352+.006*Math.cos(phi);
+  const row=(dy,off)=>Array.from({length:n},(_,i)=>{const phi=i/n*tau;return rimPt(yc(phi)+dy,phi,off);});
+  surface([row(-.017,.003),row(-.014,.008),row(0,.01),row(.014,.008),row(.017,.003)],true,(j)=>j===0||j===4?dark:red,toHead);
+  const back=rimPt(yc(Math.PI),Math.PI,.012);
+  lathe(Array.from({length:7},(_,k)=>{const a=k/6*Math.PI;return [Math.sin(a)*.02,Math.cos(a)*.018];}),back,()=>red,toHead,{n:14,sz:.8});
+  for(const s of [-1,1]){
+   const P=[];for(let j=0;j<=16;j++){const t=j/16,flap=.035*t*Math.sin(elapsed*13+t*8+s),lift=.02*t*Math.sin(elapsed*9+t*6);
+    const cxp=back[0]+s*(.014+.06*t)+flap*.6,cyp=back[1]-.1*t+lift,czp=back[2]-.24*t,w=.022*(1-.2*t),tw=.6*t+.4*Math.sin(elapsed*7+t*5+s)*t;
+    P.push([[cxp-w*Math.sin(tw),cyp+w*Math.cos(tw),czp],[cxp+w*Math.sin(tw),cyp-w*Math.cos(tw),czp]]);}
+   surface(P,false,(j)=>j%4<2?red:shadeOf(red,.9),toHead);
+  }
+ }
+ if(wearing('eyes')==='brillor'){
+  // Ordinary black sunglasses: a thick frame across the face just above the beak, two dark glossy lenses
+  // that wrap a little round the sides, a bridge, and arms running back over the head's sides.
+  const frame=C('#111214'),lens=C('#16202a'),glint=C('#55667c'),y=.338,off=.012;
+  const at=(phi,dy,o)=>{const p=rimPt(y,phi,o,.33);return [p[0],y+dy,p[2]];};
+  // Lens outline in (u across 0..1 from the nose outwards, v up -1..1): a wayfarer, straight on top, rounded below.
+  const top=u=>.024+.003*u,bot=u=>-.02-.006*Math.sin(Math.PI*Math.min(1,u*1.1)),rnd=u=>Math.min(1,Math.sin(Math.PI*u)*2.4);
+  for(const s of [-1,1]){
+   const N=16,phis=Array.from({length:N+1},(_,i)=>s*mix(.07,.66,i/N));
+   const grid=(o,grow)=>{const G=[];for(let k=0;k<=6;k++){const v=k/6;G.push(phis.map((phi,i)=>{const u=i/N,r=rnd(u),h=mix(top(u)+grow,bot(u)-grow,v);return at(phi,h*(.35+.65*r)+(1-r)*.002,o);}));}return G;};
+   surface(grid(off,.006),false,()=>frame,toHead,goo);                     // the frame, a little bigger than the lens
+   surface(grid(off+.004,-.001),false,(k,i)=>k===1&&i>2&&i<9?glint:k<=2?C('#22303e'):lens,toHead,goo); // the lens, with a sheen across the top
+   surface([phis.map(phi=>at(phi,top(0)+.008,off+.007)),phis.map(phi=>at(phi,top(0)+.008,off-.002)),phis.map(phi=>at(phi,top(0)-.002,off+.007))],false,()=>frame,toHead,goo); // heavy top bar
+   const arm=[];for(let k=0;k<=10;k++){const phi=s*mix(.66,2.2,k/10);arm.push([at(phi,.027,.006),at(phi,.017,.006)]);}surface(arm,false,()=>frame,toHead,goo);
+  }
+  surface([[at(-.08,.022,off+.005),at(.08,.022,off+.005)],[at(-.08,.013,off+.004),at(.08,.013,off+.004)]],false,()=>frame,toHead,goo); // the bridge over the nose
+ }
+ if(wearing('neck')==='halsduk'){
+  // A chunky knitted scarf wrapped twice round the neck, fitted to it, striped blue and cream,
+  // with one end hanging down the chest, swinging, finished with a fringe.
+  const blue=C('#2f6fbf'),cream=C('#ece6d6'),n=48;
+  for(const [k,z,tilt] of [[0,.19,.02],[1,.232,-.015]]){
+   const P=[];for(let c=0;c<=8;c++){const q=c/8*tau,dz=Math.cos(q)*.02,doff=.018+Math.sin(q)*.016,row=[];
+    for(let i=0;i<n;i++){const a=i/n*tau;row.push(headPt(z+dz+tilt*Math.sin(a),a,doff));}P.push(row);}
+   surface(P.map(r=>r),true,(c,i)=>(Math.floor(i/4)+k)%2?cream:blue,toBody);
+  }
+  const top=headPt(.2,-Math.PI/2+.35,.03),sway=Math.sin(elapsed*5)*.015;
+  const E=[];for(let j=0;j<=10;j++){const t=j/10,w=.034;E.push([[top[0]-w+sway*t,top[1]-.2*t,top[2]+.02-.06*t],[top[0]+w+sway*t,top[1]-.2*t,top[2]+.02-.06*t]]);}
+  surface(E,false,(j)=>Math.floor(j/2)%2?cream:blue,toBody);
+  for(let f=0;f<6;f++){const x=top[0]-.03+f*.012+sway;surface([[[x,top[1]-.2,top[2]-.04],[x+.005,top[1]-.2,top[2]-.04]],[[x+.002,top[1]-.24,top[2]-.05],[x+.007,top[1]-.24,top[2]-.05]]],false,()=>cream,toBody);}
  }
 }
 // Small pictures for the menu.
