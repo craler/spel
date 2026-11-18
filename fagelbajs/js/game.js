@@ -34,7 +34,7 @@ function saveScore(name,done){
  return place(board());
 }
 function finish(heading,cause,action){
- state='end';closeClip();$('feedback').classList.remove('on');if(killClip)document.body.classList.remove('crashed'); // the replay plays in colourkeys.clear();checkFeats();
+ state='end';closeClip();countFlight();$('feedback').classList.remove('on');if(killClip)document.body.classList.remove('crashed'); // the replay plays in colourkeys.clear();checkFeats();
  const record=points>best;if(record){best=points;try{localStorage.setItem('fagelbajs.best',String(best));}catch{}}
  const top=board().slice(0,10),listed=points>0&&(top.length<10||points>top.at(-1).points);if(Date.now()-sharedAt>20000)fetchScores();
  const row=(k,v)=>'<div><dt>'+k+'</dt><dd>'+v+'</dd></div>',mins=Math.floor(elapsed/60),secs=String(Math.floor(elapsed%60)).padStart(2,'0');

@@ -52,7 +52,7 @@ function eventHit(id){
  const e=events.find(e=>String(id).startsWith('ev'+e.serial+':'));if(!e||e.done||e.over)return;
  e.hits++;
  if(e.hits>=e.goal){
-  e.done=true;e.left=Math.min(e.left,5);addPoints(e.bonus);feedLine(e.title.split(' ')[0]+' KLARAD',e.bonus);
+  e.done=true;e.left=Math.min(e.left,5);stats.events++;saveStats();addPoints(e.bonus);feedLine(e.title.split(' ')[0]+' KLARAD',e.bonus);
   banner('+'+e.bonus,e.title.split(' ')[0].toLowerCase()+' i spillror','alert',2.4);tone(660,990,.12,'triangle',.08);tone(990,1320,.25,'triangle',.08,.12);
   popups.push({x:e.x,y:8,z:e.z,text:'+'+e.bonus,t:elapsed,gold:true});
  }

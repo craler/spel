@@ -144,7 +144,7 @@ function renderBird(){
   const a=hy*w,e=hp*w,py=y-.2,pz=z-.2,x1=x*Math.cos(a)+pz*Math.sin(a),z1=-x*Math.sin(a)+pz*Math.cos(a);
   return [x1,py*Math.cos(e)+z1*Math.sin(e)+.2,z1*Math.cos(e)-py*Math.sin(e)+.2];
  }
- const face=(pts,color)=>poly(pts.map(p=>world(head(p))),color,1),plain=(pts,color)=>poly(pts.map(world),color,1);
+ const face=(pts,color)=>poly(pts.map(p=>world(head(p))),color),plain=(pts,color)=>poly(pts.map(world),color,true);
  // Every flight feather flutters by itself in the airstream, harder the faster the bird goes.
  const wind=clamp(Math.hypot(forwardSpeed(),b.vy)/30,.3,1.7)*(1+2*fl),flutter=(i,rate)=>wind*Math.sin(elapsed*rate+i*2.1);
  smoothBody(p=>world(head(p)));
@@ -161,6 +161,7 @@ function renderBird(){
    face([[cx,y+r,z-r+t],[cx,y+r-t,z-r],[cx,y-r,z+r-t],[cx,y-r+t,z+r]],'#1c1622');face([[cx,y+r,z+r-t],[cx,y+r-t,z+r],[cx,y-r,z-r+t],[cx,y-r+t,z-r]],'#1c1622');
   }else{eye(.024,'#ffbf56',0);eye(.012,'#362c49',.0015);}
  }
+ drawLook(face,(pts,color)=>poly(pts.map(world),color)); // worn things keep their own colours
  // Separate overlapping tail feathers with a dark terminal band and pale tips.
  const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl+.16*br; // fanned wide as an air brake
  for(let k=-3;k<=3;k++){
@@ -240,8 +241,8 @@ const overlay=$('overlay2d'), ctx=overlay.getContext('2d');
 // The bird code above describes its feathers as polygons; they go straight into the per-frame triangle batch.
 // Each feather is shaded as if gently domed: the normals lean outwards towards its edges, so the light rolls
 // over it instead of the whole patch turning one flat colour.
-function poly(points,color){
- const col=rgb(color),n=points.length,a=points[0],b=points[1],c=points[n-1];
+function poly(points,color,body){
+ const col=body?tintFeather(rgb(color)):rgb(color),n=points.length,a=points[0],b=points[1],c=points[n-1];
  const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
  let f=[uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx];const fl=Math.hypot(...f)||1;f=f.map(q=>q/fl);
  const m=[0,1,2].map(k=>points.reduce((s,p)=>s+p[k],0)/n);
