@@ -69,7 +69,8 @@ function gather(dt=0){
   for(let k=0;k<8;k++){
    if(!jogger(i,j,k)&&hash(i,j,k+77)<.2)continue; // a fifth of the pedestrians stay at home, which saves drawing them
    const h=pedestrian(i,j,k,dt);
-   if(jogger(i,j,k)){h.base=30;h.label='JOGGAREN';h.shout='MITT VARVREKORD!';h.star=true;h.c='#d9f03a';h.running=!scored.has(h.id);}
+   // Joggers get no star: they are everywhere, and the stars are for the rarer targets.
+   if(jogger(i,j,k)){h.base=30;h.label='JOGGAREN';h.shout='MITT VARVREKORD!';h.star=false;h.c='#d9f03a';h.running=!scored.has(h.id);}
    people.push(h);
   }
   const b=block(i,j),extra=(id,x,y,z,yaw,c,base,label,shout)=>people.push({x,y,z,id,i,j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:i+j,fixed:true,base,label,shout,star:true,umb:false});
