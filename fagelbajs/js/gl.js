@@ -19,6 +19,7 @@ float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(
 float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
  return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
 float shadow(vec3 wp,vec3 n){
+ if(uFast>1.5)return 1.; // Snabbast: no shadows at all
  vec4 lp=uLight*vec4(wp+n*.12,1.);vec3 c=lp.xyz*.5+.5;
  if(c.x<0.||c.x>1.||c.y<0.||c.y>1.||c.z>1.)return 1.;
  if(uFast>.5)return texture(uShadow,vec3(c.xy,c.z-.0009)); // fast: one sample
@@ -257,8 +258,8 @@ class Mesh{
   return this;
  }
  // A wheel on a sideways axle, with a lighter hub on the outer face.
- wheel(x,y,z,r,w,out,tyre,hub){
-  const n=10,p=(i,rad,dx)=>{const a=i*tau/n;return [x+dx,y+rad*Math.sin(a),z+rad*Math.cos(a)];};
+ wheel(x,y,z,r,w,out,tyre,hub,n=10){
+  const p=(i,rad,dx)=>{const a=i*tau/n;return [x+dx,y+rad*Math.sin(a),z+rad*Math.cos(a)];};
   for(let i=0;i<n;i++){
    this.quad(p(i,r,-w/2),p(i+1,r,-w/2),p(i+1,r,w/2),p(i,r,w/2),tyre);
    this.quad(p(i,r,out*w/2),p(i+1,r,out*w/2),p(i+1,r*.55,out*w/2),p(i,r*.55,out*w/2),tyre);
@@ -287,7 +288,7 @@ class Mesh{
  // One instance: position, yaw, scale, colour, material (0 lit, 1 facade, 2 glowing, -1 glossy), four animation values.
  add(x,y,z,yaw=0,sx=1,sy=1,sz=1,col=WHITE,mat=0,a0=0,a1=0,a2=0,a3=0){
   if((this.n+1)*ISTRIDE>this.inst.length){const g=new Float32Array(this.inst.length*2);g.set(this.inst);this.inst=g;}
-  this.inst.set([x,y,z,yaw,sx,sy,sz,col[0],col[1],col[2],mat,a0,a1,a2,a3],this.n++*ISTRIDE);
+  const d=this.inst,o=this.n++*ISTRIDE;d[o]=x;d[o+1]=y;d[o+2]=z;d[o+3]=yaw;d[o+4]=sx;d[o+5]=sy;d[o+6]=sz;d[o+7]=col[0];d[o+8]=col[1];d[o+9]=col[2];d[o+10]=mat;d[o+11]=a0;d[o+12]=a1;d[o+13]=a2;d[o+14]=a3;
  }
  upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.ibo);gl.bufferData(gl.ARRAY_BUFFER,this.inst.subarray(0,this.n*ISTRIDE),gl.DYNAMIC_DRAW);}
  draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.drawArraysInstanced(gl.TRIANGLES,0,this.count,this.n);}
@@ -304,13 +305,14 @@ function triBatch(mat=0){
   // A triangle with its own normal and colour at every corner, for smooth shading.
   smooth(p,nrm,col,alpha){
    if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
-   for(let k=0;k<3;k++){const a=p[k],n=nrm[k],c=col[k];this.data.set([a[0],a[1],a[2],n[0],n[1],n[2],c[0],c[1],c[2],0,0,alpha?alpha[k]:0],this.n++*STRIDE);}
+   const d=this.data; // written in place: no temporary arrays, so less work for the garbage collector
+   for(let k=0;k<3;k++){const a=p[k],n=nrm[k],c=col[k],o=this.n++*STRIDE;d[o]=a[0];d[o+1]=a[1];d[o+2]=a[2];d[o+3]=n[0];d[o+4]=n[1];d[o+5]=n[2];d[o+6]=c[0];d[o+7]=c[1];d[o+8]=c[2];d[o+9]=0;d[o+10]=0;d[o+11]=alpha?alpha[k]:0;}
   },
   tri(a,b,c,col){
    if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
    const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
    let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
-   for(const p of [a,b,c]){this.data.set([p[0],p[1],p[2],nx,ny,nz,col[0],col[1],col[2],0,0,0],this.n++*STRIDE);}
+   const d=this.data;for(const p of [a,b,c]){const o=this.n++*STRIDE;d[o]=p[0];d[o+1]=p[1];d[o+2]=p[2];d[o+3]=nx;d[o+4]=ny;d[o+5]=nz;d[o+6]=col[0];d[o+7]=col[1];d[o+8]=col[2];d[o+9]=0;d[o+10]=0;d[o+11]=0;}
   },
   fan(pts,col){for(let i=2;i<pts.length;i++)this.tri(pts[0],pts[i-1],pts[i],col);},
   upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.data.subarray(0,this.n*STRIDE),gl.DYNAMIC_DRAW);},
@@ -326,7 +328,7 @@ const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(g
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,1,1,-1,-1,1,1,-1,1]),gl.STATIC_DRAW);attribs([[0,2,0]],2,0);gl.bindVertexArray(null);
 // Shadow map.
 // Shadow map. Fast graphics use a quarter of the pixels.
-let SHADOW=fast?1024:2048;const shadowTex=gl.createTexture(), shadowFbo=gl.createFramebuffer();
+let SHADOW=fastest?512:fast?1024:2048;const shadowTex=gl.createTexture(), shadowFbo=gl.createFramebuffer();
 function shadowSize(n){SHADOW=n;gl.bindTexture(gl.TEXTURE_2D,shadowTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.DEPTH_COMPONENT24,SHADOW,SHADOW,0,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,null);}
 shadowSize(SHADOW);gl.bindTexture(gl.TEXTURE_2D,shadowTex);
 for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_COMPARE_MODE,gl.COMPARE_REF_TO_TEXTURE],[gl.TEXTURE_COMPARE_FUNC,gl.LEQUAL]])gl.texParameteri(gl.TEXTURE_2D,k,v);
@@ -367,8 +369,8 @@ function viewMatrix(){
 function lightUniforms(prog){
  const u=prog.u;gl.useProgram(prog.p);
  gl.uniform3fv(u.uSun,sky.dir);if(u.uGlow)gl.uniform1f(u.uGlow,sky.glow);gl.uniform3fv(u.uSunCol,sky.sun);gl.uniform3fv(u.uSkyCol,sky.sky);gl.uniform3fv(u.uGroundCol,sky.ground);
- gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fast?1.35:1));if(u.uNight)gl.uniform1f(u.uNight,sky.night?1:0);
- if(u.uSpot){gl.uniform1f(u.uSpot,spot.on);gl.uniform3fv(u.uSpotPos,spot.pos);gl.uniform3fv(u.uSpotDir,spot.dir);}if(u.uFast)gl.uniform1f(u.uFast,fast?1:0);if(u.uTexel)gl.uniform1f(u.uTexel,1/SHADOW);
+ gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fastest?1.9:fast?1.35:1));if(u.uNight)gl.uniform1f(u.uNight,sky.night?1:0);
+ if(u.uSpot){gl.uniform1f(u.uSpot,spot.on);gl.uniform3fv(u.uSpotPos,spot.pos);gl.uniform3fv(u.uSpotDir,spot.dir);}if(u.uFast)gl.uniform1f(u.uFast,gfx);if(u.uTexel)gl.uniform1f(u.uTexel,1/SHADOW);
  if(u.uVP)gl.uniformMatrix4fv(u.uVP,false,viewM);
  if(u.uLight)gl.uniformMatrix4fv(u.uLight,false,lightM);
  if(u.uShadow)gl.uniform1i(u.uShadow,0);
@@ -380,7 +382,7 @@ function drawFrame(casters,scene,decals){
  lightMatrix(bird.x,12,bird.z);viewMatrix();
  gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);gl.viewport(0,0,SHADOW,SHADOW);gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.useProgram(progDepth.p);gl.uniformMatrix4fv(progDepth.u.uVP,false,lightM);
- for(const m of casters)m.drawShadow?m.drawShadow():m.draw(); // statics: only the blocks the shadow map covers
+ if(!fastest)for(const m of casters)m.drawShadow?m.drawShadow():m.draw(); // statics: only the blocks the shadow map covers
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,glCanvas.width,glCanvas.height);gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,shadowTex);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,cityTex);
  // Sky

@@ -70,7 +70,8 @@ const bodyRings=(()=>{
  out.push(S.at(-1));return out;
 })();
 const plumeCol={back:rgb('#7c8aab'),belly:rgb('#a9b3c9'),green:rgb('#3f8a74'),purple:rgb('#7b5a98'),head:rgb('#6a7697'),rump:rgb('#9aa6c0')};
-const SEG=18;
+let SEG=18,bodyColCache=null; // SEG: points round each ring of the body (fewer with fast graphics)
+const bodyRingsLow=()=>bodyRings.filter((_,k)=>k%2===0||k===bodyRings.length-1);
 function plumageColor(z,a){
  const up=Math.sin(a),side=Math.abs(Math.cos(a)),lerp=(p,q,t)=>[mix(p[0],q[0],t),mix(p[1],q[1],t),mix(p[2],q[2],t)];
  let c=lerp(plumeCol.belly,plumeCol.back,clamp(up*.9+.55,0,1));
@@ -81,8 +82,9 @@ function plumageColor(z,a){
  return c;
 }
 function smoothBody(toWorld){
- const R=bodyRings,grid=R.map(([z,y,w,h],j)=>Array.from({length:SEG},(_,i)=>{const a=i*tau/SEG;return toWorld([w*Math.cos(a),y+h*Math.sin(a),z]);}));
- const cols=R.map(([z])=>Array.from({length:SEG},(_,i)=>plumageColor(z,i*tau/SEG)));
+ SEG=fast?12:18;const R=fast?bodyRingsLow():bodyRings,grid=R.map(([z,y,w,h],j)=>Array.from({length:SEG},(_,i)=>{const a=i*tau/SEG;return toWorld([w*Math.cos(a),y+h*Math.sin(a),z]);}));
+ if(!bodyColCache||bodyColCache.seg!==SEG||bodyColCache.n!==R.length){bodyColCache=R.map(([z])=>Array.from({length:SEG},(_,i)=>plumageColor(z,i*tau/SEG)));bodyColCache.seg=SEG;bodyColCache.n=R.length;}
+ const cols=bodyColCache;
  const tip=toWorld([0,R.at(-1)[1],R.at(-1)[0]+.012]),tail=toWorld([0,R[0][1],R[0][0]-.02]);
  const norm=(j,i)=>{ // across the ring and along the body, from the neighbouring points
   const g=grid,a=g[j][(i+1)%SEG],b=g[j][(i+SEG-1)%SEG],c=g[Math.min(R.length-1,j+1)][i],d=g[Math.max(0,j-1)][i];
@@ -255,8 +257,9 @@ const M={
  ball:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,10,6).build(),
  disc:(()=>{const m=new Mesh();for(let i=0;i<14;i++){const a=i*tau/14,b=(i+1)*tau/14;m.tri([0,0,0],[Math.cos(b),0,Math.sin(b)],[Math.cos(a),0,Math.sin(a)],WHITE,1);}return m.build();})(),
  people:[['#dba27e','#33271f','#2b323d',0],['#8a5a3c','#1d1612','#3a4a66',1],['#f0c4a4','#b9853e','#4a4038',1],['#c68a5e','#2a2019','#5c5f66',0],['#e6b08c','#7a3b1e','#2f3d55',0]].map(([skin,hair,pants,long])=>personMesh(rgb(skin),rgb(hair),rgb(pants),long)),
+ peopleFar:[['#dba27e','#33271f','#2b323d',0],['#8a5a3c','#1d1612','#3a4a66',1],['#f0c4a4','#b9853e','#4a4038',1],['#c68a5e','#2a2019','#5c5f66',0],['#e6b08c','#7a3b1e','#2f3d55',0]].map(([skin,hair,pants,long])=>personMesh(rgb(skin),rgb(hair),rgb(pants),long,true)),
  umbrella:new Mesh().tube(0,2.02,2.42,0,.85,.03,WHITE,1,0,0,10,false).tube(.2,1.15,2.4,.1,.014,.014,rgb('#22252a'),0,0,0,5).build(),
- car:carMesh('sedan'),hatch:carMesh('hatch'),cab:carMesh('cab'),
+ car:carMesh('sedan'),carFar:carMesh('sedan',true),hatchFar:carMesh('hatch',true),hatch:carMesh('hatch'),cab:carMesh('cab'),
  bus:(()=>{const m=new Mesh(),glass=rgb('#17212d'),tyre=rgb('#141518'),hub=rgb('#aeb3b8');
   m.loft([[-5.2,.45,3,1.2,1.15],[5,.45,3,1.2,1.15],[5.2,.55,2.3,1.15,1.1]],WHITE,1);
   m.box(-1.22,1.55,-4.8,1.22,2.55,4.5,glass).box(-1.05,1.5,5.0,1.05,2.6,5.22,glass).box(-1.21,.45,-5.21,1.21,.75,5.21,rgb('#1c1d21'));
@@ -301,8 +304,11 @@ const M={
   m.loft([[-1.3,1.55,2.2,1.05,.8],[-.9,1.55,2.3,1.1,.85],[.9,1.55,2.3,1.1,.85],[1.4,1.6,2.1,.9,.7]],[.92,.92,.92],1);
   m.beam([0,2,1.2],[0,3.25,3.9],.13,[.6,.6,.6],1).beam([0,3.2,3.8],[0,3.4,4.2],.2,[.45,.45,.45],1);
   m.ball(.45,2.32,-.3,.32,.14,.32,[.75,.75,.75],1,0,0,8,4);return m.build();})(),
- tree:new Mesh().tube(0,0,2.6,0,.24,.15,rgb('#463222'),0,0,0,6).ball(0,4.3,0,2.3,2.1,2.3,WHITE,1,0,0,9,6).ball(1.25,3.3,.55,1.5,1.3,1.5,[.85,.9,.85],1,0,0,8,5).ball(-1,3.5,-.8,1.65,1.45,1.6,[.92,1.08,.9],1,0,0,8,5).build(),
- lamp:new Mesh().tube(0,0,5.4,0,.08,.05,rgb('#24272b'),0,0,0,6).box(-.05,5.3,-.05,.05,5.4,.9,rgb('#24272b')).ball(0,5.28,.85,.2,.1,.26,rgb('#fff1c0'),0,0,0,6,4).build(),
+ // Trees, lamps, people and cars come in a near and a far version: past a few blocks the haze hides the detail,
+ // so they are drawn with far fewer triangles. Most of the time a frame takes goes into drawing triangles.
+ tree:new Mesh().tube(0,0,2.6,0,.24,.15,rgb('#463222'),0,0,0,5).ball(0,4.3,0,2.3,2.1,2.3,WHITE,1,0,0,8,5).ball(1.25,3.3,.55,1.5,1.3,1.5,[.85,.9,.85],1,0,0,7,4).ball(-1,3.5,-.8,1.65,1.45,1.6,[.92,1.08,.9],1,0,0,7,4).build(),
+ treeFar:new Mesh().tube(0,0,2.4,0,.24,.17,rgb('#463222'),0,0,0,4,false).ball(0,3.95,0,2.5,2.35,2.5,WHITE,1,0,0,7,4).build(),
+ lamp:new Mesh().tube(0,0,5.4,0,.08,.05,rgb('#24272b'),0,0,0,4,false).box(-.05,5.3,-.05,.05,5.4,.9,rgb('#24272b')).ball(0,5.28,.85,.2,.1,.26,rgb('#fff1c0'),0,0,0,5,3).build(),
  table:new Mesh().tube(0,0,.98,0,.05,.05,rgb('#5a5d60'),0,0,0,6).tube(0,.98,1.04,0,.62,.62,rgb('#d8d0c0'),0,0,0,10).tube(0,1.04,2.55,0,.03,.03,rgb('#3a3d40'),0,0,0,5)
   .tube(0,2.2,2.8,0,1.55,.03,WHITE,1,0,0,10,false).build(),
  stall:(()=>{const m=new Mesh(),wood=rgb('#7d5d3f');m.box(-1.7,0,-.7,1.7,1.05,.7,wood);
@@ -321,23 +327,25 @@ const M={
   for(let i=1;i<6;i++){const a=Math.PI+i*Math.PI/6;pts.push([.5*Math.cos(a),-.8+.2*Math.sin(a),0]);}
   pts.push([.5,-.8,0],[.5,0,0]);for(let i=2;i<pts.length;i++)m.tri(pts[0],pts[i-1],pts[i],WHITE,1);return m.build();})(),
 };
-function personMesh(skin,hair,pants,long){
- const m=new Mesh(),shoe=rgb('#1c1a19');
+function personMesh(skin,hair,pants,long,far){
+ // far: the same figure with fewer sides on every part (about a quarter of the triangles), same limbs and animation
+ const m=new Mesh(),shoe=rgb('#1c1a19'),T=far?4:6,B=far?5:8,Bh=far?3:5,Bl=far?2:4;
  for(const [sx,part] of [[-.1,1],[.1,2]]){
-  m.tube(sx,.07,.88,0,.07,.1,pants,0,part,.88,6);m.box(sx-.07,0,-.08,sx+.07,.09,.17,shoe,0,part,.88);
+  m.tube(sx,.07,.88,0,.07,.1,pants,0,part,.88,T,!far);m.box(sx-.07,0,-.08,sx+.07,.09,.17,shoe,0,part,.88);
  }
- m.ball(0,1.08,0,.19,.26,.14,WHITE,1,0,0,8,5).ball(0,1.32,0,.24,.17,.15,WHITE,1,0,0,8,4); // waist and shoulders
+ m.ball(0,1.08,0,.19,.26,.14,WHITE,1,0,0,B,Bh).ball(0,1.32,0,.24,.17,.15,WHITE,1,0,0,B,Bl+(far?0:0)); // waist and shoulders
  for(const [sx,part] of [[-.29,3],[.29,4]]){
-  m.tube(sx,.96,1.43,0,.045,.062,WHITE,1,part,1.43,6);m.ball(sx,.92,0,.05,.06,.05,skin,0,part,1.43,6,4);
+  m.tube(sx,.96,1.43,0,.045,.062,WHITE,1,part,1.43,T,!far);if(!far)m.ball(sx,.92,0,.05,.06,.05,skin,0,part,1.43,6,4);
  }
- m.tube(0,1.44,1.58,0,.05,.05,skin,0,0,0,6,false);
- m.ball(0,1.69,0,.122,.14,.128,skin,0,0,0,8,5).ball(0,1.745,-.025,.13,.11,.134,hair,0,0,0,8,4);
- if(long)m.ball(0,1.6,-.07,.13,.2,.09,hair,0,0,0,8,4);
+ if(!far)m.tube(0,1.44,1.58,0,.05,.05,skin,0,0,0,6,false);
+ m.ball(0,1.69,0,.122,.14,.128,skin,0,0,0,B,Bh).ball(0,1.745,-.025,.13,.11,.134,hair,0,0,0,B,Bl);
+ if(long)m.ball(0,1.6,-.07,.13,.2,.09,hair,0,0,0,B,Bl);
  return m.build();
 }
+
 // Cars are lofted through a handful of cross-sections so they get a bonnet, a raked windscreen and a boot,
 // with round wheels, lights, bumpers and mirrors. Around 300 triangles each.
-function carMesh(kind){
+function carMesh(kind,far){ // far: no mirrors, people or small parts, and plainer wheels
  const m=new Mesh(),tyre=rgb('#141518'),hub=rgb('#aeb3b8'),glass=rgb('#17212d'),dark=rgb('#1c1d21'),skin=rgb('#dba27e');
  m.loft([[-2.05,.4,.68,.8,.78],[-1.9,.3,.86,.9,.88],[-1.1,.3,.95,.92,.9],[.8,.3,.94,.92,.9],[1.7,.3,.82,.9,.86],[2.05,.38,.62,.8,.76]],WHITE,1);
  if(kind==='cab'){
@@ -347,14 +355,15 @@ function carMesh(kind){
   const back=kind==='hatch'?[[-1.95,.93,1,.86,.82],[-1.72,.93,1.4,.85,.68]]:[[-1.5,.93,.97,.86,.84],[-.98,.93,1.42,.84,.66]];
   m.loft([...back,[.3,.93,1.44,.84,.68],[1.02,.93,.97,.86,.84]],glass);
   m.box(-.66,1.43,back[1][0]+.03,.66,1.475,.28,WHITE,1);
-  for(const sx of [-1,1])for(const z of [back[1][0],.3])m.beam([sx*.845,.95,z],[sx*.675,1.44,z],.035,WHITE,1); // pillars
+  if(!far)for(const sx of [-1,1])for(const z of [back[1][0],.3])m.beam([sx*.845,.95,z],[sx*.675,1.44,z],.035,WHITE,1); // pillars
  }
  for(const sx of [-1,1]){
-  for(const z of [-1.28,1.25])m.wheel(sx*.9,.34,z,.34,.22,sx,tyre,hub);
+  for(const z of [-1.28,1.25])m.wheel(sx*.9,.34,z,.34,.22,sx,tyre,hub,far?5:10);
+  if(far)continue;
   m.box(sx*.62-.19,.6,2.0,sx*.62+.19,.76,2.07,rgb('#fff2c4'));m.box(sx*.62-.19,.62,-2.07,sx*.62+.19,.8,-2.0,rgb('#b3201c'));
   m.box(sx*.93,.93,.72,sx*1.06,1.03,.86,WHITE,1); // mirror
  }
- m.box(-.86,.36,2.02,.86,.5,2.1,dark).box(-.86,.38,-2.1,.86,.52,-2.02,dark).box(-.22,.52,-2.08,.22,.64,-2.06,rgb('#e8e6dc'));
+ if(!far)m.box(-.86,.36,2.02,.86,.5,2.1,dark).box(-.86,.38,-2.1,.86,.52,-2.02,dark).box(-.22,.52,-2.08,.22,.64,-2.06,rgb('#e8e6dc'));
  return m.build();
 }
 // A splatter: a dark wet core, a paler body with four rounded fingers, and a cream rim. The vertex colours
@@ -377,8 +386,8 @@ function splatMesh(upright){
  return m.build();
 }
 M.cube.cull=true;
-const statics=[M.cube,M.tree,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
-const moving=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.big,M.balloon,M.boat,M.ball,M.dome];
+const statics=[M.cube,M.tree,M.treeFar,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
+const moving=[...M.people,...M.peopleFar,M.umbrella,M.car,M.carFar,M.hatchFar,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.big,M.balloon,M.boat,M.ball,M.dome];
 const decals=[M.splat,M.splatWall,M.drip,M.disc];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 let staticKey='';
@@ -388,7 +397,7 @@ function buildStatics(){
  for(const m of statics)m.clear();
  // Nearest blocks first, so the shadow pass can stop after the ones its map covers (see Mesh.drawShadow).
  // Fast graphics draw 9 x 9 blocks instead of 14 x 14 and let the haze close in a little sooner.
- const reach=fast?4.5:7,list=[];
+ const reach=fastest?3.5:fast?4.5:7,treeNear=fastest?1.5:2.5,lampNear=fastest?2.5:3.5,list=[];
  for(let i=Math.ceil(ix-.5-reach);i<=Math.floor(ix-.5+reach);i++)for(let j=Math.ceil(iz-.5-reach);j<=Math.floor(iz-.5+reach);j++)list.push([i,j,Math.max(Math.abs(i-ix+.5),Math.abs(j-iz+.5))]);
  list.sort((a,b)=>a[2]-b[2]);let marked=false;
  for(const [i,j,d] of list){
@@ -400,8 +409,8 @@ function buildStatics(){
    // Roof plant: purely for looks, kept low.
    M.cube.add(a+w*.25+seed*2,h,c+d*.3,0,1.8,.8,1.3,roofKit);if(w*d>150)M.cube.add(a+w*.62,h,c+d*.6,0,2.4,1,2.2,roofKit);
   }
-  for(const [x,z,s,seed] of b.trees)M.tree.add(x,0,z,seed*tau,s,s*(.9+.25*seed),s,rgb(leaf[Math.floor(seed*leaf.length)]));
-  for(const [n,[x,z]] of b.lamps.entries())M.lamp.add(x,0,z,[.8,-.8,2.4,-2.4][n]);
+  for(const [x,z,s,seed] of b.trees)(d>treeNear?M.treeFar:M.tree).add(x,0,z,seed*tau,s,s*(.9+.25*seed),s,rgb(leaf[Math.floor(seed*leaf.length)]));
+  if(d<=lampNear)for(const [n,[x,z]] of b.lamps.entries())M.lamp.add(x,0,z,[.8,-.8,2.4,-2.4][n]);
   if(!onEventSquare(i,j))for(const [x,z,p] of b.tables)M.table.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
   if(!onEventSquare(i,j))for(const [x,z,p] of b.stalls)M.stall.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
   for(const [x,z,yaw] of b.benches)M.bench.add(x,0,z,yaw);
@@ -430,15 +439,17 @@ const splatCol=[...rgb('#f4f1e6')], smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), a
 function buildMoving(){
  spot.on=0;goo.mat=gooMat;for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
+ const far2=(fastest?30:45)**2,range=fastest?80:130;
  for(const h of people){
-  if(Math.abs(h.x-camera.x)>130||Math.abs(h.z-camera.z)>130)continue;
+  if(Math.abs(h.x-camera.x)>range||Math.abs(h.z-camera.z)>range)continue;
+  const farAway=(h.x-camera.x)**2+(h.z-camera.z)**2>far2;
   const down=scored.has(h.id),size=.93+.14*hash(h.phase,3,7),since=down?elapsed-fallen.get(h.id):0;
   // A hit knocks them flat. After a few seconds they get up again, turn to the bird and shake a fist.
   const t=down?clamp(since/.43,0,1)*(1-clamp((since-4.5)/.9,0,1)):0,lean=t*t*Math.PI*.49,angry=down&&since>5.2;
   const stride=down?0:h.dance?.35:h.fixed?0:h.running?.95:h.climbing?.5:.55,pace=h.dance?h.dance:h.running?11:h.climbing?9:6.2;
   const arms=h.climbing||winding.has(h.id)?1:angry?.55+.4*Math.sin(elapsed*9+h.phase):h.dance&&!down?h.armsUp??.5+.5*Math.sin(elapsed*h.dance*.5+h.phase):0;
   if(angry)h.yaw=Math.atan2(bird.x-h.x,bird.z-h.z);
-  M.people[Math.floor(hash(h.phase,9,2)*M.people.length)].add(h.x,h.y+(down?.13*t:0),h.z,h.yaw,size,size,size,rgb(h.c),0,elapsed*pace+h.phase,stride,lean,arms);
+  (farAway?M.peopleFar:M.people)[Math.floor(hash(h.phase,9,2)*M.people.length)].add(h.x,h.y+(down?.13*t:0),h.z,h.yaw,size,size,size,rgb(h.c),0,elapsed*pace+h.phase,stride,lean,arms);
   if(down){ // a white cap of it on the head and shoulders
    const fx=Math.sin(h.yaw)*Math.sin(lean),fz=Math.cos(h.yaw)*Math.sin(lean),up=Math.cos(lean);
    M.ball.add(h.x+fx*1.72,h.y+.2+1.76*up,h.z+fz*1.72,0,.21,.14,.21,splatCol,gooMat);
@@ -447,7 +458,8 @@ function buildMoving(){
   if(h.bride&&!down)M.ball.add(h.x,h.y+.55,h.z,0,.42,.55,.42,splatCol,gooMat);
  }
  for(const c of cars){
-  (c.bus?M.bus:c.cab?M.cab:c.hatch?M.hatch:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
+  const carFar=(c.x-camera.x)**2+(c.z-camera.z)**2>(fastest?40:60)**2;
+  (c.bus?M.bus:c.cab?(carFar?M.carFar:M.cab):c.hatch?(carFar?M.hatchFar:M.hatch):carFar?M.carFar:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
   if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol,gooMat);
   const alarm=alarms.get(c.id);
   if(alarm!==undefined){ // hit while parked: a white cap on the roof and, for a while, flashing indicators
@@ -605,6 +617,7 @@ function puff(x,y,z,r,alpha,col){
 const smokeDark=rgb('#4a4a50'),smokePale=rgb('#d2d2d8'),fire=rgb('#ff8a1e');
 function smokeColumn(x,y,z,age,seed,size=1){
  if(Math.abs(x-camera.x)>140||Math.abs(z-camera.z)>140)return;
+ if(fastest){if(age<7)M.ball.add(x,y+.3,z,0,.35*size,.5*size,.35*size,fire,2);return;}
  const strength=clamp(age/.4,0,1)*clamp(1.4-age/22,0,1);if(strength<=0)return;
  for(let i=0;i<16;i++){
   const t=((age*.26+i/16+hash(seed,i,1)*.06)%1),wind=t*t*4.5*size,rise=t*7*size;

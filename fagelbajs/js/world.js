@@ -112,9 +112,15 @@ function traffic(){
  // Drivers brake: a car stops behind a wreck or a stopped car, and gives way to cross traffic already in the junction.
  // Once the way is clear it drives a little faster until it is back in its place. Only a car that had no room to stop crashes.
  const moving=cars.filter(c=>!c.parked),blockers=[...moving,...wrecks.values()];
+ // Only vehicles in the neighbouring 14 m squares can be in the way, so each car checks those instead of all of them.
+ const grid=new Map(),cell=(x,z)=>Math.floor(x/14)+','+Math.floor(z/14);
+ blockers.forEach((o,k)=>{o.rank=k;const key=cell(o.x,o.z);let l=grid.get(key);if(!l)grid.set(key,l=[]);l.push(o);});
  for(const c of moving){
   const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),held=lag.get(c.id)||0;let stop=false;
-  for(const o of blockers){
+  const gx=Math.floor(c.x/14),gz=Math.floor(c.z/14),near=[];
+  for(let i=gx-1;i<=gx+1;i++)for(let j=gz-1;j<=gz+1;j++){const l=grid.get(i+','+j);if(l)near.push(...l);}
+  near.sort((a,b)=>a.rank-b.rank); // same order as before, since a stopped car can stop the one behind it
+  for(const o of near){
    if(o===c)continue;
    const dx=o.x-c.x,dz=o.z-c.z,ahead=dx*fx+dz*fz;
    if(ahead<=0||ahead>(o.bus||c.bus?13:8.5)||Math.abs(dx*fz-dz*fx)>2.1)continue;

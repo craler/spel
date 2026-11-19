@@ -3,11 +3,11 @@
 // ---- Start menu: the controls as a picture, and sub-pages for the high scores, feats, settings and rules.
 // Switch fast graphics on or off while running: smaller and simpler shadows, fewer blocks drawn, cheaper shaders,
 // lower resolution and fewer old stains. Edge smoothing follows on the next page load.
-function topDensity(){return fast?Math.min(devicePixelRatio||1,1)*.85:Math.min(devicePixelRatio||1,1.5);}
-function setFast(on){
- if(on===fast)return;fast=on;shadowSize(on?1024:2048);staticKey='';density=Math.min(density,topDensity());if(!on)density=topDensity();fit();
+function topDensity(){const d=devicePixelRatio||1;return fastest?Math.min(d,1)*.7:fast?Math.min(d,1)*.85:Math.min(d,1.5);}
+function setLevel(n){
+ if(n===gfx)return;gfx=n;fast=n>=1;fastest=n>=2;shadowSize(fastest?512:fast?1024:2048);staticKey='';density=topDensity();fit();
 }
-const qualityNames={auto:'Auto',high:'Snygg',fast:'Snabb'};
+const qualityNames={auto:'Auto',high:'Snygg',fast:'Snabb',fastest:'Snabbast'};
 const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+'</kbd><span>'+does+'</span></div>';
 function controlsPicture(){
  if(touchMode)return '<div class="pads"><div><i class="pad"></i><span>Spaken styr</span></div><div><i class="round">DYK</i><span>Störtdyk</span></div><div><i class="round">BAJSA</i><span>Bajsa</span></div></div>';
@@ -30,7 +30,7 @@ const views={
  scores:()=>{if(Date.now()-sharedAt>10000)fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
   return ['Topplista',board().length?scoreList():'<p class="cause">Inga flygningar än.</p>'];},
  feats:()=>['Bedrifter',featList(true)],
- settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+(testSite?setting('Ljudnivåer','Ställ in →','volumes'):'')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',qualityNames[quality]+(quality==='auto'?(fast?' (snabb just nu)':' (snygg just nu)'):''),'graphics')+(smoothEdges===fast?'<p class="cause">Kantutjämningen ändras när sidan laddas om.</p>':'')],
+ settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+(testSite?setting('Ljudnivåer','Ställ in →','volumes'):'')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',qualityNames[quality]+(quality==='auto'?' (just nu '+['snygg','snabb','snabbast'][gfx]+')':''),'graphics')+(smoothEdges===fast?'<p class="cause">Kantutjämningen ändras när sidan laddas om.</p>':'')],
  help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
 };
 function openView(name){
@@ -49,7 +49,7 @@ document.querySelector('.panel').addEventListener('click',e=>{
   if(what==='pitch'){reversePitch=!reversePitch;try{localStorage.setItem('fagelbajs.upClimbs',reversePitch?'yes':'no');}catch{}}
   if(what==='sound'){muted=!muted;setAudio();}
   if(what==='camera')view();
-  if(what==='graphics'){quality={auto:'high',high:'fast',fast:'auto'}[quality];try{localStorage.setItem('fagelbajs.quality',quality);}catch{}setFast(quality==='fast'||(quality==='auto'&&autoFast));}
+  if(what==='graphics'){quality={auto:'high',high:'fast',fast:'fastest',fastest:'auto'}[quality];try{localStorage.setItem('fagelbajs.quality',quality);}catch{}setLevel(levelOf(quality));}
   openView('settings');
  }
 });
@@ -127,8 +127,9 @@ function frame(now){
   frameTime=mix(frameTime,real,.04);quickFor=frameTime<1/52?quickFor+real:0;
   const top=topDensity();
   // Auto: watch the first seconds of flight. A computer that cannot keep up gets the fast graphics, now and on later visits.
-  if(quality==='auto'&&!fast&&!navigator.webdriver){judged+=real;if(judged>4&&frameTime>1/40){autoFast=true;try{localStorage.setItem('fagelbajs.autoFast','yes');}catch{}setFast(true);feedLine('SNABB GRAFIK PÅ');}}
-  if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>.75){density=Math.max(.75,density-.25);lastTune=now;quickFor=0;fit();}
+  // If it is still too slow a few seconds later, it steps down once more, to Snabbast.
+  if(quality==='auto'&&gfx<2&&!navigator.webdriver){judged+=real;if(judged>4&&frameTime>1/40){autoLevel=gfx+1;try{localStorage.setItem('fagelbajs.autoLevel',String(autoLevel));}catch{}setLevel(autoLevel);judged=0;frameTime=1/45;feedLine(fastest?'SNABBASTE GRAFIK PÅ':'SNABB GRAFIK PÅ');}}
+  if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>(fastest?.5:.75)){density=Math.max(fastest?.5:.75,density-.25);lastTune=now;quickFor=0;fit();}
   else if(quickFor>8&&density<top){density=Math.min(top,density+.25);lastTune=now;quickFor=0;fit();}
  }
  if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);if(state==='play')record();} // people and traffic move once per frame, on the second step

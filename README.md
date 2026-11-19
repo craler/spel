@@ -39,8 +39,10 @@ Bra att veta:
 - Stridsvagnar (bromsar, svänger på stället, rekyl) finns i `updateTanks()` (`world.js`), näten i `updateThreats()` (`game.js`) och `drawNet()`/`drawSnare()` (`render.js`).
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
 - Affischen `poster.jpg` visas på startsidan.
-- Grafik (Inställningar): Auto, Snygg eller Snabb (`quality`/`fast` i `core.js`, `setFast()` i `main.js`). Snabb ger hälften så stor skuggkarta med ett enda sampel, 9 × 9 kvarter i stället för 14 × 14 och lite tätare dis, ett molnlager och inga molnskuggor, ingen kantutjämning (från nästa sidladdning), lägre upplösning och högst 250 bajsfläckar.
-  Auto mäter de första sekunderna av flygningen och slår på Snabb om datorn inte hänger med. Valet sparas till nästa besök (`fagelbajs.autoFast`).
+- Grafik (Inställningar): Auto, Snygg, Snabb eller Snabbast (`quality`/`gfx` i `core.js`, `setLevel()` i `main.js`).
+  Det som kostar mest är antalet trianglar, så träd, människor och bilar har en enklare modell på avstånd och lyktstolpar ritas bara nära.
+  Snabb: mindre skuggkarta med ett sampel, 9 × 9 kvarter, enklare duvkropp och shaders, lägre upplösning. Snabbast: inga skuggor alls, 7 × 7 kvarter och tätare dis,
+  människor bara inom 80 m, ännu lägre upplösning och ingen rök. Auto mäter de första sekunderna och stegar ner till Snabb och sedan Snabbast om det behövs (`fagelbajs.autoLevel`).
 - Skuggpasset ritar bara de närmaste kvarteren (`Mesh.near`, `drawShadow()` i `gl.js`), och fotgängare och trafik räknas om en gång per bildruta i stället för två.
 
 Trimvärden att känna till: stjärngränser `thresholds` (game.js), riskbonus och kombo i `award()` (game.js),

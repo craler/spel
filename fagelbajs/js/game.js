@@ -437,7 +437,7 @@ function simulate(dt){
  if(elapsed>bannerUntil)$('feedback').classList.remove('on');
  if(++slipTick%5===0)slips();if(slipTick%30===0)checkFeats();
  popups=popups.filter(p=>elapsed-p.t<1.1);bubbles=bubbles.filter(b=>elapsed-b.t<1.5);
- const maxStains=fast?250:650;if(stains.length>maxStains)stains.splice(0,stains.length-maxStains+50);
+ const maxStains=fastest?150:fast?250:650;if(stains.length>maxStains)stains.splice(0,stains.length-maxStains+50);
  if(!wanted&&elapsed>=60){finish('Tiden är ute!','Du hann inte starta jakten.','Flyg igen →');}
 }
 // Resolve the nearest contact plane for the tumbling body, including roof edges.
