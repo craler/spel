@@ -1,9 +1,9 @@
 'use strict';
 // ---- Utseende: things for the dove to wear, unlocked by playing and kept in this browser.
 // Not live yet: the menu page and the looks only appear with ?looks=1 in the address, for trying them out.
-const looksLive=true;
+const looksLive=testSite||/[?&]looks=1/.test(location.search); // not finished: only on the test site for now
 // On the test site (raw.githack.com) there is a button that unlocks everything, for trying the looks out.
-const testSite=/githack|localhost/.test(location.host);let unlockAll=false;try{unlockAll=testSite&&localStorage.getItem('fagelbajs.unlockAll')==='yes';}catch{}
+let unlockAll=false;try{unlockAll=testSite&&localStorage.getItem('fagelbajs.unlockAll')==='yes';}catch{}
 // Lifetime progress, saved on this device: points over all flights, the most stars reached, events completed.
 let stats={total:0,maxStars:0,events:0};
 try{Object.assign(stats,JSON.parse(localStorage.getItem('fagelbajs.stats')||'{}'));}catch{}

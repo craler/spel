@@ -12,7 +12,7 @@ const scoreApi='https://lcnyzjuehtmqnbyyltqh.supabase.co/rest/v1/scores', scoreK
 let scores=[],lastName='',shared=null,sharedAt=0;
 try{scores=JSON.parse(localStorage.getItem('fagelbajs.scores')||'[]');lastName=localStorage.getItem('fagelbajs.name')||'';}catch{}
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
-function board(){return shared||scores;}
+function board(){return testSite?scores:shared||scores;} // the test site keeps its own list
 function fetchScores(){
  sharedAt=Date.now();
  return fetch(scoreApi+'?select=name,points,stars&order=points.desc,created_at.asc&limit=20',{headers:{apikey:scoreKey}})
@@ -21,7 +21,7 @@ function fetchScores(){
 fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
 function scoreList(mark=-1,count=10){
  return '<ol class="scores">'+board().slice(0,count).map((s,i)=>'<li class="'+(i===mark?'me':'')+'"><span>'+esc(s.name)+'</span><i>'+'★'.repeat(s.stars)+'</i><b>'+number(s.points)+'</b></li>').join('')+'</ol>'+
-  (shared?'':'<p class="cause">Den gemensamma topplistan gick inte att nå, så här visas bara den här datorns.</p>');
+  (testSite?'<p class="cause">Testläge: topplistan sparas bara på den här enheten.</p>':shared?'':'<p class="cause">Den gemensamma topplistan gick inte att nå, så här visas bara den här datorns.</p>');
 }
 // Saves locally at once, then sends it to the shared list; done() is called with the place once the list is back.
 function saveScore(name,done){
@@ -29,6 +29,7 @@ function saveScore(name,done){
  scores.push(entry);scores.sort((a,b)=>b.points-a.points);scores=scores.slice(0,10);lastName=entry.name;
  try{localStorage.setItem('fagelbajs.scores',JSON.stringify(scores));localStorage.setItem('fagelbajs.name',lastName);}catch{}
  const place=list=>list.findIndex(s=>s.name===entry.name&&s.points===entry.points);
+ if(testSite){if(done)setTimeout(()=>done(place(board())));return place(board());}
  fetch(scoreApi,{method:'POST',headers:{apikey:scoreKey,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({name:entry.name,points:entry.points,stars:entry.stars})})
   .then(r=>r.ok?fetchScores():null).catch(()=>null).then(()=>{if(done)done(place(board()));});
  return place(board());
@@ -41,7 +42,7 @@ function finish(heading,cause,action){
  panel(heading,'<p class="cause">'+cause+'</p><p class="score">'+number(points)+'<small> poäng</small>'+(record?'<em>NYTT REKORD</em>':'')+'</p>'+
   '<dl class="stats">'+row('Stjärnor','★'.repeat(wanted)||'–')+row('Träffar',hits)+row('Bilar',carsHit)+row('Bästa kombo','×'+bestCombo)+row('Stjärnmål',run.stars)+row('I luften',mins+':'+secs)+'</dl>'+
   '<p class="rank">Titel: <b>'+rankOf(points)+'</b>'+(record?'':' · rekord '+number(best))+'</p>'+
-  (listed?'<form id="save"><label for="name">Du kom in på '+(shared?'den gemensamma topplistan':'topplistan')+'! Skriv ditt namn:</label><div><input id="name" maxlength="12" autocomplete="off" spellcheck="false" value="'+esc(lastName)+'"><button>Spara</button></div></form>':'')+
+  (listed?'<form id="save"><label for="name">Du kom in på '+(shared&&!testSite?'den gemensamma topplistan':'topplistan')+'! Skriv ditt namn:</label><div><input id="name" maxlength="12" autocomplete="off" spellcheck="false" value="'+esc(lastName)+'"><button>Spara</button></div></form>':'')+
   '<div id="board">'+(board().length?scoreList(-1,5):'')+'</div>'+featList(),action);
  const form=$('save');
  if(form){

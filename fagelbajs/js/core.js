@@ -16,4 +16,7 @@ let quality='auto',autoFast=false;
 try{quality=localStorage.getItem('fagelbajs.quality')||(localStorage.getItem('fagelbajs.low')==='yes'?'fast':'auto');autoFast=localStorage.getItem('fagelbajs.autoFast')==='yes';}catch{}
 let fast=quality==='fast'||(quality==='auto'&&autoFast);
 const smoothEdges=!fast;
+// The test copy of the game (raw.githack.com, or run locally) shows things that are not live yet, keeps its high scores
+// to itself and has a few testing tools. The live game is the same code on any other address.
+const testSite=/githack|localhost|127\.0\.0\.1/.test(location.host);
 try { reversePitch=localStorage.getItem('fagelbajs.upClimbs')==='yes'; } catch {}
