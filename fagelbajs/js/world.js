@@ -67,6 +67,7 @@ function gather(dt=0){
  people=[];const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile);
  for(let i=ix-2;i<=ix+2;i++)for(let j=iz-2;j<=iz+2;j++){
   for(let k=0;k<8;k++){
+   if(!jogger(i,j,k)&&hash(i,j,k+77)<.2)continue; // a fifth of the pedestrians stay at home, which saves drawing them
    const h=pedestrian(i,j,k,dt);
    if(jogger(i,j,k)){h.base=30;h.label='JOGGAREN';h.shout='MITT VARVREKORD!';h.star=true;h.c='#d9f03a';h.running=!scored.has(h.id);}
    people.push(h);

@@ -29,7 +29,8 @@ function block(i,j){
   else if(v===5){add(9,9,15,24,storeys(3,3,6),30);add(26,13,7,16,storeys(6,6,11),32);}
   else{add(9,9,10,10,storeys(3,1,6),30);add(23,9,10,10,storeys(6,2,9),32);add(9,23,10,10,storeys(7,2,10),34);add(23,23,10,10,storeys(8,1,5),36);}
   const tall=b.blds.find(q=>q[4]>18&&q[1]-z<12);
-  if(tall&&R(160)<.6)b.cleaner=[tall[0]+tall[2]/2,tall[1]-.75,tall[4],R(161)*9];
+  if(false&&tall&&R(160)<.6)b.cleaner= // window cleaners are switched off; set false to true to bring them back
+   [tall[0]+tall[2]/2,tall[1]-.75,tall[4],R(161)*9];
   if(R(13)<.55)for(let n=0;n<4;n++){ // street trees along two sides
    b.trees.push([x+11+n*6.8,z+5.9,.62+R(14+n)*.2,R(18+n)],[x+5.9,z+11+n*6.8,.62+R(22+n)*.2,R(26+n)]);}
  }else if(type===1){

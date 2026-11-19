@@ -343,8 +343,6 @@ const skies=[
  {name:'kvällssol',dir:[-.52,.6,.61],sun:[3.1,2.25,1.45],sky:[.3,.42,.66],ground:[.2,.17,.14],fog:[.78,.62,.48],zenith:[.14,.28,.62],fogD:.0058,glow:1},
  {name:'middag',dir:[.35,.86,.36],sun:[2.9,2.7,2.4],sky:[.4,.52,.78],ground:[.22,.2,.17],fog:[.62,.71,.82],zenith:[.1,.27,.68],fogD:.0044,glow:.2},
  {name:'morgon',dir:[.66,.52,-.54],sun:[2.5,2.15,1.9],sky:[.36,.44,.6],ground:[.17,.17,.18],fog:[.82,.77,.74],zenith:[.2,.36,.66],fogD:.0072,glow:.55},
- // Night: a dim blue moon in place of the sun, stars, many lit windows, street lamps and headlights (see nightLights()).
- {name:'natt',dir:[.45,.72,.3],sun:[.42,.5,.72],sky:[.05,.07,.14],ground:[.025,.025,.035],fog:[.045,.055,.09],zenith:[.008,.015,.05],fogD:.0062,glow:3.2,night:true},
  {name:'skymning',dir:[-.7,.5,-.5],sun:[2.6,1.45,.9],sky:[.22,.26,.5],ground:[.13,.1,.12],fog:[.7,.44,.42],zenith:[.09,.13,.38],fogD:.006,glow:1.7},
 ];
 for(const s of skies){const l=Math.hypot(...s.dir);s.dir=s.dir.map(v=>v/l);}
