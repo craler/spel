@@ -367,7 +367,7 @@ function viewMatrix(){
 function lightUniforms(prog){
  const u=prog.u;gl.useProgram(prog.p);
  gl.uniform3fv(u.uSun,sky.dir);if(u.uGlow)gl.uniform1f(u.uGlow,sky.glow);gl.uniform3fv(u.uSunCol,sky.sun);gl.uniform3fv(u.uSkyCol,sky.sky);gl.uniform3fv(u.uGroundCol,sky.ground);
- gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fastest?1.9:fast?1.35:1));if(u.uNight)gl.uniform1f(u.uNight,sky.night?1:0);
+ gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fastest?1.9:fast?1.35:1.12));if(u.uNight)gl.uniform1f(u.uNight,sky.night?1:0);
  if(u.uSpot){gl.uniform1f(u.uSpot,spot.on);gl.uniform3fv(u.uSpotPos,spot.pos);gl.uniform3fv(u.uSpotDir,spot.dir);}if(u.uFast)gl.uniform1f(u.uFast,gfx);if(u.uTexel)gl.uniform1f(u.uTexel,1/SHADOW);
  if(u.uVP)gl.uniformMatrix4fv(u.uVP,false,viewM);
  if(u.uLight)gl.uniformMatrix4fv(u.uLight,false,lightM);

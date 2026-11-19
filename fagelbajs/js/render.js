@@ -308,7 +308,7 @@ const M={
  // so they are drawn with far fewer triangles. Most of the time a frame takes goes into drawing triangles.
  tree:new Mesh().tube(0,0,2.6,0,.24,.15,rgb('#463222'),0,0,0,5).ball(0,4.3,0,2.3,2.1,2.3,WHITE,1,0,0,8,5).ball(1.25,3.3,.55,1.5,1.3,1.5,[.85,.9,.85],1,0,0,7,4).ball(-1,3.5,-.8,1.65,1.45,1.6,[.92,1.08,.9],1,0,0,7,4).build(),
  treeFar:new Mesh().tube(0,0,2.4,0,.24,.17,rgb('#463222'),0,0,0,4,false).ball(0,3.95,0,2.5,2.35,2.5,WHITE,1,0,0,7,4).build(),
- lamp:new Mesh().tube(0,0,5.4,0,.08,.05,rgb('#24272b'),0,0,0,4,false).box(-.05,5.3,-.05,.05,5.4,.9,rgb('#24272b')).ball(0,5.28,.85,.2,.1,.26,rgb('#fff1c0'),0,0,0,5,3).build(),
+ lamp:new Mesh().tube(0,0,5.4,0,.08,.05,rgb('#24272b'),0,0,0,4,false).box(-.05,5.3,-.05,.05,5.4,.9,rgb('#24272b')).box(-.16,5.18,.62,.16,5.32,1.08,rgb('#fff1c0'),0,0,0,.7).build(), // a plain tapered lamp head
  table:new Mesh().tube(0,0,.98,0,.05,.05,rgb('#5a5d60'),0,0,0,6).tube(0,.98,1.04,0,.62,.62,rgb('#d8d0c0'),0,0,0,10).tube(0,1.04,2.55,0,.03,.03,rgb('#3a3d40'),0,0,0,5)
   .tube(0,2.2,2.8,0,1.55,.03,WHITE,1,0,0,10,false).build(),
  stall:(()=>{const m=new Mesh(),wood=rgb('#7d5d3f');m.box(-1.7,0,-.7,1.7,1.05,.7,wood);
@@ -397,7 +397,8 @@ function buildStatics(){
  for(const m of statics)m.clear();
  // Nearest blocks first, so the shadow pass can stop after the ones its map covers (see Mesh.drawShadow).
  // Fast graphics draw 9 x 9 blocks instead of 14 x 14 and let the haze close in a little sooner.
- const reach=fastest?3.5:fast?4.5:7,treeNear=fastest?1.5:2.5,lampNear=fastest?2.5:3.5,list=[];
+ // Draw distance in blocks; trees are left out beyond treeFar (tiny dots in the haze by then), lamp posts beyond lampNear.
+ const reach=fastest?3.5:fast?4.5:6,treeNear=fastest?1.5:2.5,treeEnd=fastest?2.5:fast?3.5:4.5,lampNear=fastest?2.5:3.5,list=[];
  for(let i=Math.ceil(ix-.5-reach);i<=Math.floor(ix-.5+reach);i++)for(let j=Math.ceil(iz-.5-reach);j<=Math.floor(iz-.5+reach);j++)list.push([i,j,Math.max(Math.abs(i-ix+.5),Math.abs(j-iz+.5))]);
  list.sort((a,b)=>a[2]-b[2]);let marked=false;
  for(const [i,j,d] of list){
@@ -409,7 +410,7 @@ function buildStatics(){
    // Roof plant: purely for looks, kept low.
    M.cube.add(a+w*.25+seed*2,h,c+d*.3,0,1.8,.8,1.3,roofKit);if(w*d>150)M.cube.add(a+w*.62,h,c+d*.6,0,2.4,1,2.2,roofKit);
   }
-  for(const [x,z,s,seed] of b.trees)(d>treeNear?M.treeFar:M.tree).add(x,0,z,seed*tau,s,s*(.9+.25*seed),s,rgb(leaf[Math.floor(seed*leaf.length)]));
+  if(d<=treeEnd)for(const [x,z,s,seed] of b.trees)(d>treeNear?M.treeFar:M.tree).add(x,0,z,seed*tau,s,s*(.9+.25*seed),s,rgb(leaf[Math.floor(seed*leaf.length)]));
   if(d<=lampNear)for(const [n,[x,z]] of b.lamps.entries())M.lamp.add(x,0,z,[.8,-.8,2.4,-2.4][n]);
   if(!onEventSquare(i,j))for(const [x,z,p] of b.tables)M.table.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
   if(!onEventSquare(i,j))for(const [x,z,p] of b.stalls)M.stall.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
