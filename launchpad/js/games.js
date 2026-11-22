@@ -31,7 +31,8 @@ const GLYPHS={
  'N':['1001','1101','1011','1001','1001'],'O':['010','101','101','101','010'],'P':['110','101','110','100','100'],
  'R':['110','101','110','101','101'],'T':['111','010','010','010','010'],'U':['101','101','101','101','111'],
  'V':['101','101','101','101','010'],'Ä':['101','010','101','111','101'],
- 'S':['011','100','010','001','110'],'Y':['101','101','010','010','010'],'Ö':['101','000','111','101','111']
+ 'S':['011','100','010','001','110'],'Y':['101','101','010','010','010'],'Ö':['101','000','111','101','111'],
+ 'B':['110','101','110','101','110'],'C':['011','100','100','100','011'],'H':['101','101','111','101','101'],'J':['001','001','001','101','010']
 };
 const glyph=ch=>GLYPHS[ch]||GLYPHS[ch.toUpperCase()]||GLYPHS[' '];
 function drawGlyph(g,ox,oy,c,a=1){for(let r=0;r<g.length;r++)for(let k=0;k<g[r].length;k++)if(g[r][k]==='1')px(ox+k,oy+r,c,a);}
@@ -774,4 +775,250 @@ const Rymd={
  }
 };
 
-const GAMES=[Fargminne,Takt,Rymd,Mullvad,Minne,PadPong];
+// =====================================================================
+// Mazes, shared by Ficklampan and Minneslabyrinten. 1 = wall, 0 = floor.
+// =====================================================================
+const DIR4=[[1,0],[-1,0],[0,1],[0,-1]];
+// A perfect maze of cw × ch rooms on a (2cw+1) × (2ch+1) tile grid: exactly one way between any two tiles.
+function carveMaze(cw,ch){
+ const W=cw*2+1,H=ch*2+1,g=new Uint8Array(W*H).fill(1),seen=new Uint8Array(cw*ch),stack=[[0,0]];
+ seen[0]=1;g[W+1]=0;
+ while(stack.length){
+  const [cx,cy]=stack[stack.length-1];
+  const n=DIR4.map(([dx,dy])=>[cx+dx,cy+dy,dx,dy]).filter(([x,y])=>x>=0&&y>=0&&x<cw&&y<ch&&!seen[y*cw+x]);
+  if(!n.length){stack.pop();continue;}
+  const [nx,ny,dx,dy]=n[rnd(n.length)];seen[ny*cw+nx]=1;
+  g[(cy*2+1+dy)*W+cx*2+1+dx]=0;g[(ny*2+1)*W+nx*2+1]=0;stack.push([nx,ny]);
+ }
+ return {W,H,g};
+}
+// Distances from (sx,sy) over floor tiles; block(i) can close extra tiles (doors).
+function mazeDist(m,sx,sy,block){
+ const {W,H,g}=m,dist=new Int32Array(W*H).fill(-1),prev=new Int32Array(W*H).fill(-1),q=[sy*W+sx];dist[q[0]]=0;
+ for(let h=0;h<q.length;h++){
+  const i=q[h],x=i%W,y=i/W|0;
+  for(const [dx,dy] of DIR4){
+   const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=W||ny>=H)continue;
+   const j=ny*W+nx;if(g[j]||dist[j]>=0||(block&&block(j)))continue;
+   dist[j]=dist[i]+1;prev[j]=i;q.push(j);
+  }
+ }
+ return {dist,prev};
+}
+// Which way a press at (x,y) points from (px,py): one step along the bigger difference. Same pad or exact diagonal: null.
+function stepToward(px,py,x,y){const dx=x-px,dy=y-py;if(Math.abs(dx)===Math.abs(dy))return null;return Math.abs(dx)>Math.abs(dy)?[Math.sign(dx),0]:[0,Math.sign(dy)];}
+
+
+// =====================================================================
+// FICKLAMPAN – you are a white dot in a dark maze bigger than the pad. The pad is a window that follows you.
+// Press a pad next to the dot (or anywhere in that direction) to take one step. Only the walls close to you
+// are lit, like a torch. The exit pulses green; when it is outside the window a faint green glow at the edge
+// shows which way it is. From level 3 there are coloured keys that open doors of the same colour.
+// =====================================================================
+const FL_WARM=[1,.78,.42],FL_KEYS=[COL.yellow,COL.blue,COL.red],FL_KEY_NAMES=['gul','blå','röd'];
+const FL_OX=3,FL_OY=3; // where you are on the pad
+const Ficklampan={
+ id:'ficklampan',name:'Ficklampan',color:FL_WARM,
+ how:'Du är den vita pricken i en mörk labyrint. Tryck på rutan bredvid pricken för att gå dit. Ficklampan lyser bara upp väggarna närmast dig. Hitta utgången som pulserar grönt – när den är utanför plattan visar ett svagt grönt sken vid kanten åt vilket håll den ligger. Från nivå 3 finns färgade nycklar som öppnar dörrar i samma färg.',
+ legend:[[COL.white,'Du'],[COL.green,'Utgången'],[FL_WARM,'Väggar i ficklampans sken'],[COL.yellow,'Nyckel och dörr i samma färg']],
+ start(now){this.phase='play';this.level=0;this.next(now);},
+ next(now){
+  this.level++;
+  const c=Math.min(4+this.level,10),m=this.m=carveMaze(c,c); // 11 × 11 pads, growing to 21 × 21
+  this.px=1;this.py=1;
+  const {dist,prev}=mazeDist(m,1,1);let ex=0;for(let i=0;i<dist.length;i++)if(dist[i]>dist[ex])ex=i;
+  this.exit=ex;this.doors=new Map();this.keys=new Map();this.have=new Set();this.opened=[];
+  // Doors on the way to the exit (on the tiles between rooms), each key somewhere you can reach before its door
+  const nDoors=this.level<3?0:this.level<5?1:this.level<7?2:3,path=[];
+  for(let i=ex;i>=0;i=prev[i])path.unshift(i);
+  for(let k=0;k<nDoors;k++){
+   let j=Math.floor(path.length*(.3+.6*(k+1)/(nDoors+1)));
+   while(j<path.length-2&&(this.doors.has(path[j])||(path[j]%m.W)%2&&((path[j]/m.W|0)%2)))j++;
+   this.doors.set(path[j],k);
+  }
+  for(let k=0;k<nDoors;k++){
+   const reach=mazeDist(m,1,1,j=>this.doors.has(j)&&this.doors.get(j)>=k).dist,cand=[];
+   for(let i=0;i<reach.length;i++)if(reach[i]>3&&!this.doors.has(i)&&!this.keys.has(i))cand.push(i);
+   cand.sort((a,b)=>reach[b]-reach[a]);
+   this.keys.set(cand[rnd(Math.max(1,Math.ceil(cand.length/3)))],k);
+  }
+  this.step='in';this.stepAt=now;this.bump=null;this.moves=0;this.beatAt=now+1.5;
+  if(this.level>1)sfx.start();
+ },
+ update(dt,now){
+  const t=now-this.stepAt;
+  if(this.step==='in'&&t>1.2){this.step='play';this.stepAt=now;}
+  else if(this.step==='out'&&t>1.6)this.next(now);
+  // A slow, soft heartbeat in the dark
+  if(this.step==='play'&&now>=this.beatAt){this.beatAt=now+1.6;const a=audioNow();tone(62,40,.14,'sine',.16,a);tone(58,38,.12,'sine',.11,a+.2);}
+ },
+ input(ev,now){
+  if(ev.kind!=='pad'||!ev.down||this.step!=='play')return;
+  const d=stepToward(FL_OX,FL_OY,ev.x,ev.y);if(!d)return;
+  const {W,H,g}=this.m,nx=this.px+d[0],ny=this.py+d[1],i=ny*W+nx;
+  const hitWall=()=>{this.bump={x:nx,y:ny,at:now};tone(90,60,.1,'square',.08);};
+  if(nx<0||ny<0||nx>=W||ny>=H||g[i])return hitWall();
+  if(this.doors.has(i)){
+   const k=this.doors.get(i);
+   if(!this.have.has(k))return hitWall();
+   this.doors.delete(i);this.have.delete(k);this.opened.push({i,k,at:now});
+   [0,4,7].forEach((n,j)=>tone(scaleHz(n+3),scaleHz(n+3),.14,'triangle',.1,audioNow()+j*.07));
+  }
+  this.px=nx;this.py=ny;this.moves++;noise(.03,1800,.035,0,'bandpass');
+  if(this.keys.has(i)){this.have.add(this.keys.get(i));this.keys.delete(i);sfx.gold();}
+  if(i===this.exit){this.step='out';this.stepAt=now;sfx.win();saveBest(this.id,this.level);}
+ },
+ // The window around (px,py). k = how much light there is (0..1).
+ view(m,cx,cy,now,k,extra){
+  const {W,H,g}=m,R=2.9+.15*Math.sin(now*7.3)*Math.sin(now*2.1);
+  for(let sy=0;sy<8;sy++)for(let sx=0;sx<8;sx++){
+   const wx=cx+sx-FL_OX,wy=cy+sy-FL_OY;if(wx<0||wy<0||wx>=W||wy>=H)continue;
+   const i=wy*W+wx,a=k*Math.pow(Math.max(0,1-Math.hypot(sx-FL_OX,sy-FL_OY)/R),1.2);
+   if(g[i]){if(a>0)px(sx,sy,FL_WARM,a);}
+   else if(extra&&extra(i,sx,sy,a));
+   else if(a>0)px(sx,sy,FL_WARM,a*.07); // the floor in the light pool
+  }
+ },
+ draw(now){
+  const t=now-this.stepAt,m=this.m;
+  if(this.step==='in'&&t<.8){drawBigNumber(this.level,FL_WARM,Math.min(1,t/.2),0);return;}
+  const k=this.step==='in'?Math.min(1,(t-.8)/.4):1;
+  this.view(m,this.px,this.py,now,k,(i,sx,sy,a)=>{
+   if(this.doors.has(i)){px(sx,sy,FL_KEYS[this.doors.get(i)],Math.max(a,.06));return true;}
+   if(this.keys.has(i)){px(sx,sy,FL_KEYS[this.keys.get(i)],Math.max(a,.12+.2*pulse(now,2)));return true;}
+   if(i===this.exit){px(sx,sy,COL.green,.35+.65*pulse(now,1.4));return true;}
+   const o=this.opened.find(o=>o.i===i&&now-o.at<.5);
+   if(o){px(sx,sy,FL_KEYS[o.k],1-(now-o.at)/.5);return true;}
+   return false;
+  });
+  // Bumped into a wall: it flashes red
+  if(this.bump&&now-this.bump.at<.3)px(this.bump.x-this.px+FL_OX,this.bump.y-this.py+FL_OY,COL.red,1-(now-this.bump.at)/.3);
+  // Which way the exit is, when it is outside the window
+  const ex=this.exit%m.W,ey=this.exit/m.W|0,dx=ex-this.px,dy=ey-this.py;
+  if(dx<-FL_OX||dx>7-FL_OX||dy<-FL_OY||dy>7-FL_OY){
+   const s=Math.min(dx?(dx>0?7-FL_OX:FL_OX)/Math.abs(dx):9,dy?(dy>0?7-FL_OY:FL_OY)/Math.abs(dy):9);
+   px(Math.round(FL_OX+dx*s),Math.round(FL_OY+dy*s),COL.green,k*(.1+.25*pulse(now,1.2)));
+  }
+  px(FL_OX,FL_OY,COL.white);
+  // Keys you carry, on the top row
+  [...this.have].forEach((key,j)=>topLed(j,FL_KEYS[key],.6+.4*pulse(now,2)));
+  if(this.step==='out')fill(COL.green,Math.max(0,.6-t*.4));
+ },
+ hud(){
+  if(this.step==='out')return `Du hittade ut på nivå ${this.level}!`;
+  const keys=[...this.have].map(k=>FL_KEY_NAMES[k]),doors=this.doors.size;
+  return `Nivå ${this.level} · steg ${this.moves}`+(keys.length?` · du har nyckel: ${keys.join(', ')}`:doors?` · ${doors} ${doors>1?'dörrar':'dörr'} på vägen – leta nyckel`:'');
+ },
+ demo(t){
+  if(!this.dm){const m=carveMaze(5,5),{dist,prev}=mazeDist(m,1,1);let ex=0;for(let i=0;i<dist.length;i++)if(dist[i]>dist[ex])ex=i;const p=[];for(let i=ex;i>=0;i=prev[i])p.unshift(i);this.dm={m,p,ex};}
+  const {m,p,ex}=this.dm,i=p[Math.floor(t*3)%p.length],x=i%m.W,y=i/m.W|0;
+  this.view(m,x,y,t,1,(j,sx,sy)=>{if(j===ex){px(sx,sy,COL.green,.35+.65*pulse(t,1.4));return true;}return false;});
+  px(FL_OX,FL_OY,COL.white);
+ }
+};
+
+
+// =====================================================================
+// MINNESLABYRINTEN – the maze lights up for three seconds, then goes dark. Walk from start (white, bottom left)
+// to the goal (green, top right) from memory. Walk into a wall and it flashes red and you go back to the
+// start – but that wall keeps glowing faintly so you don't hit it again.
+// =====================================================================
+// A winding corridor from (0,7) to (7,0) that never touches itself, plus a few dead ends.
+function memoryMaze(len,branches){
+ const ok=(o,x,y,fx,fy)=>x>=0&&y>=0&&x<8&&y<8&&!o[y*8+x]&&DIR4.every(([dx,dy])=>{const ax=x+dx,ay=y+dy;return (ax===fx&&ay===fy)||ax<0||ay<0||ax>7||ay>7||!o[ay*8+ax];});
+ let best=null;
+ for(let tries=0;tries<600;tries++){
+  const o=new Uint8Array(64);let x=0,y=7,n=1;o[56]=1;
+  while(!(x===7&&y===0)){
+   const opts=DIR4.map(([dx,dy])=>[x+dx,y+dy]).filter(([nx,ny])=>(nx===7&&ny===0)||ok(o,nx,ny,x,y));
+   if(!opts.length)break;
+   // A little pull towards the goal so it gets there, but plenty of wandering
+   opts.sort((a,b)=>(a[0]-a[1])-(b[0]-b[1]));
+   const [nx,ny]=Math.random()<.35?opts[opts.length-1]:opts[rnd(opts.length)];
+   x=nx;y=ny;o[y*8+x]=1;n++;
+  }
+  if(!(x===7&&y===0))continue;
+  const score=Math.abs(n-len);
+  if(!best||score<best.score)best={o,score};
+  if(score<=2)break;
+ }
+ const o=best.o;
+ // Dead ends: short side corridors that also never touch the rest
+ for(let b=0,tries=0;b<branches&&tries<200;tries++){
+  const open=[];for(let i=0;i<64;i++)if(o[i])open.push(i);
+  let i=open[rnd(open.length)],x=i%8,y=i/8|0,made=0;
+  for(let s=0;s<3;s++){
+   const opts=DIR4.map(([dx,dy])=>[x+dx,y+dy]).filter(([nx,ny])=>ok(o,nx,ny,x,y));
+   if(!opts.length)break;[x,y]=opts[rnd(opts.length)];o[y*8+x]=1;made++;
+  }
+  if(made)b++;
+ }
+ return o; // 1 = floor
+}
+const MemLab={
+ id:'minneslab',name:'Minneslabyrinten',color:COL.blue,
+ how:'Labyrinten lyser i tre sekunder och blir sedan svart. Gå från den vita starten nere till vänster till det gröna målet uppe till höger – på minnet. Tryck på rutan bredvid pricken för att gå. Går du in i en vägg blinkar den rött och du åker tillbaka till start, men väggen fortsätter att lysa svagt.',
+ legend:[[COL.blue,'Väggar (syns bara i början)'],[COL.white,'Du och starten'],[COL.green,'Målet'],[COL.red,'Väggar du har gått in i']],
+ showFor:3,
+ start(now){this.phase='play';this.level=0;this.total=0;this.next(now);},
+ next(now){
+  this.level++;
+  this.open=memoryMaze(Math.min(13+this.level*2,30),Math.min(1+Math.floor(this.level/2),5));
+  this.found=new Set();this.px=0;this.py=7;this.bumps=0;this.trail=[];this.bumpAt=0;
+  this.step='show';this.stepAt=now;sfx.start();
+ },
+ update(dt,now){
+  const t=now-this.stepAt;
+  if(this.step==='show'&&t>this.showFor){this.step='play';this.stepAt=now;tone(330,165,.3,'triangle',.08);}
+  else if(this.step==='good'&&t>1.3)this.next(now);
+ },
+ input(ev,now){
+  if(ev.kind!=='pad'||!ev.down||this.step!=='play')return;
+  const d=stepToward(this.px,this.py,ev.x,ev.y);if(!d)return;
+  const nx=this.px+d[0],ny=this.py+d[1];
+  if(nx<0||ny<0||nx>7||ny>7)return;
+  if(!this.open[ny*8+nx]){
+   this.found.add(ny*8+nx);this.bumpAt=now;this.bumpAt2=[nx,ny];this.bumps++;this.total++;
+   this.px=0;this.py=7;this.trail=[];sfx.bad();return;
+  }
+  this.trail.push({x:this.px,y:this.py,at:now});
+  this.px=nx;this.py=ny;sfx.hit(nx+(7-ny));
+  if(nx===7&&ny===0){this.step='good';this.stepAt=now;sfx.win();saveBest(this.id,this.level);}
+ },
+ draw(now){
+  const t=now-this.stepAt;
+  if(this.step==='show'){
+   const a=Math.min(1,t/.2);
+   for(let i=0;i<64;i++)if(!this.open[i])px(i%8,i/8|0,COL.blue,a*.75);
+   topBar(1-t/this.showFor,COL.blue);
+  }
+  for(const i of this.found)px(i%8,i/8|0,COL.red,.18);
+  if(this.bumpAt&&now-this.bumpAt<.5)px(this.bumpAt2[0],this.bumpAt2[1],COL.red,pulse(now,8));
+  this.trail=this.trail.filter(s=>now-s.at<.4);
+  for(const s of this.trail)px(s.x,s.y,COL.white,.3*(1-(now-s.at)/.4));
+  px(0,7,COL.white,.25);
+  px(7,0,COL.green,.5+.5*pulse(now,1.5));
+  px(this.px,this.py,COL.white);
+  if(this.step==='good'){
+   for(let i=0;i<64;i++)if(this.open[i])px(i%8,i/8|0,COL.green,Math.max(0,.7-t*.5));
+  }
+ },
+ hud(){
+  if(this.step==='show')return `Nivå ${this.level} · titta noga – snart blir det mörkt!`;
+  if(this.step==='good')return `Nivå ${this.level} klar med ${this.bumps} väggträffar!`;
+  return `Nivå ${this.level} · väggträffar ${this.bumps}`;
+ },
+ demo(t){
+  if(!this.dm){ // the way from start to goal
+   const o=memoryMaze(17,1),{prev}=mazeDist({W:8,H:8,g:o.map(v=>v?0:1)},0,7),p=[];
+   for(let j=7;j>=0;j=prev[j])p.unshift(j);
+   this.dm={o,p};
+  }
+  const {o,p}=this.dm,cyc=1.5+p.length*.3,k=t%cyc;
+  if(k<1.5)for(let i=0;i<64;i++){if(!o[i])px(i%8,i/8|0,COL.blue,.75);}
+  const i=p[Math.max(0,Math.min(p.length-1,Math.floor((k-1.5)/.3)))];
+  px(7,0,COL.green,.5+.5*pulse(t,1.5));px(i%8,i/8|0,COL.white);
+ }
+};
+
+const GAMES=[Fargminne,Takt,Rymd,Ficklampan,MemLab,Mullvad,Minne,PadPong];
