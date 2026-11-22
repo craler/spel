@@ -30,7 +30,8 @@ const GLYPHS={
  'K':['101','101','110','101','101'],'L':['100','100','100','100','111'],'M':['10001','11011','10101','10001','10001'],
  'N':['1001','1101','1011','1001','1001'],'O':['010','101','101','101','010'],'P':['110','101','110','100','100'],
  'R':['110','101','110','101','101'],'T':['111','010','010','010','010'],'U':['101','101','101','101','111'],
- 'V':['101','101','101','101','010'],'Ä':['101','010','101','111','101']
+ 'V':['101','101','101','101','010'],'Ä':['101','010','101','111','101'],
+ 'S':['011','100','010','001','110'],'Y':['101','101','010','010','010'],'Ö':['101','000','111','101','111']
 };
 const glyph=ch=>GLYPHS[ch]||GLYPHS[ch.toUpperCase()]||GLYPHS[' '];
 function drawGlyph(g,ox,oy,c,a=1){for(let r=0;r<g.length;r++)for(let k=0;k<g[r].length;k++)if(g[r][k]==='1')px(ox+k,oy+r,c,a);}
@@ -543,7 +544,7 @@ const Fargminne={
   this.step='level';this.stepAt=now;
   [0,2,4].forEach((n,i)=>tone(scaleHz(n+5+this.level%5),scaleHz(n+5+this.level%5),.16,'square',.07,audioNow()+.08+i*.12));
  },
- timing(){return {on:Math.max(.28,.6-this.level*.025),gap:Math.max(.1,.2-this.level*.007)};},
+ timing(){return {on:.8*Math.max(.28,.6-this.level*.025),gap:.8*Math.max(.1,.2-this.level*.007)};}, // 20 % faster than the first version
  beep(q,dur=.3){tone(FM_HZ[q],FM_HZ[q],dur,'square',.09);},
  update(dt,now){
   if(this.phase==='over')return;
@@ -606,4 +607,171 @@ const Fargminne={
  }
 };
 
-const GAMES=[Fargminne,Takt,Mullvad,Minne,PadPong];
+// =====================================================================
+// RYMDFÖRSVAR – shoot the things coming down at you. Press a pad on the bottom row to fire up that column.
+// The round buttons on the right are your weapons, each in its own colour (the shots have the same colour).
+// A new weapon unlocks at the start of waves 2–5; it blinks white until you pick it.
+// Something reaching the bottom row costs a life (red lights top left). Three lives.
+// =====================================================================
+const RF_WEAPONS=[
+ {name:'Laser',col:COL.green,cool:.16,speed:.045,shots:[[0,0]],dmg:1,info:'ett snabbt skott rakt upp'},
+ {name:'Trippel',col:COL.cyan,cool:.3,speed:.05,shots:[[-1,0],[0,0],[1,0]],dmg:1,info:'tre skott bredvid varandra'},
+ {name:'Solfjäder',col:COL.yellow,cool:.32,speed:.06,shots:[[0,-1],[0,0],[0,1]],dmg:1,info:'tre skott som sprids snett'},
+ {name:'Raket',col:COL.orange,cool:.7,speed:.09,shots:[[0,0]],dmg:2,blast:1,info:'långsam, sprängs över en ruta åt alla håll'},
+ {name:'Blixt',col:COL.purple,cool:1.4,beam:true,dmg:3,info:'träffar hela kolumnen på en gång'}
+];
+// The things coming at you: colour shows what they are.
+const RF_FOES={
+ drone:{col:COL.red,hp:1,pts:10,step:1},
+ tank:{col:COL.pink,hp:3,pts:30,step:1.3},   // gets dimmer for every hit
+ dart:{col:COL.white,hp:1,pts:20,step:.5}     // fast
+};
+const Rymd={
+ id:'rymd',name:'Rymdförsvar',color:COL.cyan,
+ how:'Saker kommer ner mot dig. Tryck på en knapp i nedersta raden för att skjuta uppåt i den kolumnen. De runda knapparna till höger är vapnen – ett nytt låses upp varje våg och blinkar vitt tills du väljer det. Kommer något ända ner förlorar du ett liv. Du har tre.',
+ legend:[[COL.red,'Röd = vanlig (1 träff)'],[COL.pink,'Rosa = pansar (3 träffar)'],[COL.white,'Vit = snabb'],
+  ...RF_WEAPONS.map(w=>[w.col,`${w.name}: ${w.info}`])],
+ start(now){
+  this.phase='play';this.score=0;this.lives=3;this.wave=0;this.weapon=0;this.unlocked=1;this.fresh=-1;
+  this.foes=[];this.shots=[];this.fx=[];this.beams=[];this.coolUntil=0;this.hurtAt=-9;this.fireAt=-9;this.fireX=0;
+  this.nextWave(now);
+ },
+ nextWave(now){
+  this.wave++;
+  if(this.wave>=2&&this.unlocked<RF_WEAPONS.length){this.fresh=this.unlocked;this.unlocked++;}
+  this.toSpawn=5+this.wave*3;this.step='wave';this.stepAt=now;this.spawnAt=now+1.4;
+  sfx.start();
+ },
+ spawn(now){
+  const w=this.wave,r=Math.random();
+  const kind=w>=3&&r<.2?'dart':w>=2&&r<.42?'tank':'drone',f=RF_FOES[kind];
+  const free=[...Array(8).keys()].filter(x=>!this.foes.some(e=>e.x===x&&e.y<1));
+  if(!free.length)return false;
+  this.foes.push({kind,x:free[rnd(free.length)],y:0,hp:f.hp,moveAt:now+this.stepTime()*f.step,hitAt:-9});
+  return true;
+ },
+ stepTime(){return Math.max(.32,1.05-this.wave*.08);},
+ hit(e,dmg,now){
+  e.hp-=dmg;e.hitAt=now;
+  if(e.hp<=0){
+   this.foes.splice(this.foes.indexOf(e),1);this.score+=RF_FOES[e.kind].pts;
+   this.fx.push({x:e.x,y:e.y,at:now,col:RF_FOES[e.kind].col});sfx.hit(this.score/10%10);
+  }else tone(500,400,.05,'square',.06);
+ },
+ foeAt(x,y){return this.foes.find(e=>e.x===x&&e.y===y);},
+ fire(x,now){
+  const w=RF_WEAPONS[this.weapon];
+  if(now<this.coolUntil)return;
+  this.coolUntil=now+w.cool;this.fireAt=now;this.fireX=x;
+  if(w.beam){
+   this.beams.push({x,at:now});tone(1200,200,.35,'sawtooth',.1);
+   for(const e of this.foes.filter(e=>e.x===x))this.hit(e,w.dmg,now);
+   return;
+  }
+  for(const [dx,vx] of w.shots){const sx=x+dx;if(sx<0||sx>7)continue;this.shots.push({x:sx,y:7,vx,w:this.weapon,moveAt:now});}
+  w.blast?tone(180,90,.25,'sawtooth',.1):tone(1400,700,.07,'square',.06);
+ },
+ update(dt,now){
+  if(this.phase==='over')return;
+  if(this.step==='wave'){if(now-this.stepAt>1.4)this.step='play';else return;}
+  // New foes
+  if(this.toSpawn>0&&now>=this.spawnAt&&this.spawn(now)){this.toSpawn--;this.spawnAt=now+Math.max(.45,1.5-this.wave*.12)*(.6+Math.random()*.8);}
+  // Shots fly up one row at a time and hit whatever is in the pad they enter
+  for(const s of [...this.shots]){
+   const w=RF_WEAPONS[s.w];
+   while(now>=s.moveAt&&this.shots.includes(s)){
+    s.moveAt+=w.speed;s.y--;s.x+=s.vx;
+    if(s.y<0||s.x<0||s.x>7){this.shots.splice(this.shots.indexOf(s),1);break;}
+    const e=this.foeAt(s.x,s.y);
+    if(e){
+     this.shots.splice(this.shots.indexOf(s),1);
+     if(w.blast){
+      this.fx.push({x:s.x,y:s.y,at:now,col:w.col,big:true});noise(.3,300,.2,0,'lowpass');
+      for(const o of this.foes.filter(o=>Math.abs(o.x-s.x)<=1&&Math.abs(o.y-s.y)<=1))this.hit(o,w.dmg,now);
+     }else this.hit(e,w.dmg,now);
+    }
+   }
+  }
+  // Foes step down
+  for(const e of [...this.foes]){
+   if(now<e.moveAt)continue;
+   e.moveAt=now+this.stepTime()*RF_FOES[e.kind].step;e.y++;
+   const s=this.shots.find(s=>s.x===e.x&&s.y===e.y);
+   if(s){this.shots.splice(this.shots.indexOf(s),1);this.hit(e,RF_WEAPONS[s.w].dmg,now);continue;}
+   if(e.y>=7){
+    this.foes.splice(this.foes.indexOf(e),1);this.lives--;this.hurtAt=now;sfx.bad();
+    if(this.lives<=0){const best=saveBest(this.id,this.score);gameOver(this,this.score,best?COL.gold:COL.cyan,now);best?sfx.win():sfx.over();return;}
+   }
+  }
+  if(this.toSpawn===0&&!this.foes.length){this.shots=[];this.nextWave(now);}
+ },
+ input(ev,now){
+  if(this.phase==='over')return overInput(this,ev,now);
+  if(!ev.down)return;
+  if(ev.kind==='side'){
+   if(ev.i<this.unlocked){this.weapon=ev.i;if(this.fresh===ev.i)this.fresh=-1;sfx.menu();}
+   else tone(150,150,.08,'square',.05);
+   return;
+  }
+  if(ev.kind==='pad'&&ev.y===7&&this.step==='play')this.fire(ev.x,now);
+ },
+ draw(now){
+  if(this.phase==='over')return drawOver(this,now);
+  const w=RF_WEAPONS[this.weapon];
+  // Weapons on the right: locked = dark, unlocked = dim in its colour, chosen = bright, new = blinks white
+  RF_WEAPONS.forEach((v,i)=>{
+   if(i>=this.unlocked)return;
+   if(i===this.fresh&&Math.floor(now*3)%2)sideLed(i,COL.white);
+   else sideLed(i,v.col,i===this.weapon?1:.2);
+  });
+  // Lives on the top row (red), then how many are left in the wave (dim)
+  for(let i=0;i<3;i++)topLed(i,COL.red,i<this.lives?1:.06);
+  if(this.step==='wave'){
+   const t=now-this.stepAt;
+   drawBigNumber(this.wave,COL.cyan,Math.min(1,t/.25),0);
+   if(this.fresh>=0){const c=RF_WEAPONS[this.fresh].col;for(let x=0;x<8;x++)px(x,7,c,.5+.5*pulse(now,4));}
+   return;
+  }
+  // Bottom row: your cannons, in the weapon's colour. Dimmer while reloading.
+  const ready=now>=this.coolUntil;
+  for(let x=0;x<8;x++)px(x,7,w.col,ready?.35:.1);
+  if(now-this.fireAt<.12)px(this.fireX,7,COL.white,1-(now-this.fireAt)/.12);
+  // Foes
+  for(const e of this.foes){
+   const f=RF_FOES[e.kind],a=e.kind==='tank'?.35+.65*e.hp/f.hp:1;
+   px(e.x,e.y,now-e.hitAt<.08?COL.white:f.col,a);
+   if(e.y>=5)px(e.x,e.y,COL.red,.3*pulse(now,6)); // close to the bottom: warning
+  }
+  // Shots, with a short tail
+  for(const s of this.shots){const c=RF_WEAPONS[s.w].col;px(s.x,s.y,c);px(s.x-s.vx,s.y+1,c,.25);}
+  // Lightning beams
+  this.beams=this.beams.filter(b=>now-b.at<.3);
+  for(const b of this.beams)for(let y=0;y<7;y++)px(b.x,y,Math.random()<.5?COL.white:COL.purple,1-(now-b.at)/.3);
+  // Explosions
+  this.fx=this.fx.filter(f=>now-f.at<(f.big?.45:.3));
+  for(const f of this.fx){
+   const k=(now-f.at)/(f.big?.45:.3),a=1-k;
+   px(f.x,f.y,COL.white,a);
+   const r=f.big?1:0;
+   for(let dy=-1-r;dy<=1+r;dy++)for(let dx=-1-r;dx<=1+r;dx++)if(dx||dy)px(f.x+dx,f.y+dy,f.col,a*(f.big?.7:.4)*(Math.abs(dx)+Math.abs(dy)<=1+r?1:.5));
+  }
+  if(now-this.hurtAt<.35)fill(COL.red,.4*(1-(now-this.hurtAt)/.35));
+ },
+ hud(){
+  if(this.phase==='over')return `Du nådde våg ${this.wave} och fick ${this.score} poäng`;
+  const w=RF_WEAPONS[this.weapon];
+  if(this.step==='wave')return `Våg ${this.wave}`+(this.fresh>=0?` · nytt vapen: ${RF_WEAPONS[this.fresh].name} (${RF_WEAPONS[this.fresh].info}) – tryck på den blinkande knappen till höger`:'');
+  return `Våg ${this.wave} · poäng ${this.score} · liv ${this.lives} · vapen: ${w.name}`;
+ },
+ demo(t){
+  for(let x=0;x<8;x++)px(x,7,COL.green,.3);
+  for(let i=0;i<4;i++){
+   const cyc=2.4,k=((t+i*.6)%cyc)/cyc,x=[1,5,3,6][i],hy=Math.floor(k*5);
+   if(k<.7){px(x,Math.floor(k/.7*4),RF_FOES[i===2?'tank':'drone'].col);const sy=7-Math.floor(Math.max(0,k-.4)/.3*4);if(k>.4)px(x,sy,COL.green);}
+   else{const a=1-(k-.7)/.3;px(x,3,COL.white,a);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])px(x+dx,3+dy,COL.red,a*.5);}
+  }
+  RF_WEAPONS.forEach((v,i)=>sideLed(i,v.col,Math.floor(t*1.5)%RF_WEAPONS.length===i?1:.2));
+ }
+};
+
+const GAMES=[Fargminne,Takt,Rymd,Mullvad,Minne,PadPong];
