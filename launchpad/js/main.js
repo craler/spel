@@ -55,7 +55,8 @@ function drawShow(t){
 function drawPreview(t){
  const g=GAMES[preview],nt=t-previewAt;
  const nameCol=g===Fargminne?i=>FM_COL[i%4]:g.color;
- if(!scrollOnce(g.name.toUpperCase(),nameCol,nt-.1,1,14))g.demo(nt);
+ // Hovering on the screen: straight to the demo. Picked on the pad: the name scrolls by first.
+ if(previewBy==='hover'||!scrollOnce(g.name.toUpperCase(),nameCol,nt-.1,1,14))g.demo(previewBy==='hover'?nt+2:nt);
  GAMES.forEach((h,i)=>sideLed(i,h.color,i===preview?.65+.35*pulse(t,2):.2));
  topLed(0,COL.white,.25);topLed(1,COL.white,.25);
 }
