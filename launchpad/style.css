@@ -46,6 +46,10 @@ h1 em { font-style: italic; background: linear-gradient(90deg, #ff3dc8, #ff7a3d,
 .led.held { outline: 2px solid #fff; outline-offset: 1px; }
 figcaption { margin-top: 10px; color: #8f82b5; font-size: 14px; text-align: center; }
 
+.info { display: flex; flex-direction: column; }
+/* In the menu the game list sits right under the title, so the text that changes when you hover a game
+   is below it and the list never moves under the mouse. */
+.info.menu h2 { order: -3; } .info.menu .hud { order: -2; } .info.menu #list { order: -1; }
 .info h2 { margin: 0; font-size: 34px; font-weight: 900; font-style: italic; letter-spacing: -.02em; }
 .hud { min-height: 1.5em; margin: 4px 0 10px; color: #ffd24a; font-weight: 800; font-variant-numeric: tabular-nums; }
 #how { margin: 0 0 6px; color: #d6cdf5; }

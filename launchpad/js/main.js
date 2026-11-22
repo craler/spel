@@ -138,6 +138,7 @@ LP.onConnect=()=>{introAt=clock;};
 
 function showGameInfo(){
  const g=current,shown=g||(preview!==null?GAMES[preview]:null);
+ document.querySelector('.info').classList.toggle('menu',!g);
  $('#game-name').textContent=shown?shown.name:'Meny';
  let how;
  if(g)how=g.how;
