@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0820">
+<title>Launchpad Legends • Kornhalls spelhörna</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<meta property="og:title" content="Launchpad Legends"><meta property="og:image" content="poster.jpg">
+<link rel="apple-touch-icon" href="poster.jpg">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+ <header>
+  <a class="back" href="../">← Kornhalls spelhörna</a>
+  <small class="kicker">KORNHALLS SPELHÖRNA / 02</small>
+  <h1>Launchpad <em>Legends</em></h1>
+  <p class="sub">Spelen händer i ljuset på din Launchpad Mini MK3.</p>
+ </header>
+
+ <section class="connect">
+  <p id="status" aria-live="polite">Startar…</p>
+  <button id="connect" hidden>Anslut Launchpad</button>
+  <p id="sound-hint">🔈 Klicka någonstans på sidan en gång för att få ljud.</p>
+ </section>
+
+ <div class="stage">
+  <figure class="pad-wrap">
+   <div id="mirror" aria-label="Spegel av din Launchpad – går också att klicka på"></div>
+   <figcaption>Spegel av din Launchpad. Du kan klicka på den också.</figcaption>
+  </figure>
+
+  <section class="info">
+   <h2 id="game-name">Välj ett spel</h2>
+   <p id="hud" class="hud" aria-live="polite"></p>
+   <p id="how"></p>
+   <p id="best" class="best"></p>
+   <ol id="list" aria-label="Spelen"></ol>
+   <div class="tools"><button id="menu-btn">Till menyn</button><button id="mute" aria-pressed="true">Ljud på</button></div>
+  </section>
+ </div>
+</main>
+<script src="./js/pad.js"></script>
+<script src="./js/sound.js"></script>
+<script src="./js/games.js"></script>
+<script src="./js/main.js"></script>
+</body>
+</html>
