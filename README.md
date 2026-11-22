@@ -14,11 +14,13 @@ För att testa: öppna startsidan med `?test=1` eller gå direkt till `launchpad
 | --- | --- |
 | `js/pad.js` | Launchpad via Web MIDI: Programmer mode, koordinater, ritfunktioner, skickar bara ändrade lampor (RGB-SysEx), spegeln på sidan |
 | `js/sound.js` | Syntade ljud och trummor (WebAudio). Ljud kräver ett klick på sidan, knapptryck på plattan räknas inte |
-| `js/games.js` | Småspelen: Takt (rytmspel), Mullvad, Minne, Pad-pong, plus gemensam siffer-font och slutskärm |
-| `js/main.js` | Menyn (fyra 4 × 4-rutor), spel-loopen, tillbaka-knappen och skärmen |
+| `js/games.js` | Småspelen: Färgminne, Takt (rytmspel), Mullvad, Minne, Pad-pong, plus font (siffror, bokstäver, stora siffror) och slutskärm |
+| `js/main.js` | Menyn, spel-loopen, tillbaka-knappen och skärmen |
 
-- Menyn: tryck på en av fyra rutor. Håll in den runda knappen uppe till höger (User, röd) för att gå tillbaka.
-- Nytt småspel: lägg ett objekt i `games.js` med `start/update/draw/input/hud/preview` och lägg till det i `GAMES`. Översta raden 0–6 är fri, knapp 7 är tillbaka.
+- Menyn: de runda knapparna till höger är spellistan (ett spel per knapp, i spelets färg; ett nytt spel blinkar vitt). Plattan visar spelets namn och sedan en demo. Tryck var som helst på plattan för att spela. ▲ ▼ byter också spel, och rör ingen plattan på 30 s bläddrar menyn själv. Håll in den runda knappen uppe till höger (User, röd) för att gå tillbaka.
+- Färgminne: fyra färgfält som i Simon. Före varje nivå lyser nivåns nummer upp stort i vitt.
+- Mullvad visar före varje omgång vad färgerna ger (grön 1, guld 5, röd −3) och räknar ner 3-2-1.
+- Nytt småspel: lägg ett objekt i `games.js` med `start/update/draw/input/hud/demo` och lägg till det i `GAMES` (högst 8). `isNew: true` får det att blinka som nytt, `legend` visar färgförklaringar på skärmen. Översta raden 0–6 är fri, knapp 7 är tillbaka.
 - Rekord sparas i webbläsaren (`legends.best.<id>`).
 - Ser färgerna urblekta eller för mörka ut på riktiga plattan: justera `GAMMA` i `pad.js`.
 

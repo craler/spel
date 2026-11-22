@@ -1,35 +1,44 @@
 'use strict';
 // Launchpad Legends: the menu on the Launchpad, the game loop and the screen.
 //
-// Menu: the grid is split into four 4 × 4 tiles, one per game (GAMES in games.js, in order
-// top-left, top-right, bottom-left, bottom-right). Press a tile to start that game.
+// Menu: the right column is the game list – one round button per game, in its colour. The selected one
+// is bright, a new game blinks white. The grid first scrolls the selected game's name, then plays a demo.
+// Press anywhere on the grid (or the same side button again) to play. ▲ ▼ on the top row also move.
+// Nobody touching it for a while: it cycles through the games by itself.
 // Anywhere: hold the top-right round button (User, lit red) for a moment to go back to the menu.
 
 const $=s=>document.querySelector(s);
-let current=null,clock=0,last=performance.now()/1000,introAt=-9,chosen=null,chosenAt=0;
-let backDownAt=null;
+let current=null,clock=0,last=performance.now()/1000,introAt=-9;
+let sel=0,selAt=0,lastTouch=0,starting=null,backDownAt=null;
 const BACK_HOLD=.6;
 const now=()=>clock;
 
 // ---- Menu
-function tileOf(x,y){return (y<4?0:2)+(x<4?0:1);}
+const IDLE_CYCLE=30,CYCLE_EVERY=9;
+function select(i,quiet=false){sel=(i+GAMES.length)%GAMES.length;selAt=clock;if(!quiet)sfx.menu();showGameInfo();}
 function drawMenu(t){
- GAMES.forEach((g,i)=>{
-  const ox=(i%2)*4,oy=i<2?0:4;
-  const put=(x,y,c,a=1)=>{if(x>=0&&x<4&&y>=0&&y<4)px(ox+x,oy+y,c,a);};
-  for(let y=0;y<4;y++)for(let x=0;x<4;x++)put(x,y,g.color,.1);
-  g.preview(put,t+i*.37);
-  if(chosen===i){const a=1-(t-chosenAt)/.3;for(let y=0;y<4;y++)for(let x=0;x<4;x++)put(x,y,COL.white,a);}
+ const g=GAMES[sel],nt=t-selAt;
+ const nameCol=g===Fargminne?i=>FM_COL[i%4]:g.color;
+ if(!scrollOnce(g.name.toUpperCase(),nameCol,nt-.15,1,11))g.demo(nt);
+ GAMES.forEach((h,i)=>{
+  if(i===sel)sideLed(i,h.color,.65+.35*pulse(t,2));
+  else if(h.isNew&&Math.floor(t*2.5)%2)sideLed(i,COL.white,.8);
+  else sideLed(i,h.color,.25);
  });
+ topLed(0,COL.white,.2);topLed(1,COL.white,.2);
+ if(starting!==null)fill(COL.white,Math.max(0,1-(t-starting)/.3));
 }
+function go(){if(starting!==null)return;starting=clock;sfx.menu();setTimeout(()=>{starting=null;startGame(GAMES[sel]);},280);}
 function menuInput(ev){
- if(ev.kind!=='pad'||!ev.down||chosen!==null)return;
- chosen=tileOf(ev.x,ev.y);chosenAt=clock;sfx.menu();
- setTimeout(()=>{startGame(GAMES[chosen]);chosen=null;},280);
+ lastTouch=clock;
+ if(!ev.down||starting!==null)return;
+ if(ev.kind==='side'){if(ev.i<GAMES.length){if(ev.i===sel&&clock-selAt>.25)go();else select(ev.i);}return;}
+ if(ev.kind==='top'){if(ev.i===0)select(sel-1);else if(ev.i===1)select(sel+1);return;}
+ if(ev.kind==='pad')go();
 }
 
-function startGame(g){current=g;g.start(clock);sfx.start();showGameInfo();}
-function toMenu(){current=null;sfx.menu();showGameInfo();}
+function startGame(g){current=g;sel=GAMES.indexOf(g);lastTouch=clock;g.start(clock);sfx.start();showGameInfo();}
+function toMenu(){current=null;selAt=clock;lastTouch=clock;sfx.menu();showGameInfo();}
 
 // ---- The rainbow sweep when the Launchpad is plugged in
 function drawIntro(t){
@@ -53,11 +62,12 @@ function frame(){
  const t=performance.now()/1000,dt=Math.min(.05,t-last);last=t;clock+=dt;
  if(current)current.update(dt,clock);
  if(backDownAt!==null&&clock-backDownAt>=BACK_HOLD){backDownAt=null;if(current)toMenu();}
+ if(!current&&clock-lastTouch>IDLE_CYCLE&&clock-selAt>CYCLE_EVERY)select(sel+1,true);
  clearFrame();
  if(!drawIntro(clock)){if(current)current.draw(clock);else drawMenu(clock);}
  // Back button: red while in a game, flashing while held
  if(current)topLed(7,COL.red,backDownAt!==null?pulse(clock,8):.5);
- logoLed(current?current.color:hue((clock*.08)%1),.4+.3*pulse(clock,1));
+ logoLed((current||GAMES[sel]).color,.4+.3*pulse(clock,1));
  flush();
  updateScreen();
  requestAnimationFrame(frame);
@@ -81,11 +91,15 @@ LP.onStatus=s=>{
 LP.onConnect=()=>{introAt=clock;};
 
 function showGameInfo(){
- const g=current;
- $('#game-name').textContent=g?g.name:'Välj ett spel';
- $('#how').textContent=g?g.how:'Tryck på en av de fyra rutorna på din Launchpad. Håll in den röda runda knappen uppe till höger för att komma tillbaka hit.';
- $('#best').textContent=g?(getBest(g.id)?`Ditt rekord: ${getBest(g.id)}`:''):'';
- document.querySelectorAll('#list li').forEach((li,i)=>li.classList.toggle('on',GAMES[i]===g));
+ const g=current,shown=g||GAMES[sel];
+ $('#game-name').textContent=g?g.name:'Meny';
+ $('#how').textContent=g?g.how:`Välj spel med de runda knapparna till höger på plattan (eller ▲ ▼). Tryck var som helst på plattan för att spela ${shown.name}. Håll in den röda runda knappen uppe till höger för att komma tillbaka hit.`;
+ const legend=$('#legend');legend.replaceChildren();
+ for(const [c,text] of (g&&g.legend)||[]){
+  const li=document.createElement('li');li.textContent=text;li.style.setProperty('--c',`rgb(${c.map(v=>Math.round(v*255)).join(',')})`);legend.append(li);
+ }
+ $('#best').textContent=g&&getBest(g.id)?`Ditt rekord: ${getBest(g.id)}`:'';
+ document.querySelectorAll('#list li').forEach((li,i)=>{li.classList.toggle('on',i===sel);li.classList.toggle('playing',GAMES[i]===g);});
 }
 let lastHud='',lastSound=null;
 function updateScreen(){
@@ -101,8 +115,9 @@ function setup(){
  GAMES.forEach((g,i)=>{
   const li=document.createElement('li'),c=g.color.map(v=>Math.round(v*255)).join(',');
   li.style.setProperty('--c',`rgb(${c})`);
-  li.innerHTML=`<b></b><span>${['Uppe till vänster','Uppe till höger','Nere till vänster','Nere till höger'][i]}</span>`;
+  li.innerHTML=`<b></b><span>Sidoknapp ${i+1}</span>`;
   li.querySelector('b').textContent=g.name;
+  if(g.isNew){const n=document.createElement('em');n.className='new';n.textContent='Nytt';li.querySelector('b').append(n);}
   li.addEventListener('click',()=>{audioInit();startGame(g);});
   list.append(li);
  });

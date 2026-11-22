@@ -6,7 +6,8 @@
 //   draw(now)             – paint the Launchpad with px()/topLed()/sideLed()
 //   input(ev, now)        – a pad or button went down/up: {kind:'pad',x,y,down} / {kind:'top'|'side',i,down}
 //   hud()                 – one or two lines for the screen
-//   preview(put, t)       – a little animation for the 4 × 4 menu tile; put(x,y,colour) with x,y 0..3
+//   demo(t)               – the looping animation the menu shows on the whole grid while the game is selected
+//   isNew, legend         – optional: blink as new in the menu; [[colour, text], …] shown on screen under the rules
 // Top row button 7 (User) is reserved for "hold to go back to the menu" (main.js), so games use top 0..6.
 
 const COL={
@@ -17,23 +18,43 @@ const rnd=n=>Math.floor(Math.random()*n);
 const lerp=(a,b,k)=>a+(b-a)*Math.max(0,Math.min(1,k));
 const pulse=(t,speed=3)=>.55+.45*Math.sin(t*speed*Math.PI);
 
-// ---- 3 × 5 font for numbers
+// ---- 3 × 5 font (M and N are wider). Text colour can be a function of the letter index.
 const GLYPHS={
  '0':['111','101','101','101','111'],'1':['010','110','010','010','111'],'2':['111','001','111','100','111'],
  '3':['111','001','111','001','111'],'4':['101','101','111','001','001'],'5':['111','100','111','001','111'],
  '6':['111','100','111','101','111'],'7':['111','001','001','010','010'],'8':['111','101','111','101','111'],
- '9':['111','101','111','001','111'],'-':['000','000','111','000','000'],' ':['000','000','000','000','000']
+ '9':['111','101','111','001','111'],'-':['000','000','111','000','000'],'+':['000','010','111','010','000'],' ':['00','00','00','00','00'],
+ 'A':['010','101','111','101','101'],'D':['110','101','101','101','110'],'E':['111','100','110','100','111'],
+ 'F':['111','100','110','100','100'],'G':['011','100','101','101','011'],'I':['111','010','010','010','111'],
+ 'K':['101','101','110','101','101'],'L':['100','100','100','100','111'],'M':['10001','11011','10101','10001','10001'],
+ 'N':['1001','1101','1011','1001','1001'],'O':['010','101','101','101','010'],'P':['110','101','110','100','100'],
+ 'R':['110','101','110','101','101'],'T':['111','010','010','010','010'],'U':['101','101','101','101','111'],
+ 'V':['101','101','101','101','010'],'Ä':['101','010','101','111','101']
 };
-function drawText(str,ox,oy,c){
- let x=ox;
- for(const ch of str){const g=GLYPHS[ch]||GLYPHS[' '];for(let r=0;r<5;r++)for(let k=0;k<3;k++)if(g[r][k]==='1')px(x+k,oy+r,c);x+=4;}
+const glyph=ch=>GLYPHS[ch]||GLYPHS[ch.toUpperCase()]||GLYPHS[' '];
+function drawGlyph(g,ox,oy,c,a=1){for(let r=0;r<g.length;r++)for(let k=0;k<g[r].length;k++)if(g[r][k]==='1')px(ox+k,oy+r,c,a);}
+function drawText(str,ox,oy,c,a=1){
+ let x=ox,i=0;
+ for(const ch of str){const g=glyph(ch);drawGlyph(g,x,oy,typeof c==='function'?c(i):c,a);x+=g[0].length+1;i++;}
 }
-const textWidth=s=>s.length*4-1;
+const textWidth=s=>[...s].reduce((w,ch)=>w+glyph(ch)[0].length+1,0)-1;
 // Centred if it fits, otherwise scrolling right → left.
 function drawTextFit(str,c,t,oy=1){
  const w=textWidth(str);
  if(w<=8){drawText(str,Math.floor((8-w)/2),oy,c);return;}
  const span=w+12;drawText(str,8-Math.floor((t*9)%span),oy,c);
+}
+// One pass from right to left; returns false when it has scrolled past.
+function scrollOnce(str,c,t,oy=1,speed=10){const x=8-Math.floor(t*speed);if(x<-textWidth(str))return false;drawText(str,x,oy,c);return true;}
+// Big numbers 7 pads tall: one digit 5 wide, two digits 3 wide each. reveal 0..1 lights them up from the left.
+function stretch(g,cols,rows){return rows.map(r=>cols.map(c=>g[r][c]).join(''));}
+function drawBigNumber(n,c,reveal=1,oy=0){
+ const str=String(n).slice(-2),one=str.length===1;
+ const gl=[...str].map(ch=>stretch(GLYPHS[ch],one?[0,1,1,1,2]:[0,1,2],[0,1,1,2,3,3,4]));
+ const w=one?5:7,ox=Math.floor((8-w)/2),edge=reveal*(w+1);
+ gl.forEach((g,i)=>{for(let r=0;r<7;r++)for(let k=0;k<g[r].length;k++){
+  const x=ox+i*4+k;if(g[r][k]==='1'&&x-ox<edge)px(x,oy+r,typeof c==='function'?c(x,oy+r):c);
+ }});
 }
 
 // ---- Best scores, kept in this browser
@@ -172,10 +193,10 @@ const Takt={
   if(this.phase==='over'){const total=this.notes.length||1;return `Poäng ${this.score} · träffar ${Math.round(100*this.hits/total)} % · längsta serie ${this.maxCombo}`;}
   return `Poäng ${this.score} · serie ${this.combo} · ×${this.mult()}`;
  },
- preview(put,t){
+ demo(t){
   for(let l=0;l<4;l++){
-   const y=((t*4+l*1.7)%5)-1;put(l,Math.floor(y),LANE_COL[l]);
-   put(l,3,LANE_COL[l],.2);
+   const c=LANE_COL[l];for(let k=0;k<2;k++)px(l*2+k,7,c,.25);
+   for(let j=0;j<2;j++){const y=Math.floor((t*3.7+l*2.3+j*4)%9)-1;for(let k=0;k<2;k++){px(l*2+k,y,c);px(l*2+k,y-1,c,.25);}if(y===7)for(let k=0;k<2;k++)px(l*2+k,7,COL.white);}
   }
  }
 };
@@ -186,9 +207,13 @@ const Takt={
 // =====================================================================
 const Mullvad={
  id:'mullvad',name:'Mullvad',color:COL.green,
- how:'Slå på de gröna innan de slocknar. Guld ger 5 poäng. Rör inte de röda – de kostar 3. Du har 30 sekunder.',
+ how:'Slå på mullvadarna innan de slocknar. Du har 30 sekunder.',
+ legend:[[COL.green,'Grön = 1 poäng'],[COL.gold,'Guld = 5 poäng'],[COL.red,'Röd = minus 3 poäng – rör inte!']],
  length:30,
- start(now){this.phase='play';this.t0=now;this.score=0;this.moles=[];this.spawnAt=now+.6;this.fx=[];this.redAt=-9;},
+ // Before every round the pads show what each colour is worth: green 1, gold 5, red −3, then 3-2-1.
+ intro:[[COL.green,'1'],[COL.gold,'5'],[COL.red,'-3']],introCard:1.3,
+ start(now){this.phase='intro';this.introAt=now;this.score=0;this.moles=[];this.fx=[];this.redAt=-9;this.lastCard=-1;},
+ introLength(){return this.intro.length*this.introCard+1.8;},
  spawn(now){
   const k=(now-this.t0)/this.length;
   const free=[];for(let y=0;y<8;y++)for(let x=0;x<8;x++)if(!this.moles.some(m=>m.x===x&&m.y===y))free.push([x,y]);
@@ -200,6 +225,13 @@ const Mullvad={
  },
  update(dt,now){
   if(this.phase==='over')return;
+  if(this.phase==='intro'){
+   const t=now-this.introAt,card=Math.floor(t/this.introCard),cd=Math.floor((t-this.intro.length*this.introCard)/.6);
+   const step=card<this.intro.length?card:this.intro.length+cd;
+   if(step!==this.lastCard){this.lastCard=step;if(card<this.intro.length)this.intro[card][1]==='-3'?sfx.bad():sfx.hit(card*3);else if(cd<3)sfx.tick();}
+   if(t>=this.introLength()){this.phase='play';this.t0=now;this.spawnAt=now+.3;sfx.start();}
+   return;
+  }
   const k=(now-this.t0)/this.length;
   if(now>=this.spawnAt){
    this.spawn(now);if(k>.5&&Math.random()<.35)this.spawn(now);
@@ -213,7 +245,7 @@ const Mullvad={
  },
  input(ev,now){
   if(this.phase==='over')return overInput(this,ev,now);
-  if(ev.kind!=='pad'||!ev.down)return;
+  if(ev.kind!=='pad'||!ev.down||this.phase!=='play')return;
   const i=this.moles.findIndex(m=>m.x===ev.x&&m.y===ev.y);if(i<0)return;
   const m=this.moles[i];this.moles.splice(i,1);
   if(m.type==='red'){this.score=Math.max(0,this.score-3);this.redAt=now;sfx.bad();}
@@ -222,6 +254,20 @@ const Mullvad={
  },
  draw(now){
   if(this.phase==='over')return drawOver(this,now);
+  if(this.phase==='intro'){
+   const t=now-this.introAt,card=Math.floor(t/this.introCard);
+   if(card<this.intro.length){
+    // The points in big digits on top, a bar of that colour along the bottom
+    const [c,pts]=this.intro[card],lt=t-card*this.introCard,a=Math.min(1,lt/.15);
+    drawText(pts,Math.floor((8-textWidth(pts))/2),0,c,a);
+    for(let y=6;y<8;y++)for(let x=0;x<8;x++)px(x,y,c,a*(.55+.45*pulse(now,3)));
+    for(let i=0;i<this.intro.length;i++)topLed(i,this.intro[i][0],i===card?1:.15);
+   }else{
+    const cd=Math.floor((t-this.intro.length*this.introCard)/.6);
+    if(cd<3)drawBigNumber(3-cd,COL.white,1,0);
+   }
+   return;
+  }
   if(now-this.redAt<.3)fill(COL.red,.35*(1-(now-this.redAt)/.3));
   for(const m of this.moles){
    const age=(now-m.born)/m.life,a=Math.min(1,(now-m.born)/.08)*(age>.65?1-(age-.65)/.35*.8:1);
@@ -237,12 +283,11 @@ const Mullvad={
   const left=1-(now-this.t0)/this.length;
   topBar(left,left<.25?COL.red:left<.5?COL.yellow:COL.green);
  },
- hud(){return this.phase==='over'?`Du fick ${this.score} poäng`:`Poäng ${this.score}`;},
- preview(put,t){
-  for(let i=0;i<3;i++){
-   const s=Math.floor(t*2.5)+i*7,age=(t*2.5)%1;
-   const h=(s*2654435761)>>>0,x=h%4,y=(h>>>4)%4;
-   put(x,y,i===2&&s%5===0?COL.gold:COL.green,1-age*.8);
+ hud(){return this.phase==='over'?`Du fick ${this.score} poäng`:this.phase==='intro'?'Grön 1 · guld 5 · röd minus 3. Snart kör vi!':`Poäng ${this.score}`;},
+ demo(t){
+  for(let i=0;i<5;i++){
+   const s=Math.floor(t*2+i*.37)*5+i,age=(t*2+i*.37)%1,h=(s*2654435761)>>>0;
+   px(h%8,(h>>>5)%8,s%11===0?COL.gold:s%7===0?COL.red:COL.green,1-age*.85);
   }
  }
 };
@@ -304,9 +349,10 @@ const Minne={
   if(this.phase==='over')return `Du klarade ${this.level-1} nivåer`;
   return `Nivå ${this.level} · ${this.cells.size} ljus att komma ihåg`;
  },
- preview(put,t){
-  const s=Math.floor(t/1.2),on=(t%1.2)<.7;
-  for(let i=0;i<4;i++){const h=((s*7+i*13)*2654435761)>>>0;put(h%4,(h>>>3)%4,COL.purple,on?1:.15);}
+ demo(t){
+  const s=Math.floor(t/2.2),k=t%2.2;
+  for(let i=0;i<6;i++){const h=((s*7+i*13)*2654435761)>>>0,x=h%8,y=(h>>>4)%8;
+   if(k<1)px(x,y,COL.cyan);else if(k>1.3&&k-1.3>i*.12)px(x,y,COL.purple);}
  }
 };
 
@@ -401,11 +447,90 @@ const PadPong={
   const s=`Röd ${this.score[0]} – ${this.score[1]} Blå`;
   return this.phase==='over'?`${this.winner===0?'Röd':'Blå'} vann! ${s}`:s;
  },
- preview(put,t){
-  const k=(t*3)%6,y=k<3?k:6-k,x=Math.floor((t*2.1)%4);
-  put(x,0,COL.blue,.4);put(x,3,COL.red,.4);
-  put(Math.floor((t*3.3)%4),Math.round(y),COL.white);
+ demo(t){
+  const k=(t*5)%10,y=1+(k<5?k:10-k),x=Math.floor(t*3.4)%14,bx=x<8?x:14-x;
+  for(let i=0;i<8;i++){px(i,0,COL.blue,.12);px(i,7,COL.red,.12);}
+  px(bx,Math.round(y),COL.white);
+  if(y<1.3)px(bx,0,COL.blue);if(y>5.7)px(bx,7,COL.red);
  }
 };
 
-const GAMES=[Takt,Mullvad,Minne,PadPong];
+// =====================================================================
+// FÄRGMINNE – the grid is four coloured boards (like the old Simon game). They light up in an order;
+// press them back in the same order. Before each level the level number lights up big on the pads.
+// =====================================================================
+const FM_COL=[COL.green,COL.red,COL.yellow,COL.blue];   // top-left, top-right, bottom-left, bottom-right
+const FM_HZ=[329.6,440,277.2,220];
+const fmQuad=(x,y)=>(y<4?0:2)+(x<4?0:1);
+function fmFill(q,c,a){const ox=(q%2)*4,oy=q<2?0:4;for(let y=0;y<4;y++)for(let x=0;x<4;x++)px(ox+x,oy+y,c,a);}
+const Fargminne={
+ id:'fargminne',name:'Färgminne',color:COL.yellow,isNew:true,
+ how:'Plattan är fyra färgade fält. De lyser upp ett i taget i en viss ordning. Tryck sedan på fälten i samma ordning. Varje nivå blir ordningen ett steg längre.',
+ legend:[[COL.green,'Grön'],[COL.red,'Röd'],[COL.yellow,'Gul'],[COL.blue,'Blå']],
+ start(now){this.phase='play';this.seq=[];this.level=0;this.press=null;this.next(now);},
+ next(now){
+  this.level++;this.seq.push(rnd(4));this.pos=0;this.wrong=-1;this.shown=-1;
+  this.step='level';this.stepAt=now;
+  [0,2,4].forEach((n,i)=>tone(scaleHz(n+5+this.level%5),scaleHz(n+5+this.level%5),.16,'square',.07,audioNow()+.08+i*.12));
+ },
+ timing(){return {on:Math.max(.28,.6-this.level*.025),gap:Math.max(.1,.2-this.level*.007)};},
+ beep(q,dur=.3){tone(FM_HZ[q],FM_HZ[q],dur,'square',.09);},
+ update(dt,now){
+  if(this.phase==='over')return;
+  const t=now-this.stepAt;
+  if(this.step==='level'&&t>1.8){this.step='pause';this.stepAt=now;}
+  else if(this.step==='pause'&&t>.4){this.step='show';this.stepAt=now;}
+  else if(this.step==='show'){
+   const {on,gap}=this.timing(),i=Math.floor(t/(on+gap));
+   if(i>=this.seq.length){this.step='input';this.stepAt=now;}
+   else if(i!==this.shown&&t-i*(on+gap)<on){this.shown=i;this.beep(this.seq[i],on);}
+  }
+  else if(this.step==='good'&&t>.8)this.next(now);
+  else if(this.step==='bad'&&t>1.8){
+   const reached=this.level-1,best=saveBest(this.id,reached);
+   gameOver(this,reached,best?COL.gold:COL.yellow,now);best?sfx.win():sfx.over();
+  }
+ },
+ input(ev,now){
+  if(this.phase==='over')return overInput(this,ev,now);
+  if(ev.kind!=='pad'||!ev.down||this.step!=='input')return;
+  const q=fmQuad(ev.x,ev.y);this.press={q,at:now};
+  if(q===this.seq[this.pos]){
+   this.beep(q,.25);this.pos++;
+   if(this.pos===this.seq.length){this.step='good';this.stepAt=now;}
+  }else{this.wrong=q;this.step='bad';this.stepAt=now;sfx.bad();}
+ },
+ draw(now){
+  if(this.phase==='over')return drawOver(this,now);
+  const t=now-this.stepAt;
+  for(let q=0;q<4;q++)fmFill(q,FM_COL[q],this.step==='level'?.07:.14);
+  if(this.step==='level'){
+   // The level number lights up from the left in white, clearly over the four boards
+   drawBigNumber(this.level,COL.white,Math.min(1,t/.5),0);
+   for(let x=0;x<8;x++)px(x,7,FM_COL[fmQuad(x,7)],Math.min(1,t/.5)*.6);
+  }else if(this.step==='show'){
+   const {on,gap}=this.timing(),i=Math.floor(t/(on+gap)),lt=t-i*(on+gap);
+   if(i<this.seq.length&&lt<on)fmFill(this.seq[i],FM_COL[this.seq[i]],1);
+  }else if(this.step==='good'){
+   for(let q=0;q<4;q++)fmFill(q,FM_COL[q],.25+.5*pulse(now,4));
+  }else if(this.step==='bad'){
+   fmFill(this.wrong,COL.red,pulse(now,5));
+   const want=this.seq[this.pos];if(want!==this.wrong)fmFill(want,FM_COL[want],.5+.5*pulse(now,2.5));
+  }
+  if(this.press&&now-this.press.at<.25&&this.step!=='bad')fmFill(this.press.q,FM_COL[this.press.q],1-(now-this.press.at)/.25*.6);
+  // Right column: how far into the order you are
+  if(this.step==='input'||this.step==='good'){const n=Math.min(8,this.seq.length);for(let i=0;i<n;i++)sideLed(7-i,COL.white,i<this.pos*n/this.seq.length?.9:.08);}
+ },
+ hud(){
+  if(this.phase==='over')return `Du klarade ${this.level-1} nivåer`;
+  if(this.step==='input')return `Nivå ${this.level} · din tur: ${this.pos} av ${this.seq.length}`;
+  return `Nivå ${this.level} · titta noga…`;
+ },
+ demo(t){
+  for(let q=0;q<4;q++)fmFill(q,FM_COL[q],.14);
+  const order=[0,3,1,2,1,0],k=t%(order.length*.6+1.2),i=Math.floor(k/.6);
+  if(i<order.length&&k-i*.6<.42)fmFill(order[i],FM_COL[order[i]],1);
+ }
+};
+
+const GAMES=[Fargminne,Takt,Mullvad,Minne,PadPong];

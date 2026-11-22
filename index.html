@@ -26,6 +26,9 @@
     .card.later { cursor: default; }
     .card.later .art { filter: saturate(.85) brightness(.8); }
     .badge { display: inline-block; margin-top: 16px; padding: 9px 16px; border-radius: 10px; background: #ffffff14; color: #ffd24a; font-weight: 900; box-shadow: inset 0 0 0 1px #ffd24a66; }
+    .card { position: relative; }
+    .new { position: absolute; top: 14px; right: 14px; padding: 6px 12px; border-radius: 999px; background: linear-gradient(90deg, #ff3dc8, #ff9b3d); color: #10141b; font-size: 13px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; box-shadow: 0 6px 18px #0008; transform: rotate(4deg); }
+    .note { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 0; padding: 5px 10px; border-radius: 8px; background: #ffffff10; color: #f4f6fa; font-size: 13.5px; font-weight: 700; }
     .soon { display: grid; place-items: center; min-height: 220px; border: 2px dashed #ffffff26; border-radius: 20px; color: #8d97a5; text-align: center; padding: 24px; }
     footer { margin-top: 48px; color: #8d97a5; font-size: 14px; }
   </style>
@@ -47,7 +50,8 @@
         description: 'Flyg en duva över staden och pricka folk, bilar och guldstjärnor. Klara dig undan frukten, näten, höken och stridsvagnarna.',
         poster: './fagelbajs/poster.jpg' },
       { title: 'Launchpad Legends', url: './launchpad/', soon: true,
-        description: 'Spelen som lever i ljuset på en Launchpad. Spela i takt, slå mullvadar, minns mönster och kör pad-pong mot en kompis.',
+        note: 'Kräver en Launchpad Mini MK3',
+        description: 'Spelen som lever i ljuset på en Launchpad. Färgminne, rytmspel, mullvadar, minnesmönster och pad-pong mot en kompis.',
         poster: './launchpad/poster.jpg' }
     ];
     const list = document.querySelector('#games');
@@ -70,10 +74,27 @@
       const play = document.createElement('span');
       play.className = locked ? 'badge' : 'play';
       play.textContent = locked ? 'Kommer snart' : game.soon ? 'Testa (dold) →' : 'Spela →';
-      body.append(title, description, play);
+      body.append(title, description);
+      if (game.note) {
+        const note = document.createElement('p');
+        note.className = 'note';
+        note.textContent = '🎛️ ' + game.note;
+        body.append(note);
+      }
+      body.append(document.createElement('br'), play);
+      if (game.isNew) {
+        const badge = document.createElement('span');
+        badge.className = 'new';
+        badge.textContent = 'Nytt';
+        card.append(badge);
+      }
       card.append(body);
       list.append(card);
     }
+    const soon = document.createElement('div');
+    soon.className = 'soon';
+    soon.textContent = 'Vi jobbar på fler spel…';
+    list.append(soon);
   </script>
 </body>
 </html>
