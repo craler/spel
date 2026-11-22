@@ -22,6 +22,7 @@ För att testa: öppna startsidan med `?test=1` eller gå direkt till `launchpad
 - Mullvad visar före varje omgång vad färgerna ger (grön 1, guld 5, röd −3) och räknar ner 3-2-1.
 - Nytt småspel: lägg ett objekt i `games.js` med `start/update/draw/input/hud/demo` och lägg till det i `GAMES` (högst 8). `isNew: true` får det att blinka som nytt, `legend` visar färgförklaringar på skärmen. Översta raden 0–6 är fri, knapp 7 är tillbaka.
 - Rekord sparas i webbläsaren (`legends.best.<id>`).
+- Skripten och stilen i `launchpad/index.html` har `?v=...` på slutet. Byt värdet när du ändrar filerna, annars kan webbläsare visa en gammal version.
 - Ser färgerna urblekta eller för mörka ut på riktiga plattan: justera `GAMMA` i `pad.js`.
 
 ## Duv-Diarré (`fagelbajs/`)
