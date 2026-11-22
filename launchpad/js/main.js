@@ -12,6 +12,10 @@ const $=s=>document.querySelector(s);
 let current=null,clock=0,last=performance.now()/1000,introAt=-9;
 let sel=0,lastTouch=0,starting=null,backDownAt=null;
 let preview=null,previewAt=0,previewBy=null; // the game shown on the grid in the menu, null = light show
+// More than 8 games: the right column shows one page of 8 at a time, ◀ ▶ on the top row switch page.
+const PAGE=8;let page=0;
+const pages=()=>Math.ceil(GAMES.length/PAGE),onPage=i=>Math.floor(i/PAGE)===page;
+function pageArrows(t){if(pages()<2)return;topLed(2,COL.white,page>0?.5+.4*pulse(t,1.5):.08);topLed(3,COL.white,page<pages()-1?.5+.4*pulse(t,1.5):.08);}
 const BACK_HOLD=.6,PREVIEW_IDLE=15;
 const now=()=>clock;
 
@@ -49,16 +53,17 @@ function drawShow(t){
   if(age<.15)px(r.x,r.y,COL.white,1-age/.15);
  }
  // Game buttons on the right: their colours with a wave running down; top row: a rainbow chase
- GAMES.forEach((g,j)=>sideLed(j,g.color,.25+.75*Math.max(0,Math.cos((j/8-t*.6)*TAU))**2));
+ GAMES.forEach((g,i)=>{if(!onPage(i))return;const j=i%PAGE;sideLed(j,g.color,.25+.75*Math.max(0,Math.cos((j/8-t*.6)*TAU))**2);});
  for(let j=0;j<8;j++)topLed(j,hue(wrap1(j/8-t*.5)),.5);
+ pageArrows(t);
 }
 function drawPreview(t){
  const g=GAMES[preview],nt=t-previewAt;
  const nameCol=g===Fargminne?i=>FM_COL[i%4]:g.color;
  // Hovering on the screen: straight to the demo. Picked on the pad: the name scrolls by first.
  if(previewBy==='hover'||!scrollOnce(g.name.toUpperCase(),nameCol,nt-.1,1,14))g.demo(previewBy==='hover'?nt+2:nt);
- GAMES.forEach((h,i)=>sideLed(i,h.color,i===preview?.65+.35*pulse(t,2):.2));
- topLed(0,COL.white,.25);topLed(1,COL.white,.25);
+ GAMES.forEach((h,i)=>{if(onPage(i))sideLed(i%PAGE,h.color,i===preview?.65+.35*pulse(t,2):.2);});
+ topLed(0,COL.white,.25);topLed(1,COL.white,.25);pageArrows(t);
 }
 function drawMenu(t){
  if(preview===null)drawShow(t);else drawPreview(t);
@@ -67,15 +72,19 @@ function drawMenu(t){
 function showPreview(i,by,quiet=false){
  i=(i+GAMES.length)%GAMES.length;
  if(preview===i&&by==='hover')return;
- preview=i;sel=i;previewAt=clock;previewBy=by;if(!quiet)sfx.menu();showGameInfo();
+ preview=i;sel=i;page=Math.floor(i/PAGE);previewAt=clock;previewBy=by;if(!quiet)sfx.menu();showGameInfo();
 }
 function endPreview(){preview=null;previewBy=null;showGameInfo();}
 function go(){if(starting!==null)return;const g=GAMES[preview??sel];starting=clock;sfx.menu();setTimeout(()=>{starting=null;startGame(g);},280);}
 function menuInput(ev){
  lastTouch=clock;
  if(!ev.down||starting!==null)return;
- if(ev.kind==='side'){if(ev.i<GAMES.length){if(ev.i===preview&&clock-previewAt>.25)go();else showPreview(ev.i,'pad');}return;}
- if(ev.kind==='top'){if(ev.i===0)showPreview((preview??sel+1)-1,'pad');else if(ev.i===1)showPreview(preview===null?sel:preview+1,'pad');return;}
+ if(ev.kind==='side'){const gi=page*PAGE+ev.i;if(gi<GAMES.length){if(gi===preview&&clock-previewAt>.25)go();else showPreview(gi,'pad');}return;}
+ if(ev.kind==='top'){
+  if(ev.i===0)showPreview((preview??sel+1)-1,'pad');else if(ev.i===1)showPreview(preview===null?sel:preview+1,'pad');
+  else if((ev.i===2&&page>0)||(ev.i===3&&page<pages()-1)){page+=ev.i===2?-1:1;preview=null;previewBy=null;sfx.menu();showGameInfo();}
+  return;
+ }
  if(ev.kind==='pad'){
   if(preview!==null)return go();
   ripples.push({x:ev.x,y:ev.y,at:clock,h:Math.random()});
@@ -143,7 +152,7 @@ function showGameInfo(){
  let how;
  if(g)how=g.how;
  else if(shown)how=shown.how+(previewBy==='hover'?' Klicka för att spela.':' Tryck var som helst på plattan (eller samma runda knapp igen) för att spela.');
- else how='Plattan visar en ljusshow – tryck på knapparna så sprids färgade ringar. Välj spel med de runda knapparna till höger (eller ▲ ▼), eller håll musen över ett spel här nedanför så visas det på plattan. Håll in den röda runda knappen uppe till höger för att komma tillbaka hit.';
+ else how='Plattan visar en ljusshow – tryck på knapparna så sprids färgade ringar. Välj spel med de runda knapparna till höger (eller ▲ ▼). Fler spel finns på nästa sida – tryck ▶ på översta raden (◀ går tillbaka). eller håll musen över ett spel här nedanför så visas det på plattan. Håll in den röda runda knappen uppe till höger för att komma tillbaka hit.';
  $('#how').textContent=how;
  const legend=$('#legend');legend.replaceChildren();
  for(const [c,text] of (shown&&shown.legend)||[]){
@@ -166,7 +175,7 @@ function setup(){
  GAMES.forEach((g,i)=>{
   const li=document.createElement('li'),c=g.color.map(v=>Math.round(v*255)).join(',');
   li.style.setProperty('--c',`rgb(${c})`);
-  li.innerHTML=`<b></b><span>Sidoknapp ${i+1}</span>`;
+  li.innerHTML=`<b></b><span>${i<PAGE?'':`Sida ${Math.floor(i/PAGE)+1} (▶) · `}Sidoknapp ${i%PAGE+1}</span>`;
   li.querySelector('b').textContent=g.name;
   li.addEventListener('click',()=>{audioInit();startGame(g);});
   li.addEventListener('mouseenter',()=>{if(!current&&starting===null)showPreview(i,'hover',true);});
