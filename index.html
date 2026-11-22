@@ -23,6 +23,9 @@
     h2 { margin: 0 0 6px; font-size: 26px; font-weight: 900; font-style: italic; letter-spacing: -.02em; }
     .card p { margin: 0; color: #c4ccd8; font-size: 15.5px; }
     .play { display: inline-block; margin-top: 16px; padding: 9px 16px; border-radius: 10px; background: #ffd24a; color: #10141b; font-weight: 900; }
+    .card.later { cursor: default; }
+    .card.later .art { filter: saturate(.85) brightness(.8); }
+    .badge { display: inline-block; margin-top: 16px; padding: 9px 16px; border-radius: 10px; background: #ffffff14; color: #ffd24a; font-weight: 900; box-shadow: inset 0 0 0 1px #ffd24a66; }
     .soon { display: grid; place-items: center; min-height: 220px; border: 2px dashed #ffffff26; border-radius: 20px; color: #8d97a5; text-align: center; padding: 24px; }
     footer { margin-top: 48px; color: #8d97a5; font-size: 14px; }
   </style>
@@ -37,16 +40,22 @@
   </main>
   <script>
     // Lägg nya spel i egna mappar och lägg till dem här. "poster" är en bild till kortet, "art" en liten SVG om bild saknas.
+    // "soon: true" visar kortet som Kommer snart och går inte att klicka på. Med ?test=1 i adressen går det ändå att öppna.
+    const testing = new URLSearchParams(location.search).has('test');
     const games = [
       { title: 'Duv-Diarré', url: './fagelbajs/',
         description: 'Flyg en duva över staden och pricka folk, bilar och guldstjärnor. Klara dig undan frukten, näten, höken och stridsvagnarna.',
-        poster: './fagelbajs/poster.jpg' }
+        poster: './fagelbajs/poster.jpg' },
+      { title: 'Launchpad Legends', url: './launchpad/', soon: true,
+        description: 'Spelen som lever i ljuset på en Launchpad. Spela i takt, slå mullvadar, minns mönster och kör pad-pong mot en kompis.',
+        poster: './launchpad/poster.jpg' }
     ];
     const list = document.querySelector('#games');
     for (const game of games) {
-      const card = document.createElement('a');
-      card.className = 'card';
-      card.href = game.url;
+      const locked = game.soon && !testing;
+      const card = document.createElement(locked ? 'div' : 'a');
+      card.className = locked ? 'card later' : 'card';
+      if (!locked) card.href = game.url;
       if (game.poster) {
         const img = document.createElement('img');
         img.className = 'art poster'; img.src = game.poster; img.alt = game.title + ' – affisch'; img.loading = 'lazy';
@@ -59,16 +68,12 @@
       const description = document.createElement('p');
       description.textContent = game.description;
       const play = document.createElement('span');
-      play.className = 'play';
-      play.textContent = 'Spela →';
+      play.className = locked ? 'badge' : 'play';
+      play.textContent = locked ? 'Kommer snart' : game.soon ? 'Testa (dold) →' : 'Spela →';
       body.append(title, description, play);
       card.append(body);
       list.append(card);
     }
-    const soon = document.createElement('div');
-    soon.className = 'soon';
-    soon.textContent = 'Nästa spel är på gång…';
-    list.append(soon);
   </script>
 </body>
 </html>

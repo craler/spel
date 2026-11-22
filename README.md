@@ -2,6 +2,26 @@
 
 Kornhalls spelhörna: små webbspel som körs direkt i webbläsaren, utan byggsteg. Startsidan `index.html` listar spelen.
 
+## Launchpad Legends (`launchpad/`) – kommer snart
+
+Ett spel för en Novation Launchpad Mini MK3. Allt spelas i knapparnas ljus; skärmen visar regler, poäng och en klickbar spegel av plattan.
+Körs i Chrome eller Edge på en dator (Safari och alla webbläsare på iPhone/iPad saknar Web MIDI). Koppla in plattan med USB, öppna sidan och tillåt MIDI.
+
+På startsidan visas kortet som **Kommer snart** och går inte att klicka på (`soon: true` i `index.html`).
+För att testa: öppna startsidan med `?test=1` eller gå direkt till `launchpad/`. Ta bort `soon: true` när spelet ska släppas.
+
+| Fil | Innehåll |
+| --- | --- |
+| `js/pad.js` | Launchpad via Web MIDI: Programmer mode, koordinater, ritfunktioner, skickar bara ändrade lampor (RGB-SysEx), spegeln på sidan |
+| `js/sound.js` | Syntade ljud och trummor (WebAudio). Ljud kräver ett klick på sidan, knapptryck på plattan räknas inte |
+| `js/games.js` | Småspelen: Takt (rytmspel), Mullvad, Minne, Pad-pong, plus gemensam siffer-font och slutskärm |
+| `js/main.js` | Menyn (fyra 4 × 4-rutor), spel-loopen, tillbaka-knappen och skärmen |
+
+- Menyn: tryck på en av fyra rutor. Håll in den runda knappen uppe till höger (User, röd) för att gå tillbaka.
+- Nytt småspel: lägg ett objekt i `games.js` med `start/update/draw/input/hud/preview` och lägg till det i `GAMES`. Översta raden 0–6 är fri, knapp 7 är tillbaka.
+- Rekord sparas i webbläsaren (`legends.best.<id>`).
+- Ser färgerna urblekta eller för mörka ut på riktiga plattan: justera `GAMMA` i `pad.js`.
+
 ## Duv-Diarré (`fagelbajs/`)
 
 Flyg en duva över staden, pricka folk och bilar, bygg kaos och klara dig undan jakten.
