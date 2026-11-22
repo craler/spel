@@ -41,7 +41,7 @@ h1 em { font-style: italic; background: linear-gradient(90deg, #ff3dc8, #ff7a3d,
 }
 .led { --c: #2a2730; padding: 0; border: 0; border-radius: 10%; background: #2a2730; cursor: pointer; transition: background .04s; }
 .led.lit { background: var(--c); box-shadow: 0 0 14px var(--c), inset 0 0 6px #fff6; }
-.led.round { border-radius: 50%; transform: scale(.62); }
+.led.btn { border-radius: 14%; transform: scale(.8); }
 .led.logo { border-radius: 30%; transform: scale(.5); cursor: default; }
 .led.held { outline: 2px solid #fff; outline-offset: 1px; }
 figcaption { margin-top: 10px; color: #8f82b5; font-size: 14px; text-align: center; }
@@ -60,6 +60,8 @@ figcaption { margin-top: 10px; color: #8f82b5; font-size: 14px; text-align: cent
   background: #ffffff0c; box-shadow: inset 4px 0 0 var(--c), inset 0 0 0 1px #ffffff14;
 }
 #list li:hover { background: #ffffff18; }
+#list li.head { grid-column: 1 / -1; padding: 10px 2px 0; cursor: default; background: none; box-shadow: none; color: #ff9b3d; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+#list li.head:first-child { padding-top: 0; }
 #list li.playing { background: #ffffff26; }
 #list li.on { background: #ffffff1c; box-shadow: inset 4px 0 0 var(--c), inset 0 0 0 2px var(--c); }
 #list b { display: block; font-size: 18px; }

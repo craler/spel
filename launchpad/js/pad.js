@@ -150,11 +150,11 @@ function buildMirror(root){
   root.append(b);mirrorCells.set(idx,b);
  };
  const arrows=['▲','▼','◀','▶','S','D','K','U'];
- for(let i=0;i<8;i++)add('round',topIdx(i),{kind:'top',i},arrows[i]);
+ for(let i=0;i<8;i++)add('btn',topIdx(i),{kind:'top',i},arrows[i]);
  add('logo',LOGO,null);
  for(let y=0;y<8;y++){
   for(let x=0;x<8;x++)add('pad',gridIdx(x,y),{kind:'pad',x,y});
-  add('round',sideIdx(y),{kind:'side',i:y},'►');
+  add('btn',sideIdx(y),{kind:'side',i:y},y===7?'Stop Solo Mute':'►');
  }
 }
 function mirrorPaint(){
