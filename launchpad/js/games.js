@@ -1021,4 +1021,135 @@ const MemLab={
  }
 };
 
-const GAMES=[Fargminne,Takt,Rymd,Ficklampan,MemLab,Mullvad,Minne,PadPong];
+// =====================================================================
+// PORTALHOPP – a little runner (white) walks on its own and turns around at walls. Press an empty pad to put
+// a portal there: first blue, then orange, then blue again (moving it), and so on. Walking or falling into one
+// portal takes the runner out of the other, still going the same way. Get it past pits and spikes to the
+// green goal. Portals stay where they are when you fail, so you can adjust them and try again.
+// Fewer portal moves = more stars. The bottom round button on the right starts the level over without portals.
+// Map: '#' ground, '^' spikes, 'S' start (walking right), 's' start walking left, 'G' goal, '.' air.
+// Falling off the bottom of the pad is the end of the runner.
+// =====================================================================
+const PH_BLUE=[0,.35,1],PH_ORANGE=[1,.4,0],PH_GROUND=[.32,.27,.48];
+const PH_LEVELS=[
+ // 1: a gap – put blue in front of it and orange on the other side
+ ['........','........','........','........','........','........','S.....G.','###..###'],
+ // 2: a wall – the goal is up on a ledge
+ ['........','........','......G.','....###.','........','........','S..#....','########'],
+ // 3: catch the fall before the spikes
+ ['S.......','####....','........','........','........','........','......G.','^^^^^###'],
+ // 4: which side of the ledge you come out on matters
+ ['........','........','........','...G....','..###...','........','S......#','########'],
+ // 5: down the shaft, out to the left
+ ['......S.','....####','........','G.......','##......','........','........','..^^^^^^'],
+ // 6: the goal hangs above a spike pit
+ ['S.......','##......','........','........','.....#G.','.....###','........','^^^^^^^^'],
+ // 7: the goal is shut in behind a wall – come in from the other side, or from above
+ ['........','.G#.....','###.....','........','.....#..','S....#..','###..###','........'],
+ // 8: the goal is far up in the corner, with spike pits all the way down
+ ['.......G','......##','........','s.......','####..#.','...#..#.','...#..#.','^^^#^^#^']
+];
+// One step of the runner. Returns 'win', 'dead' or null. Shared with the menu demo and the level check.
+function phStep(L,r,portals){
+ const at=(x,y)=>x<0||x>7||y<0?'#':y>7?'.':L[y][x],solid=(x,y)=>at(x,y)==='#';
+ if(r.y>=7||!solid(r.x,r.y+1)){r.y++;r.falling=true;}
+ else{r.falling=false;const nx=r.x+r.dir;if(nx<0||nx>7||solid(nx,r.y))r.dir=-r.dir;else r.x=nx;}
+ if(r.y>7)return 'dead';
+ const tile=at(r.x,r.y);
+ if(tile==='^')return 'dead';
+ if(tile==='G')return 'win';
+ const k=r.x+r.y*8;
+ if(r.portedTo!==k){
+  r.portedTo=-1;
+  const [b,o]=portals;
+  if(b>=0&&o>=0&&(k===b||k===o)){const to=k===b?o:b;r.x=to%8;r.y=to/8|0;r.portedTo=to;return 'port';}
+ }else return null;
+ return null;
+}
+function phRunner(L){for(let y=0;y<8;y++)for(let x=0;x<8;x++)if(L[y][x]==='S'||L[y][x]==='s')return {x,y,dir:L[y][x]==='S'?1:-1,portedTo:-1,falling:false};}
+const Portalhopp={
+ id:'portalhopp',name:'Portalhopp',color:PH_ORANGE,
+ how:'Den vita figuren springer av sig själv och vänder vid väggar. Tryck på en tom ruta för att sätta en portal: först blå, sedan orange, sedan flyttas den blå igen och så vidare. Springer eller faller figuren in i den ena portalen kommer den ut ur den andra – åt samma håll som den var på väg. Få den förbi stup och taggar till det gröna målet. Misslyckas du ligger portalerna kvar så du kan ändra dem. Färre portalflyttar ger fler stjärnor. Den nedersta runda knappen till höger börjar om banan utan portaler.',
+ legend:[[COL.white,'Figuren'],[PH_BLUE,'Blå portal'],[PH_ORANGE,'Orange portal'],[COL.green,'Målet'],[COL.red,'Taggar'],[PH_GROUND,'Mark och väggar']],
+ start(now){this.phase='play';this.level=0;this.stars=0;this.next(now);},
+ next(now){
+  this.level++;
+  if(this.level>PH_LEVELS.length){const best=saveBest(this.id,this.stars);gameOver(this,`${this.stars}`,COL.gold,now);sfx.win();return;}
+  this.L=PH_LEVELS[this.level-1];this.portals=[-1,-1];this.placed=0;this.intro=true;this.reset(now);
+ },
+ reset(now){
+  this.r=phRunner(this.L);this.step='ready';this.stepAt=now;this.moveAt=now+(this.intro?3:1.6);this.trail=[];
+ },
+ starsFor(){return this.placed<=2?3:this.placed<=4?2:1;},
+ update(dt,now){
+  if(this.phase==='over')return;
+  const t=now-this.stepAt;
+  if(this.step==='dead'&&t>1){this.intro=false;this.reset(now);return;}
+  if(this.step==='win'&&t>1.8){this.next(now);return;}
+  if(this.step==='ready'&&now>=this.moveAt){this.step='run';this.intro=false;}
+  if(this.step!=='run')return;
+  let guard=0;
+  while(now>=this.moveAt&&this.step==='run'&&guard++<4){
+   this.trail.push({x:this.r.x,y:this.r.y,at:now});
+   const res=phStep(this.L,this.r,this.portals);
+   this.moveAt+=this.r.falling?.13:.32;
+   if(res==='port'){this.portAt=now;tone(300,900,.18,'sine',.1);}
+   else if(res==='dead'){this.step='dead';this.stepAt=now;this.deadAt={x:this.r.x,y:Math.min(7,this.r.y)};sfx.bad();}
+   else if(res==='win'){this.step='win';this.stepAt=now;const s=this.starsFor();this.stars+=s;this.gotStars=s;sfx.win();}
+  }
+ },
+ input(ev,now){
+  if(this.phase==='over')return overInput(this,ev,now);
+  if(!ev.down)return;
+  if(ev.kind==='side'&&ev.i===7&&this.step!=='win'){this.portals=[-1,-1];this.placed=0;this.intro=false;this.reset(now);sfx.menu();return;}
+  if(ev.kind!=='pad'||this.step==='win')return;
+  const k=ev.x+ev.y*8,tile=this.L[ev.y][ev.x];
+  if(tile!=='.'&&tile!=='S'&&tile!=='s'){tone(140,140,.07,'square',.05);return;}
+  if(k===this.r.x+this.r.y*8)return;
+  const which=this.placed%2;
+  if(this.portals[1-which]===k)return;
+  this.portals[which]=k;this.placed++;this.placeAt=now;this.placeK=k;
+  tone(which?520:390,which?780:585,.12,'sine',.09);
+ },
+ drawLevel(L,portals,r,now,alive=true){
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+   const c=L[y][x];
+   if(c==='#')px(x,y,PH_GROUND,.8);
+   else if(c==='^')px(x,y,COL.red,.45+.35*pulse(now+x*.2,1.2));
+   else if(c==='G')px(x,y,COL.green,.5+.5*pulse(now,1.5));
+  }
+  portals.forEach((k,i)=>{if(k>=0)px(k%8,k/8|0,i?PH_ORANGE:PH_BLUE,.6+.4*pulse(now+i*.5,2.2));});
+  if(alive&&r)px(r.x,r.y,COL.white);
+ },
+ draw(now){
+  if(this.phase==='over')return drawOver(this,now);
+  const t=now-this.stepAt;
+  if(this.step==='ready'&&this.intro&&t<.8){drawBigNumber(this.level,PH_ORANGE,Math.min(1,t/.2),0);return;}
+  this.drawLevel(this.L,this.portals,this.r,now,this.step!=='dead');
+  this.trail=this.trail.filter(s=>now-s.at<.3);
+  for(const s of this.trail)px(s.x,s.y,COL.white,.25*(1-(now-s.at)/.3));
+  if(this.step==='ready'){px(this.r.x,this.r.y,COL.white,pulse(now,4));topBar(Math.max(0,(this.moveAt-now)/(this.intro?2.2:1.6)),COL.white);}
+  if(this.placeAt&&now-this.placeAt<.25)px(this.placeK%8,this.placeK/8|0,COL.white,1-(now-this.placeAt)/.25);
+  if(this.portAt&&now-this.portAt<.2)for(const k of this.portals)px(k%8,k/8|0,COL.white,1-(now-this.portAt)/.2);
+  if(this.step==='dead'){px(this.deadAt.x,this.deadAt.y,COL.red,pulse(now,6));fill(COL.red,.25*Math.max(0,1-t*2));}
+  if(this.step==='win'){fill(COL.green,Math.max(0,.5-t*.5));for(let i=0;i<3;i++)topLed(i,COL.gold,i<this.gotStars?1:.08);}
+  else{ // which portal comes next, on the top row: blue (0) and orange (1)
+   const nx=this.placed%2;topLed(0,PH_BLUE,nx===0?.6+.4*pulse(now,3):.2);topLed(1,PH_ORANGE,nx===1?.6+.4*pulse(now,3):.2);
+  }
+  sideLed(7,COL.red,.35);
+ },
+ hud(){
+  if(this.phase==='over')return `Alla ${PH_LEVELS.length} banor klara! ${this.stars} av ${PH_LEVELS.length*3} stjärnor`;
+  const next=this.placed%2?'orange':'blå';
+  if(this.step==='win')return `Bana ${this.level} klar – ${'★'.repeat(this.gotStars)}${'☆'.repeat(3-this.gotStars)} (${this.placed} portalflyttar)`;
+  if(this.step==='dead')return `Aj! Portalerna ligger kvar – flytta dem och försök igen.`;
+  return `Bana ${this.level} av ${PH_LEVELS.length} · nästa portal: ${next} · portalflyttar ${this.placed} · stjärnor ${this.stars}`;
+ },
+ demo(t){
+  const L=PH_LEVELS[0],portals=[3+6*8,5+6*8],n=Math.floor(t/.32)%12,r=phRunner(L);
+  for(let i=0;i<n;i++)if(phStep(L,r,portals)==='win')break;
+  this.drawLevel(L,portals,r,t);
+ }
+};
+
+const GAMES=[Fargminne,Takt,Rymd,Ficklampan,MemLab,Portalhopp,Mullvad,Minne,PadPong];
