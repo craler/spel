@@ -13,14 +13,15 @@ För att testa: öppna startsidan med `?test=1` eller gå direkt till `launchpad
 | Fil | Innehåll |
 | --- | --- |
 | `js/pad.js` | Launchpad via Web MIDI: Programmer mode, koordinater, ritfunktioner, skickar bara ändrade lampor (RGB-SysEx), spegeln på sidan |
-| `js/sound.js` | Syntade ljud och trummor (WebAudio). Ljud kräver ett klick på sidan, knapptryck på plattan räknas inte |
+| `js/sound.js` | Syntade ljud och rockbandet till Takt: trummor, bas, distad kompgitarr och leadgitarr med eko (WebAudio). Ljud kräver ett klick på sidan, knapptryck på plattan räknas inte |
 | `js/games.js` | Småspelen: Färgminne, Takt (rytmspel), Mullvad, Minne, Pad-pong, plus font (siffror, bokstäver, stora siffror) och slutskärm |
 | `js/main.js` | Menyn, spel-loopen, tillbaka-knappen och skärmen |
 
-- Menyn: de runda knapparna till höger är spellistan (ett spel per knapp, i spelets färg; ett nytt spel blinkar vitt). Plattan visar spelets namn och sedan en demo. Tryck var som helst på plattan för att spela. ▲ ▼ byter också spel, och rör ingen plattan på 30 s bläddrar menyn själv. Håll in den runda knappen uppe till höger (User, röd) för att gå tillbaka.
-- Färgminne: fyra färgfält som i Simon. Före varje nivå lyser nivåns nummer upp stort i vitt.
+- Menyn: plattan visar en regnbågsljusshow (`SHOWS` i `main.js`, sex effekter som tonar över i varandra), och tryck på plattan skickar ut färgade ringar. De runda knapparna till höger är spellistan (ett spel per knapp, i spelets färg). En sidoknapp eller ▲ ▼ visar spelet på plattan (namnet och sedan en demo); samma knapp igen eller ett tryck på plattan startar det. Håller man musen över ett spel i listan på skärmen visas det på plattan på samma sätt. Efter 15 s utan tryck går menyn tillbaka till ljusshowen. Håll in den runda knappen uppe till höger (User, röd) för att gå tillbaka.
+- Färgminne: fyra färgfält som i Simon. Första nivån är tre färger i rad. Före varje nivå lyser nivåns nummer kort upp i vitt (`levelFor`).
+- Takt: rytmspel i stil med Guitar Hero. Nivå 1 har fyra filer i mitten (grön, röd, gul, blå), nivå 2 sex och nivå 3 åtta (`TAKT_LEVELS`). Låten (`TAKT_SONG`) har intro, vers, refräng och avslut, och noterna är fraser som upprepas. Varje träff spelar leadgitarrens ton, och filerna är ackordets toner så det alltid låter rätt. Ju längre serie, desto mer spelar bandet (×2 öppna gitarrackord, ×3 crash och snabba hihats, ×4 arpeggio). 70 % träffar låser upp nästa nivå. Ljudet skickas tidigare med högtalarnas fördröjning (`outputLatency`) så att det landar med ljusen.
 - Mullvad visar före varje omgång vad färgerna ger (grön 1, guld 5, röd −3) och räknar ner 3-2-1.
-- Nytt småspel: lägg ett objekt i `games.js` med `start/update/draw/input/hud/demo` och lägg till det i `GAMES` (högst 8). `isNew: true` får det att blinka som nytt, `legend` visar färgförklaringar på skärmen. Översta raden 0–6 är fri, knapp 7 är tillbaka.
+- Nytt småspel: lägg ett objekt i `games.js` med `start/update/draw/input/hud/demo` och lägg till det i `GAMES` (högst 8). `legend` visar färgförklaringar på skärmen. Översta raden 0–6 är fri, knapp 7 är tillbaka.
 - Rekord sparas i webbläsaren (`legends.best.<id>`).
 - Skripten och stilen i `launchpad/index.html` har `?v=...` på slutet. Byt värdet när du ändrar filerna, annars kan webbläsare visa en gammal version.
 - Ser färgerna urblekta eller för mörka ut på riktiga plattan: justera `GAMMA` i `pad.js`.

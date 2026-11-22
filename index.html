@@ -43,13 +43,13 @@
   </main>
   <script>
     // Lägg nya spel i egna mappar och lägg till dem här. "poster" är en bild till kortet, "art" en liten SVG om bild saknas.
-    // "soon: true" visar kortet som Kommer snart och går inte att klicka på. Med ?test=1 i adressen går det ändå att öppna.
+    // "isNew: true" sätter en NYTT-etikett på kortet. "soon: true" visar kortet som Kommer snart och går inte att klicka på. Med ?test=1 i adressen går det ändå att öppna.
     const testing = new URLSearchParams(location.search).has('test');
     const games = [
       { title: 'Duv-Diarré', url: './fagelbajs/',
         description: 'Flyg en duva över staden och pricka folk, bilar och guldstjärnor. Klara dig undan frukten, näten, höken och stridsvagnarna.',
         poster: './fagelbajs/poster.jpg' },
-      { title: 'Launchpad Legends', url: './launchpad/', soon: true,
+      { title: 'Launchpad Legends', url: './launchpad/', soon: true, isNew: true,
         note: 'Kräver en Launchpad Mini MK3',
         description: 'Spelen som lever i ljuset på en Launchpad. Färgminne, rytmspel, mullvadar, minnesmönster och pad-pong mot en kompis.',
         poster: './launchpad/poster.jpg' }

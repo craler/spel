@@ -29,17 +29,75 @@ function tone(from,to,dur,type='square',gain=.12,at=0){
 function noise(dur,freq,gain=.15,at=0,type='highpass'){
  if(!audioReady())return;
  const t=Math.max(at,ctx.currentTime),s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),g=ctx.createGain();
- s.buffer=noiseBuf;f.type=type;f.frequency.value=freq;
+ s.buffer=noiseBuf;s.loop=true;f.type=type;f.frequency.value=freq;
  g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
  s.connect(f);f.connect(g);g.connect(master);s.start(t);s.stop(t+dur+.02);
 }
-// Drum kit for the rhythm game.
+// ---- The rock band for Takt: drums, bass, a distorted rhythm guitar and a lead guitar with echo.
 const drum={
- kick:at=>tone(150,40,.28,'sine',.5,at),
- snare:at=>{noise(.16,1500,.22,at);tone(220,140,.08,'triangle',.12,at);},
- hat:at=>noise(.04,7000,.07,at),
- bass:(f,at)=>tone(f,f,.22,'sawtooth',.07,at)
+ kick:(at,g=.55)=>{tone(160,42,.3,'sine',g,at);tone(900,200,.02,'square',.05,at);},
+ snare:(at,g=.24)=>{noise(.18,1400,g,at);tone(230,150,.09,'triangle',.14,at);},
+ hat:(at,g=.06)=>noise(.035,8000,g,at),
+ open:at=>noise(.22,6500,.05,at),
+ crash:at=>noise(1.6,4500,.11,at),
+ stick:at=>tone(2400,2400,.03,'square',.05,at),
+ tom:(f,at)=>tone(f,f*.6,.22,'sine',.35,at)
 };
+let leadIn=null,rhythmIn=null;
+// Input → overdrive → speaker-like lowpass → level. Returns the input node.
+function overdrive(drive,cutoff,level){
+ const sh=ctx.createWaveShaper(),c=new Float32Array(2048);
+ for(let i=0;i<2048;i++){const x=i/1023.5-1;c[i]=Math.tanh(x*drive)/Math.tanh(drive);}
+ sh.curve=c;sh.oversample='2x';
+ const cab=ctx.createBiquadFilter();cab.type='lowpass';cab.frequency.value=cutoff;cab.Q.value=.8;
+ const out=ctx.createGain();out.gain.value=level;
+ sh.connect(cab);cab.connect(out);out.connect(master);
+ return {input:sh,out};
+}
+function bandInit(){
+ if(rhythmIn||!ctx)return;
+ rhythmIn=overdrive(7,2600,.2).input;
+ const lead=overdrive(10,3800,.22);leadIn=lead.input;
+ // Echo on the lead: a quarter-ish delay that fades out
+ const d=ctx.createDelay(1),fb=ctx.createGain(),lp=ctx.createBiquadFilter(),wet=ctx.createGain();
+ d.delayTime.value=.27;fb.gain.value=.32;lp.type='lowpass';lp.frequency.value=2200;wet.gain.value=.35;
+ lead.out.connect(d);d.connect(lp);lp.connect(fb);fb.connect(d);lp.connect(wet);wet.connect(master);
+}
+// Power chord (root, fifth, octave). Palm-muted = short and dark.
+function chug(root,at,dur,muted){
+ if(!audioReady())return;bandInit();
+ const t=Math.max(at,ctx.currentTime),g=ctx.createGain(),lp=ctx.createBiquadFilter();
+ lp.type='lowpass';lp.frequency.value=muted?650:3200;
+ const peak=muted?.22:.3;
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(peak,t+.006);
+ if(dur>.2)g.gain.exponentialRampToValueAtTime(peak*.45,t+.15);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const [m,det] of [[1,-5],[1.5,4],[2,0]]){const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=root*m;o.detune.value=det;o.connect(lp);o.start(t);o.stop(t+dur+.03);}
+ lp.connect(g);g.connect(rhythmIn);
+}
+function bassNote(f,at,dur){
+ if(!audioReady())return;
+ const t=Math.max(at,ctx.currentTime),g=ctx.createGain(),lp=ctx.createBiquadFilter();
+ lp.type='lowpass';lp.frequency.value=420;
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.26,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const [type,m] of [['sawtooth',1],['sine',.5]]){const o=ctx.createOscillator();o.type=type;o.frequency.value=f*m;o.connect(lp);o.start(t);o.stop(t+dur+.03);}
+ lp.connect(g);g.connect(master);
+}
+// The lead guitar note you play when you hit a note: a small slide up into the note, then vibrato.
+function lead(f,dur=.4){
+ if(!audioReady())return;bandInit();
+ const t=ctx.currentTime,g=ctx.createGain(),vib=ctx.createOscillator(),vd=ctx.createGain();
+ vib.frequency.value=5.8;vd.gain.setValueAtTime(0,t);vd.gain.linearRampToValueAtTime(f*.012,t+dur*.6);vib.connect(vd);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.32,t+.01);g.gain.exponentialRampToValueAtTime(.18,t+.12);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const [type,m] of [['sawtooth',1],['square',2.003]]){
+  const o=ctx.createOscillator();o.type=type;
+  o.frequency.setValueAtTime(f*m*.944,t);o.frequency.exponentialRampToValueAtTime(f*m,t+.045);
+  vd.connect(o.frequency);o.connect(g);o.start(t);o.stop(t+dur+.03);
+ }
+ vib.start(t);vib.stop(t+dur+.03);
+ g.connect(leadIn);
+}
+// The muted string scrape when you miss
+function clunk(){tone(98,70,.09,'sawtooth',.09);noise(.06,900,.06,0,'bandpass');}
 // Pentatonic scale for melodic feedback: note n steps up from A3.
 const PENTA=[0,2,4,7,9];
 const scaleHz=n=>220*Math.pow(2,(PENTA[((n%5)+5)%5]+12*Math.floor(n/5))/12);
