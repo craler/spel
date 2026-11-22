@@ -1027,96 +1027,172 @@ const MemLab={
 // portal takes the runner out of the other, still going the same way. Get it past pits and spikes to the
 // green goal. Portals stay where they are when you fail, so you can adjust them and try again.
 // Fewer portal moves = more stars. The bottom round button on the right starts the level over without portals.
-// Map: '#' ground, '^' spikes, 'S' start (walking right), 's' start walking left, 'G' goal, '.' air.
-// Falling off the bottom of the pad is the end of the runner.
+// ◀ ▶ on the top row pick a level (the ones you have reached). Stars are kept in the browser.
+// Map: '#' ground, '^' spikes, 'S' start (walking right), 's' start walking left, 'G' goal, '.' air,
+//      'b' button: the runner walking over it opens every door 'D' (until it dies),
+//      't' timed button: opens the doors for PH_TIMER steps only (a door stays open while the runner is in it),
+//      '|' portal cleaner: the runner passing through it removes both portals (no portals can go on it),
+//      'J' jump pad (ground): launches the runner up and forward for PH_JUMP steps. Jumping into a portal,
+//      the jump goes on out of the other one ("speedy thing in, speedy thing out").
+// Falling off the bottom of the pad is the end of the runner. No fall damage.
 // =====================================================================
-const PH_BLUE=[0,.35,1],PH_ORANGE=[1,.4,0],PH_GROUND=[.32,.27,.48];
+const PH_BLUE=[0,.35,1],PH_ORANGE=[1,.4,0],PH_GROUND=[.32,.27,.48],PH_DOOR=[1,.75,0],PH_GRILL=[.45,.85,1],PH_PAD=[1,.15,.75];
+const PH_JUMP=3,PH_TIMER=8;
+// par: portal moves for 3 stars (2 more for 2 stars). hint: shown on the screen until the first portal goes down.
 const PH_LEVELS=[
- // 1: a gap – put blue in front of it and orange on the other side
- ['........','........','........','........','........','........','S.....G.','###..###'],
- // 2: a wall – the goal is up on a ledge
- ['........','........','......G.','....###.','........','........','S..#....','########'],
- // 3: catch the fall before the spikes
- ['S.......','####....','........','........','........','........','......G.','^^^^^###'],
- // 4: which side of the ledge you come out on matters
- ['........','........','........','...G....','..###...','........','S......#','########'],
- // 5: down the shaft, out to the left
- ['......S.','....####','........','G.......','##......','........','........','..^^^^^^'],
- // 6: the goal hangs above a spike pit
- ['S.......','##......','........','........','.....#G.','.....###','........','^^^^^^^^'],
- // 7: the goal is shut in behind a wall – come in from the other side, or from above
- ['........','.G#.....','###.....','........','.....#..','S....#..','###..###','........'],
- // 8: the goal is far up in the corner, with spike pits all the way down
- ['.......G','......##','........','s.......','####..#.','...#..#.','...#..#.','^^^#^^#^']
+ {name:'Glappet',map:['........','........','........','........','........','........','S.....G.','###..###']},
+ {name:'Muren',map:['........','........','......G.','....###.','........','........','S..#....','########']},
+ {name:'Fånga fallet',map:['S.......','####....','........','........','........','........','......G.','^^^^^###']},
+ {name:'Rätt sida',map:['........','........','........','...G....','..###...','........','S......#','########']},
+ {name:'Schaktet',map:['......S.','....####','........','G.......','##......','........','........','..^^^^^^']},
+ {name:'Över gropen',map:['S.......','##......','........','........','.....#G.','.....###','........','^^^^^^^^']},
+ {name:'Instängd',map:['........','.G#.....','###.....','........','.....#..','S....#..','###..###','........']},
+ {name:'Hörnet',map:['.......G','......##','........','s.......','####..#.','...#..#.','...#..#.','^^^#^^#^']},
+ {name:'Knappen',hint:'Ny sak: den gula knappen öppnar den gula dörren. Få figuren att gå över knappen först.',
+  map:['........','........','.b......','###.....','........','......##','S.....DG','########']},
+ {name:'Rensaren',hint:'Ny sak: den ljusblå portalrensaren tar bort båda portalerna när figuren går igenom. Sätt dem när den har passerat.',
+  map:['........','........','.....G..','....###.','........','........','S|......','########']},
+ {name:'Hoppplattan',hint:'Ny sak: den rosa hoppplattan skjuter upp figuren snett framåt. Hoppar den in i en portal fortsätter hoppet ut ur den andra – fart in, fart ut!',
+  map:['......#.','......G.','........','........','........','........','S.......','#J######']},
+ {name:'Knapp i taket',hint:'Knappen sitter uppe under taket. Bara ett hopp når dit.',
+  map:['#.......','b.......','........','........','........','......##','...s..DG','#J######']},
+ {name:'Bråttom',hint:'Portalrensaren tar bort portalerna varje gång figuren går förbi. Var snabb!',
+  map:['........','.b......','###.....','........','........','......##','S|....DG','########']},
+ {name:'Språngbrädan',hint:'Hoppplattan står på en ö mitt bland taggarna. Få figuren dit, åt rätt håll.',
+  map:['S..#....','####....','......#.','......G.','......#.','........','........','^^^J^^^^']},
+ {name:'Tidsknappen',hint:'Ny sak: tidsknappen öppnar dörren bara en kort stund. Hinner figuren inte fram stängs den igen.',
+  map:['........','.t....s.','#######.','........','........','##......','GD......','########']},
+ {name:'Finalen',par:4,hint:'Allt på en gång. Tryck på knappen, och flytta sedan portalerna innan figuren hamnar i taggarna.',
+  map:['#.......','b.......','........','........','........','......##','...s..DG','#J##^###']}
 ];
-// One step of the runner. Returns 'win', 'dead' or null. Shared with the menu demo and the level check.
+// One step of the runner. Returns 'win', 'dead', 'port', 'button', 'grill' or null. portals may be cleared.
+// Shared with the menu demo and phCheck().
 function phStep(L,r,portals){
- const at=(x,y)=>x<0||x>7||y<0?'#':y>7?'.':L[y][x],solid=(x,y)=>at(x,y)==='#';
- if(r.y>=7||!solid(r.x,r.y+1)){r.y++;r.falling=true;}
- else{r.falling=false;const nx=r.x+r.dir;if(nx<0||nx>7||solid(nx,r.y))r.dir=-r.dir;else r.x=nx;}
+ const at=(x,y)=>x<0||x>7||y<0?'#':y>7?'.':L[y][x];
+ const solid=(x,y)=>{const t=at(x,y);return t==='#'||t==='J'||(t==='D'&&!r.open);};
+ if(r.open>0&&r.open<Infinity&&at(r.x,r.y)!=='D')r.open--; // a timed door counts down (not with the runner in it)
+ r.falling=false;r.flying=false;
+ if(r.arc===0&&r.y<7&&at(r.x,r.y+1)==='J'){r.arc=PH_JUMP;r.jumpAt=r.x+r.y*8;} // standing on a jump pad: off we go
+ if(r.arc>0){
+  r.arc--;r.flying=true;
+  if(!solid(r.x+r.dir,r.y-1)){r.x+=r.dir;r.y--;}
+  else if(!solid(r.x,r.y-1))r.y--;   // a wall in front: straight up along it
+  else r.arc=0;                      // boxed in: the jump stops
+ }
+ else if(r.y>=7||!solid(r.x,r.y+1)){r.y++;r.falling=true;}
+ else{const nx=r.x+r.dir;if(solid(nx,r.y))r.dir=-r.dir;else r.x=nx;}
  if(r.y>7)return 'dead';
- const tile=at(r.x,r.y);
+ const tile=at(r.x,r.y),k=r.x+r.y*8;
+ if(r.portedTo!==k)r.portedTo=-1; // moved off the portal it came out of
  if(tile==='^')return 'dead';
  if(tile==='G')return 'win';
- const k=r.x+r.y*8;
- if(r.portedTo!==k){
-  r.portedTo=-1;
-  const [b,o]=portals;
-  if(b>=0&&o>=0&&(k===b||k===o)){const to=k===b?o:b;r.x=to%8;r.y=to/8|0;r.portedTo=to;return 'port';}
- }else return null;
+ if(tile==='b'&&r.open!==Infinity){r.open=Infinity;return 'button';}
+ if(tile==='t'){const was=r.open;r.open=PH_TIMER;return was?null:'button';}
+ if(tile==='|'){if(portals[0]>=0||portals[1]>=0){portals[0]=portals[1]=-1;return 'grill';}return null;}
+ const [b,o]=portals;
+ if(r.portedTo<0&&b>=0&&o>=0&&(k===b||k===o)){const to=k===b?o:b;r.x=to%8;r.y=to/8|0;r.portedTo=to;return 'port';}
  return null;
 }
-function phRunner(L){for(let y=0;y<8;y++)for(let x=0;x<8;x++)if(L[y][x]==='S'||L[y][x]==='s')return {x,y,dir:L[y][x]==='S'?1:-1,portedTo:-1,falling:false};}
+function phRunner(L){for(let y=0;y<8;y++)for(let x=0;x<8;x++)if(L[y][x]==='S'||L[y][x]==='s')return {x,y,dir:L[y][x]==='S'?1:-1,portedTo:-1,falling:false,flying:false,arc:0,open:0};}
+const phFree=t=>t==='.'||t==='S'||t==='s'; // where portals can go
+// For making levels: plays every pair of portals placed before the start. A good level can't be won without
+// portals (none: false) and has a few winning pairs. Portal cleaners make you place new portals while it runs,
+// which this doesn't try – play those yourself. Example in the console: phCheck(PH_LEVELS[8].map)
+function phCheck(L,limit=500){
+ const run=(b,o)=>{
+  const r=phRunner(L),p=[b,o],seen=new Set();
+  for(let i=0;i<limit;i++){
+   const key=[r.x,r.y,r.dir,r.arc,r.open,r.portedTo,p[0],p[1]].join();if(seen.has(key))return false;seen.add(key);
+   const s=phStep(L,r,p);if(s==='win')return true;if(s==='dead')return false;
+  }
+  return false;
+ };
+ const s=phRunner(L),cells=[];
+ for(let k=0;k<64;k++)if(phFree(L[k>>3][k&7])&&k!==s.x+s.y*8)cells.push(k);
+ const wins=[];for(const b of cells)for(const o of cells)if(b<o&&run(b,o))wins.push([b,o]);
+ return {none:run(-1,-1),pairs:wins.length,wins};
+}
+const PH_SAVE='legends.portalhopp.stars';
 const Portalhopp={
  id:'portalhopp',name:'Portalhopp',color:PH_ORANGE,
- how:'Den vita figuren springer av sig själv och vänder vid väggar. Tryck på en tom ruta för att sätta en portal: först blå, sedan orange, sedan flyttas den blå igen och så vidare. Springer eller faller figuren in i den ena portalen kommer den ut ur den andra – åt samma håll som den var på väg. Få den förbi stup och taggar till det gröna målet. Misslyckas du ligger portalerna kvar så du kan ändra dem. Färre portalflyttar ger fler stjärnor. Den nedersta runda knappen till höger börjar om banan utan portaler.',
- legend:[[COL.white,'Figuren'],[PH_BLUE,'Blå portal'],[PH_ORANGE,'Orange portal'],[COL.green,'Målet'],[COL.red,'Taggar'],[PH_GROUND,'Mark och väggar']],
- start(now){this.phase='play';this.level=0;this.stars=0;this.next(now);},
- next(now){
-  this.level++;
-  if(this.level>PH_LEVELS.length){const best=saveBest(this.id,this.stars);gameOver(this,`${this.stars}`,COL.gold,now);sfx.win();return;}
-  this.L=PH_LEVELS[this.level-1];this.portals=[-1,-1];this.placed=0;this.intro=true;this.reset(now);
+ how:'Den vita figuren springer av sig själv och vänder vid väggar. Tryck på en tom ruta för att sätta en portal: först blå, sedan orange, sedan flyttas den blå igen och så vidare. Springer eller faller figuren in i den ena portalen kommer den ut ur den andra – åt samma håll som den var på väg. Få den förbi stup och taggar till det gröna målet. Senare banor har knappar och dörrar, tidsknappar, portalrensare och hoppplattor. Misslyckas du ligger portalerna kvar så du kan ändra dem. Färre portalflyttar ger fler stjärnor. ◀ ▶ på översta raden byter bana, den nedersta runda knappen till höger börjar om banan utan portaler.',
+ legend:[[COL.white,'Figuren'],[PH_BLUE,'Blå portal'],[PH_ORANGE,'Orange portal'],[COL.green,'Målet'],[COL.red,'Taggar'],[PH_GROUND,'Mark och väggar'],[PH_DOOR,'Knapp, tidsknapp och dörr'],[PH_GRILL,'Portalrensare'],[PH_PAD,'Hoppplatta']],
+ loadStars(){let s=[];try{s=JSON.parse(localStorage.getItem(PH_SAVE))||[];}catch{}return PH_LEVELS.map((_,i)=>+s[i]||0);},
+ saveStars(){try{localStorage.setItem(PH_SAVE,JSON.stringify(this.best));}catch{}},
+ total(){return this.best.reduce((a,b)=>a+b,0);},
+ unlocked(){const i=this.best.findIndex(s=>!s);return i<0?PH_LEVELS.length-1:i;}, // the furthest level you may pick
+ start(now){
+  this.phase='play';this.best=this.loadStars();
+  const u=this.unlocked();this.go(this.best[u]?0:u,now); // carry on where you were (from the start once all are done)
+ },
+ go(i,now){
+  this.lv=i;this.def=PH_LEVELS[i];this.L=this.def.map;this.par=this.def.par||2;
+  this.portals=[-1,-1];this.placed=0;this.nextP=0;this.intro=true;this.reset(now);
  },
  reset(now){
-  this.r=phRunner(this.L);this.step='ready';this.stepAt=now;this.moveAt=now+(this.intro?3:1.6);this.trail=[];
+  this.r=phRunner(this.L);this.step='ready';this.stepAt=now;this.moveAt=now+(this.intro?3:1.6);this.trail=[];this.fizz=null;
  },
- starsFor(){return this.placed<=2?3:this.placed<=4?2:1;},
+ starsFor(){return this.placed<=this.par?3:this.placed<=this.par+2?2:1;},
+ won(now){
+  const s=this.starsFor();this.gotStars=s;
+  if(s>this.best[this.lv]){this.best[this.lv]=s;this.saveStars();}
+  this.step='win';this.stepAt=now;sfx.win();
+ },
  update(dt,now){
   if(this.phase==='over')return;
   const t=now-this.stepAt;
   if(this.step==='dead'&&t>1){this.intro=false;this.reset(now);return;}
-  if(this.step==='win'&&t>1.8){this.next(now);return;}
+  if(this.step==='win'&&t>1.8){
+   if(this.lv+1<PH_LEVELS.length)this.go(this.lv+1,now);
+   else{const total=this.total();saveBest(this.id,total);gameOver(this,`${total}`,COL.gold,now);}
+   return;
+  }
   if(this.step==='ready'&&now>=this.moveAt){this.step='run';this.intro=false;}
   if(this.step!=='run')return;
   let guard=0;
   while(now>=this.moveAt&&this.step==='run'&&guard++<4){
    this.trail.push({x:this.r.x,y:this.r.y,at:now});
-   const res=phStep(this.L,this.r,this.portals);
-   this.moveAt+=this.r.falling?.13:.32;
+   const old=[...this.portals],res=phStep(this.L,this.r,this.portals);
+   this.moveAt+=this.r.falling?.13:this.r.flying?.16:.32;
+   if(this.r.open>0&&this.r.open<Infinity)tone(1500,1500,.03,'square',.04); // the timed door ticking
    if(res==='port'){this.portAt=now;tone(300,900,.18,'sine',.1);}
+   else if(res==='button'){this.openAt=now;tone(180,180,.06,'square',.1);tone(520,1040,.3,'triangle',.09,audioNow()+.06);}
+   else if(res==='grill'){this.fizz={at:now,cells:old.filter(k=>k>=0)};this.nextP=0;noise(.35,2500,.12,0,'bandpass');tone(900,200,.3,'sine',.06);}
    else if(res==='dead'){this.step='dead';this.stepAt=now;this.deadAt={x:this.r.x,y:Math.min(7,this.r.y)};sfx.bad();}
-   else if(res==='win'){this.step='win';this.stepAt=now;const s=this.starsFor();this.stars+=s;this.gotStars=s;sfx.win();}
+   else if(res==='win')this.won(now);
+   if(this.r.flying&&this.r.arc===PH_JUMP-1&&res!=='port')tone(260,780,.2,'triangle',.08); // launched
   }
  },
  input(ev,now){
   if(this.phase==='over')return overInput(this,ev,now);
   if(!ev.down)return;
-  if(ev.kind==='side'&&ev.i===7&&this.step!=='win'){this.portals=[-1,-1];this.placed=0;this.intro=false;this.reset(now);sfx.menu();return;}
+  if(ev.kind==='side'&&ev.i===7&&this.step!=='win'){this.portals=[-1,-1];this.placed=0;this.nextP=0;this.intro=false;this.reset(now);sfx.menu();return;}
+  if(ev.kind==='top'&&(ev.i===2||ev.i===3)){
+   const to=this.lv+(ev.i===2?-1:1);
+   if(to>=0&&to<=this.unlocked()&&to<PH_LEVELS.length){this.go(to,now);sfx.menu();}else tone(140,140,.07,'square',.05);
+   return;
+  }
   if(ev.kind!=='pad'||this.step==='win')return;
   const k=ev.x+ev.y*8,tile=this.L[ev.y][ev.x];
-  if(tile!=='.'&&tile!=='S'&&tile!=='s'){tone(140,140,.07,'square',.05);return;}
+  if(!phFree(tile)){tone(140,140,.07,'square',.05);return;}
   if(k===this.r.x+this.r.y*8)return;
-  const which=this.placed%2;
+  const which=this.nextP;
   if(this.portals[1-which]===k)return;
-  this.portals[which]=k;this.placed++;this.placeAt=now;this.placeK=k;
+  this.portals[which]=k;this.placed++;this.nextP=1-which;this.placeAt=now;this.placeK=k;
   tone(which?520:390,which?780:585,.12,'sine',.09);
  },
  drawLevel(L,portals,r,now,alive=true){
+  const open=r&&r.open;
   for(let y=0;y<8;y++)for(let x=0;x<8;x++){
    const c=L[y][x];
    if(c==='#')px(x,y,PH_GROUND,.8);
    else if(c==='^')px(x,y,COL.red,.45+.35*pulse(now+x*.2,1.2));
    else if(c==='G')px(x,y,COL.green,.5+.5*pulse(now,1.5));
+   else if(c==='D')px(x,y,PH_DOOR,!open?.75:open<Infinity&&open<=3?.07+.5*(Math.sin(now*30)>0):.07);
+   else if(c==='b')px(x,y,PH_DOOR,open?.2:.35+.4*pulse(now,2.5));
+   else if(c==='t')px(x,y,PH_DOOR,open?.25+.75*(Math.sin(now*12)>0):.35+.4*pulse(now,2.5));
+   else if(c==='|')px(x,y,PH_GRILL,.2+.18*pulse(now*1.7+y*.35,2));
+   else if(c==='J')px(x,y,PH_PAD,.45+.4*Math.max(0,Math.sin(now*5)));
   }
   portals.forEach((k,i)=>{if(k>=0)px(k%8,k/8|0,i?PH_ORANGE:PH_BLUE,.6+.4*pulse(now+i*.5,2.2));});
   if(alive&&r)px(r.x,r.y,COL.white);
@@ -1124,32 +1200,36 @@ const Portalhopp={
  draw(now){
   if(this.phase==='over')return drawOver(this,now);
   const t=now-this.stepAt;
-  if(this.step==='ready'&&this.intro&&t<.8){drawBigNumber(this.level,PH_ORANGE,Math.min(1,t/.2),0);return;}
+  if(this.step==='ready'&&this.intro&&t<.8){drawBigNumber(this.lv+1,PH_ORANGE,Math.min(1,t/.2),0);return;}
   this.drawLevel(this.L,this.portals,this.r,now,this.step!=='dead');
   this.trail=this.trail.filter(s=>now-s.at<.3);
   for(const s of this.trail)px(s.x,s.y,COL.white,.25*(1-(now-s.at)/.3));
   if(this.step==='ready'){px(this.r.x,this.r.y,COL.white,pulse(now,4));topBar(Math.max(0,(this.moveAt-now)/(this.intro?2.2:1.6)),COL.white);}
   if(this.placeAt&&now-this.placeAt<.25)px(this.placeK%8,this.placeK/8|0,COL.white,1-(now-this.placeAt)/.25);
-  if(this.portAt&&now-this.portAt<.2)for(const k of this.portals)px(k%8,k/8|0,COL.white,1-(now-this.portAt)/.2);
+  if(this.portAt&&now-this.portAt<.2)for(const k of this.portals)if(k>=0)px(k%8,k/8|0,COL.white,1-(now-this.portAt)/.2);
+  if(this.openAt&&now-this.openAt<.4&&this.r.open)for(let k=0;k<64;k++)if(this.L[k>>3][k&7]==='D')px(k%8,k>>3,COL.white,1-(now-this.openAt)/.4);
+  if(this.fizz&&now-this.fizz.at<.5){const a=1-(now-this.fizz.at)/.5;for(const k of this.fizz.cells)px(k%8,k>>3,Math.random()<.5?PH_GRILL:COL.white,a);}
   if(this.step==='dead'){px(this.deadAt.x,this.deadAt.y,COL.red,pulse(now,6));fill(COL.red,.25*Math.max(0,1-t*2));}
   if(this.step==='win'){fill(COL.green,Math.max(0,.5-t*.5));for(let i=0;i<3;i++)topLed(i,COL.gold,i<this.gotStars?1:.08);}
   else{ // which portal comes next, on the top row: blue (0) and orange (1)
-   const nx=this.placed%2;topLed(0,PH_BLUE,nx===0?.6+.4*pulse(now,3):.2);topLed(1,PH_ORANGE,nx===1?.6+.4*pulse(now,3):.2);
+   const nx=this.nextP;topLed(0,PH_BLUE,nx===0?.6+.4*pulse(now,3):.2);topLed(1,PH_ORANGE,nx===1?.6+.4*pulse(now,3):.2);
   }
+  topLed(2,COL.white,this.lv>0?.35:.05);topLed(3,COL.white,this.lv<this.unlocked()?.35:.05);
   sideLed(7,COL.red,.35);
  },
  hud(){
-  if(this.phase==='over')return `Alla ${PH_LEVELS.length} banor klara! ${this.stars} av ${PH_LEVELS.length*3} stjärnor`;
-  const next=this.placed%2?'orange':'blå';
-  if(this.step==='win')return `Bana ${this.level} klar – ${'★'.repeat(this.gotStars)}${'☆'.repeat(3-this.gotStars)} (${this.placed} portalflyttar)`;
+  const n=PH_LEVELS.length;
+  if(this.phase==='over')return `Alla ${n} banor klara! ${this.total()} av ${n*3} stjärnor`;
+  const next=this.nextP?'orange':'blå',name=`Bana ${this.lv+1} av ${n} – ${this.def.name}`;
+  if(this.step==='win')return `${name} klar – ${'★'.repeat(this.gotStars)}${'☆'.repeat(3-this.gotStars)} (${this.placed} portalflyttar)`;
   if(this.step==='dead')return `Aj! Portalerna ligger kvar – flytta dem och försök igen.`;
-  return `Bana ${this.level} av ${PH_LEVELS.length} · nästa portal: ${next} · portalflyttar ${this.placed} · stjärnor ${this.stars}`;
+  if(this.fizz&&this.step==='run'&&!this.portals.some(k=>k>=0))return `${name} · Portalrensaren tog bort portalerna – sätt nya! Nästa: blå`;
+  if(this.def.hint&&!this.placed)return `${name} · ${this.def.hint}`;
+  return `${name} · nästa portal: ${next} · portalflyttar ${this.placed} (${this.par} ger ★★★) · stjärnor ${this.total()}`;
  },
  demo(t){
-  const L=PH_LEVELS[0],portals=[3+6*8,5+6*8],n=Math.floor(t/.32)%12,r=phRunner(L);
+  const L=PH_LEVELS[0].map,portals=[3+6*8,5+6*8],n=Math.floor(t/.32)%12,r=phRunner(L);
   for(let i=0;i<n;i++)if(phStep(L,r,portals)==='win')break;
   this.drawLevel(L,portals,r,t);
  }
 };
-
-const GAMES=[Fargminne,Takt,Rymd,Ficklampan,MemLab,Portalhopp,Mullvad,Minne,PadPong];

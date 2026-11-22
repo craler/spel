@@ -5,10 +5,19 @@
 let ctx=null,master=null,noiseBuf=null,muted=false;
 try{muted=localStorage.getItem('legends.muted')==='1';}catch{}
 
+// Everything goes through `master` and then a limiter, so many sounds at once (a firework finale, a full
+// drum machine) get squeezed instead of crackling.
+function masterChain(c){
+ const g=c.createGain(),lim=c.createDynamicsCompressor();
+ g.gain.value=muted?0:.8;
+ lim.threshold.value=-3;lim.knee.value=2;lim.ratio.value=20;lim.attack.value=.002;lim.release.value=.15;
+ g.connect(lim);lim.connect(c.destination);
+ return g;
+}
 function audioInit(){
  if(!ctx){
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
-  ctx=new AC();master=ctx.createGain();master.gain.value=muted?0:.8;master.connect(ctx.destination);
+  ctx=new AC();master=masterChain(ctx);
   noiseBuf=ctx.createBuffer(1,ctx.sampleRate*.5,ctx.sampleRate);
   const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
  }
@@ -41,7 +50,10 @@ const drum={
  open:at=>noise(.22,6500,.05,at),
  crash:at=>noise(1.6,4500,.11,at),
  stick:at=>tone(2400,2400,.03,'square',.05,at),
- tom:(f,at)=>tone(f,f*.6,.22,'sine',.35,at)
+ tom:(f,at)=>tone(f,f*.6,.22,'sine',.35,at),
+ // For Trummaskin
+ clap:at=>{for(let i=0;i<3;i++)noise(.012,1200,.22,(at||audioNow())+i*.011,'bandpass');noise(.16,1200,.15,(at||audioNow())+.033,'bandpass');},
+ cowbell:at=>{tone(560,560,.14,'square',.045,at);tone(845,845,.14,'square',.035,at);}
 };
 let leadIn=null,rhythmIn=null;
 // Input → overdrive → speaker-like lowpass → level. Returns the input node.
@@ -96,6 +108,36 @@ function lead(f,dur=.4){
  vib.start(t);vib.stop(t+dur+.03);
  g.connect(leadIn);
 }
+// A synth pluck with an echo, for the melody in Trummaskin and the cells in Livet.
+let keysIn=null,keysEcho=null;
+function keysInit(){
+ if(keysIn||!ctx)return;
+ keysIn=ctx.createGain();keysIn.connect(master);
+ const d=ctx.createDelay(1),fb=ctx.createGain(),lp=ctx.createBiquadFilter(),wet=ctx.createGain();
+ d.delayTime.value=.3;fb.gain.value=.3;lp.type='lowpass';lp.frequency.value=2400;wet.gain.value=.28;
+ keysIn.connect(d);d.connect(lp);lp.connect(fb);fb.connect(d);lp.connect(wet);wet.connect(master);keysEcho=d;
+}
+function setEcho(sec){if(keysEcho)keysEcho.delayTime.setTargetAtTime(Math.min(.9,sec),ctx.currentTime,.05);}
+function pluck(f,at=0,dur=.35,gain=.09){
+ if(!audioReady())return;keysInit();
+ const t=Math.max(at,ctx.currentTime),g=ctx.createGain(),lp=ctx.createBiquadFilter();
+ lp.type='lowpass';lp.Q.value=3;lp.frequency.setValueAtTime(Math.min(12000,f*9),t);lp.frequency.exponentialRampToValueAtTime(f*1.4,t+dur);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.005);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const det of [-8,8]){const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=f;o.detune.value=det;o.connect(lp);o.start(t);o.stop(t+dur+.03);}
+ lp.connect(g);g.connect(keysIn);
+}
+// Fireworks: the whistle going up, the bang (with a softer echo off the houses) and the crackle.
+const boom={
+ launch:()=>{tone(420,1500+Math.random()*500,.5,'sine',.025);noise(.4,3500,.02);},
+ bang:(big=1)=>{
+  const t=audioNow();boom.recent=(boom.recent||[]).filter(x=>t-x<.25);boom.recent.push(t);
+  big/=Math.sqrt(boom.recent.length); // several bangs at once: each one a bit softer
+  noise(.9,700,.3*big,t,'lowpass');tone(110,32,.55,'sine',.38*big,t);noise(.7,350,.1*big,t+.13,'lowpass');
+ },
+ crackle:(delay=0,n=12)=>{const t=audioNow()+delay;for(let i=0;i<n;i++)noise(.014,3500+Math.random()*3000,.05,t+Math.random()*.7);},
+ fizz:()=>noise(1.6,5000,.045)
+};
+
 // The muted string scrape when you miss
 function clunk(){tone(98,70,.09,'sawtooth',.09);noise(.06,900,.06,0,'bandpass');}
 // Pentatonic scale for melodic feedback: note n steps up from A3.
