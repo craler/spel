@@ -8,6 +8,10 @@
 // list on the screen previews it the same way. Nobody touching it for a while: back to the light show.
 // Anywhere: hold the top-right round button (User, lit red) for a moment to go back to the menu.
 
+// The games in menu order (the right column shows 8 per page). They live in games.js, classics.js and toys.js.
+const GAMES=[Fargminne,Takt,Rymd,Ficklampan,MemLab,Portalhopp,FyraIRad,SlackAllt,
+ Trummaskin,Fyrverkeriet,Livet,Mullvad,Minne,PadPong];
+
 const $=s=>document.querySelector(s);
 let current=null,clock=0,last=performance.now()/1000,introAt=-9;
 let sel=0,lastTouch=0,starting=null,backDownAt=null;
