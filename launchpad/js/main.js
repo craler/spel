@@ -2,23 +2,30 @@
 // Launchpad Legends: the menu on the Launchpad, the game loop and the screen.
 //
 // Menu: the grid plays a rainbow light show. Pressing a pad sends coloured rings out from it.
-// The right column is the game list – one round button per game, in its colour. Pressing one previews
+// The right column is the game list – one button per game, in its colour. Pressing one previews
 // that game on the grid (its name scrolls by, then a demo). Press the same button again, or anywhere on
 // the grid, to play. ▲ ▼ on the top row also step through the games. Holding the mouse over a game in the
 // list on the screen previews it the same way. Nobody touching it for a while: back to the light show.
-// Anywhere: hold the top-right round button (User, lit red) for a moment to go back to the menu.
+// Anywhere: hold the top-right button (User, lit red) for a moment to go back to the menu.
 
-// The games in menu order (the right column shows 8 per page). They live in games.js, classics.js and toys.js.
-const GAMES=[Fargminne,Takt,Rymd,Ficklampan,MemLab,Portalhopp,FyraIRad,SlackAllt,
- Trummaskin,Fyrverkeriet,Livet,Mullvad,Minne,PadPong];
+// The games, page by page (up to 8 per page – one per button in the right column; ◀ ▶ on the top row
+// switch page). They live in games.js, classics.js and toys.js.
+const PAGES=[
+ {name:'Spel',games:[Fargminne,Takt,Rymd,Sjunkbomb,Ficklampan,MemLab,Portalhopp,Mullvad]},
+ {name:'Brädspel och två spelare',games:[FyraIRad,SankaSkepp,SlackAllt,Minne,PadPong]},
+ {name:'Musik och leksaker',games:[Trumset,Trummaskin,Fyrverkeriet,Livet]}
+];
+const GAMES=PAGES.flatMap(p=>p.games);
 
 const $=s=>document.querySelector(s);
 let current=null,clock=0,last=performance.now()/1000,introAt=-9;
 let sel=0,lastTouch=0,starting=null,backDownAt=null;
 let preview=null,previewAt=0,previewBy=null; // the game shown on the grid in the menu, null = light show
-// More than 8 games: the right column shows one page of 8 at a time, ◀ ▶ on the top row switch page.
-const PAGE=8;let page=0;
-const pages=()=>Math.ceil(GAMES.length/PAGE),onPage=i=>Math.floor(i/PAGE)===page;
+let page=0;
+const firstOf=p=>PAGES.slice(0,p).reduce((n,q)=>n+q.games.length,0);
+const pageOf=i=>{for(let p=PAGES.length-1;p>=0;p--)if(i>=firstOf(p))return p;return 0;};
+const slotOf=i=>i-firstOf(pageOf(i)); // which button in the right column
+const pages=()=>PAGES.length,onPage=i=>pageOf(i)===page;
 function pageArrows(t){if(pages()<2)return;topLed(2,COL.white,page>0?.5+.4*pulse(t,1.5):.08);topLed(3,COL.white,page<pages()-1?.5+.4*pulse(t,1.5):.08);}
 const BACK_HOLD=.6,PREVIEW_IDLE=15;
 const now=()=>clock;
@@ -57,7 +64,7 @@ function drawShow(t){
   if(age<.15)px(r.x,r.y,COL.white,1-age/.15);
  }
  // Game buttons on the right: their colours with a wave running down; top row: a rainbow chase
- GAMES.forEach((g,i)=>{if(!onPage(i))return;const j=i%PAGE;sideLed(j,g.color,.25+.75*Math.max(0,Math.cos((j/8-t*.6)*TAU))**2);});
+ GAMES.forEach((g,i)=>{if(!onPage(i))return;const j=slotOf(i);sideLed(j,g.color,.25+.75*Math.max(0,Math.cos((j/8-t*.6)*TAU))**2);});
  for(let j=0;j<8;j++)topLed(j,hue(wrap1(j/8-t*.5)),.5);
  pageArrows(t);
 }
@@ -66,7 +73,7 @@ function drawPreview(t){
  const nameCol=g===Fargminne?i=>FM_COL[i%4]:g.color;
  // Hovering on the screen: straight to the demo. Picked on the pad: the name scrolls by first.
  if(previewBy==='hover'||!scrollOnce(g.name.toUpperCase(),nameCol,nt-.1,1,14))g.demo(previewBy==='hover'?nt+2:nt);
- GAMES.forEach((h,i)=>{if(onPage(i))sideLed(i%PAGE,h.color,i===preview?.65+.35*pulse(t,2):.2);});
+ GAMES.forEach((h,i)=>{if(onPage(i))sideLed(slotOf(i),h.color,i===preview?.65+.35*pulse(t,2):.2);});
  topLed(0,COL.white,.25);topLed(1,COL.white,.25);pageArrows(t);
 }
 function drawMenu(t){
@@ -76,14 +83,14 @@ function drawMenu(t){
 function showPreview(i,by,quiet=false){
  i=(i+GAMES.length)%GAMES.length;
  if(preview===i&&by==='hover')return;
- preview=i;sel=i;page=Math.floor(i/PAGE);previewAt=clock;previewBy=by;if(!quiet)sfx.menu();showGameInfo();
+ preview=i;sel=i;page=pageOf(i);previewAt=clock;previewBy=by;if(!quiet)sfx.menu();showGameInfo();
 }
 function endPreview(){preview=null;previewBy=null;showGameInfo();}
 function go(){if(starting!==null)return;const g=GAMES[preview??sel];starting=clock;sfx.menu();setTimeout(()=>{starting=null;startGame(g);},280);}
 function menuInput(ev){
  lastTouch=clock;
  if(!ev.down||starting!==null)return;
- if(ev.kind==='side'){const gi=page*PAGE+ev.i;if(gi<GAMES.length){if(gi===preview&&clock-previewAt>.25)go();else showPreview(gi,'pad');}return;}
+ if(ev.kind==='side'){const gi=firstOf(page)+ev.i;if(ev.i<PAGES[page].games.length){if(gi===preview&&clock-previewAt>.25)go();else showPreview(gi,'pad');}return;}
  if(ev.kind==='top'){
   if(ev.i===0)showPreview((preview??sel+1)-1,'pad');else if(ev.i===1)showPreview(preview===null?sel:preview+1,'pad');
   else if((ev.i===2&&page>0)||(ev.i===3&&page<pages()-1)){page+=ev.i===2?-1:1;preview=null;previewBy=null;sfx.menu();showGameInfo();}
@@ -136,10 +143,10 @@ function frame(){
 const STATUS={
  idle:'Klicka på knappen för att ansluta din Launchpad.',
  asking:'Webbläsaren frågar om lov att använda MIDI – svara Tillåt.',
- waiting:'Koppla in din Launchpad Mini MK3 med USB-kabeln.',
+ waiting:'Koppla in din Launchpad Mini MK3 med USB-kabeln. I en Android-telefon behövs en USB-C-adapter (OTG).',
  connected:'Launchpad ansluten – spela på knapparna!',
  denied:'MIDI är blockerat. Klicka på symbolen till vänster om adressen, tillåt MIDI-enheter och ladda om sidan.',
- nomidi:'Den här webbläsaren kan inte prata med en Launchpad. Använd Chrome eller Edge på en dator. Du kan ändå testa med knapparna här på skärmen.'
+ nomidi:'Den här webbläsaren kan inte prata med en Launchpad. Använd Chrome eller Edge på en dator, eller Chrome på en Android-telefon. Du kan ändå testa med knapparna här på skärmen.'
 };
 const isIOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 LP.onStatus=s=>{
@@ -155,15 +162,15 @@ function showGameInfo(){
  $('#game-name').textContent=shown?shown.name:'Meny';
  let how;
  if(g)how=g.how;
- else if(shown)how=shown.how+(previewBy==='hover'?' Klicka för att spela.':' Tryck var som helst på plattan (eller samma runda knapp igen) för att spela.');
- else how='Plattan visar en ljusshow – tryck på knapparna så sprids färgade ringar. Välj spel med de runda knapparna till höger (eller ▲ ▼). Fler spel finns på nästa sida – tryck ▶ på översta raden (◀ går tillbaka). eller håll musen över ett spel här nedanför så visas det på plattan. Håll in den röda runda knappen uppe till höger för att komma tillbaka hit.';
+ else if(shown)how=shown.how+(previewBy==='hover'?' Klicka för att spela.':' Tryck var som helst på plattan (eller samma knapp igen) för att spela.');
+ else how='Plattan visar en ljusshow – tryck på knapparna så sprids färgade ringar. Välj spel med knapparna i högerkolumnen (eller ▲ ▼), eller håll musen över ett spel här nedanför så visas det på plattan. Spelen ligger på tre sidor – byt sida med ◀ ▶ på översta raden. Håll in den röda knappen uppe till höger (User) för att komma tillbaka hit.';
  $('#how').textContent=how;
  const legend=$('#legend');legend.replaceChildren();
  for(const [c,text] of (shown&&shown.legend)||[]){
   const li=document.createElement('li');li.textContent=text;li.style.setProperty('--c',`rgb(${c.map(v=>Math.round(v*255)).join(',')})`);legend.append(li);
  }
  $('#best').textContent=shown&&getBest(shown.id)?`Ditt rekord: ${getBest(shown.id)}`:'';
- document.querySelectorAll('#list li').forEach((li,i)=>{li.classList.toggle('on',!g&&i===preview);li.classList.toggle('playing',GAMES[i]===g);});
+ document.querySelectorAll('#list li[data-i]').forEach(li=>{const i=+li.dataset.i;li.classList.toggle('on',!g&&i===preview);li.classList.toggle('playing',GAMES[i]===g);});
 }
 let lastHud='',lastSound=null;
 function updateScreen(){
@@ -177,9 +184,10 @@ function setup(){
  buildMirror($('#mirror'));
  const list=$('#list');
  GAMES.forEach((g,i)=>{
+  if(slotOf(i)===0){const h=document.createElement('li');h.className='head';h.textContent=`Sida ${pageOf(i)+1} – ${PAGES[pageOf(i)].name}`;list.append(h);}
   const li=document.createElement('li'),c=g.color.map(v=>Math.round(v*255)).join(',');
-  li.style.setProperty('--c',`rgb(${c})`);
-  li.innerHTML=`<b></b><span>${i<PAGE?'':`Sida ${Math.floor(i/PAGE)+1} (▶) · `}Sidoknapp ${i%PAGE+1}</span>`;
+  li.style.setProperty('--c',`rgb(${c})`);li.dataset.i=i;
+  li.innerHTML=`<b></b><span>Knapp ${slotOf(i)+1} till höger</span>`;
   li.querySelector('b').textContent=g.name;
   li.addEventListener('click',()=>{audioInit();startGame(g);});
   li.addEventListener('mouseenter',()=>{if(!current&&starting===null)showPreview(i,'hover',true);});

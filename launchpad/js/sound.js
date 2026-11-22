@@ -41,6 +41,7 @@ function noise(dur,freq,gain=.15,at=0,type='highpass'){
  s.buffer=noiseBuf;s.loop=true;f.type=type;f.frequency.value=freq;
  g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
  s.connect(f);f.connect(g);g.connect(master);s.start(t);s.stop(t+dur+.02);
+ return g;
 }
 // ---- The rock band for Takt: drums, bass, a distorted rhythm guitar and a lead guitar with echo.
 const drum={
@@ -95,11 +96,11 @@ function bassNote(f,at,dur){
  lp.connect(g);g.connect(master);
 }
 // The lead guitar note you play when you hit a note: a small slide up into the note, then vibrato.
-function lead(f,dur=.4){
+function lead(f,dur=.4,at=0,gain=.32){
  if(!audioReady())return;bandInit();
- const t=ctx.currentTime,g=ctx.createGain(),vib=ctx.createOscillator(),vd=ctx.createGain();
+ const t=Math.max(at,ctx.currentTime),g=ctx.createGain(),vib=ctx.createOscillator(),vd=ctx.createGain();
  vib.frequency.value=5.8;vd.gain.setValueAtTime(0,t);vd.gain.linearRampToValueAtTime(f*.012,t+dur*.6);vib.connect(vd);
- g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.32,t+.01);g.gain.exponentialRampToValueAtTime(.18,t+.12);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.01);g.gain.exponentialRampToValueAtTime(gain*.56,t+.12);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
  for(const [type,m] of [['sawtooth',1],['square',2.003]]){
   const o=ctx.createOscillator();o.type=type;
   o.frequency.setValueAtTime(f*m*.944,t);o.frequency.exponentialRampToValueAtTime(f*m,t+.045);
@@ -136,6 +137,70 @@ const boom={
  },
  crackle:(delay=0,n=12)=>{const t=audioNow()+delay;for(let i=0;i<n;i++)noise(.014,3500+Math.random()*3000,.05,t+Math.random()*.7);},
  fizz:()=>noise(1.6,5000,.045)
+};
+
+// A lead guitar note that rings for as long as you hold the pad (Takt's long notes). Returns stop().
+function leadHold(f){
+ if(!audioReady())return ()=>{};bandInit();
+ const t=ctx.currentTime,g=ctx.createGain(),vib=ctx.createOscillator(),vd=ctx.createGain(),oscs=[];
+ vib.frequency.value=5.5;vd.gain.setValueAtTime(0,t);vd.gain.linearRampToValueAtTime(f*.015,t+.5);vib.connect(vd);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.32,t+.01);g.gain.exponentialRampToValueAtTime(.2,t+.15);g.gain.setTargetAtTime(.14,t+.15,.8);
+ for(const [type,m] of [['sawtooth',1],['square',2.003]]){
+  const o=ctx.createOscillator();o.type=type;o.frequency.setValueAtTime(f*m*.944,t);o.frequency.exponentialRampToValueAtTime(f*m,t+.045);
+  vd.connect(o.frequency);o.connect(g);o.start(t);oscs.push(o);
+ }
+ vib.start(t);oscs.push(vib);g.connect(leadIn);
+ let done=false;
+ return ()=>{if(done)return;done=true;const e=ctx.currentTime;g.gain.cancelScheduledValues(e);g.gain.setTargetAtTime(.0001,e,.04);for(const o of oscs)o.stop(e+.3);};
+}
+
+// ---- Trumset: two drum kits to play live (0 = rock, 1 = electro / 808-style). KIT[name](kit) plays now.
+// Metal sounds (hi-hats, cymbals, cowbell) are six square waves at odd frequencies through a high filter.
+function metal(dur,gain,hp=7000,mult=1){
+ if(!audioReady())return null;
+ const t=ctx.currentTime,g=ctx.createGain(),bp=ctx.createBiquadFilter(),hf=ctx.createBiquadFilter();
+ bp.type='bandpass';bp.frequency.value=10000;bp.Q.value=.6;hf.type='highpass';hf.frequency.value=hp;
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.002);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const f of [205.3,304.4,369.6,522.7,540,800]){const o=ctx.createOscillator();o.type='square';o.frequency.value=f*mult;o.connect(bp);o.start(t);o.stop(t+dur+.05);}
+ bp.connect(hf);hf.connect(g);g.connect(master);return g;
+}
+let openHat=null; // the ringing open hi-hat, cut short by the closed one (like a real foot pedal)
+function chokeHat(){if(openHat&&ctx){openHat.gain.cancelScheduledValues(ctx.currentTime);openHat.gain.setTargetAtTime(.0001,ctx.currentTime,.01);}openHat=null;}
+const KIT={
+ kick:k=>{if(k){tone(75,44,.9,'sine',.7);tone(1200,300,.012,'square',.04);}else{tone(150,48,.35,'sine',.62);noise(.012,2500,.12);}},
+ snare:k=>{if(k){noise(.16,2600,.24);tone(250,180,.08,'triangle',.14);}else{noise(.22,1300,.3);tone(210,160,.12,'triangle',.2);}},
+ rim:k=>{tone(1750,1750,.03,'square',.05);tone(480,470,.05,'triangle',.12);noise(.02,5000,.05);},
+ clap:k=>{drum.clap();if(k)noise(.4,1200,.045,audioNow()+.04,'bandpass');},
+ hat:k=>{chokeHat();if(k)metal(.06,.1);else noise(.045,8500,.1);},
+ open:k=>{chokeHat();openHat=k?metal(.5,.08):noise(.5,7000,.07);},
+ shaker:k=>noise(.09,5500,.07,0,'bandpass'),
+ tamb:k=>{noise(.2,9000,.06);metal(.18,.03,9000,1.7);},
+ tom1:k=>k?tone(330,190,.32,'sine',.5):(tone(270,200,.3,'sine',.45),noise(.04,900,.05,0,'lowpass')),
+ tom2:k=>k?tone(250,140,.36,'sine',.5):(tone(205,150,.34,'sine',.45),noise(.04,800,.05,0,'lowpass')),
+ tom3:k=>k?tone(185,100,.42,'sine',.52):(tone(155,110,.38,'sine',.48),noise(.05,700,.05,0,'lowpass')),
+ tom4:k=>k?tone(130,70,.5,'sine',.55):(tone(112,80,.45,'sine',.5),noise(.05,600,.06,0,'lowpass')),
+ crash:k=>{noise(k?1.2:1.8,k?7000:5000,.13);metal(k?1:1.5,.035,6000,1.3);},
+ ride:k=>{metal(1.3,.045,4500,1.9);tone(3100,3100,.7,'sine',.018);},
+ cowbell:k=>drum.cowbell(),
+ bongo:k=>{tone(520,430,.13,'sine',.38);noise(.012,2500,.05);},
+ // Extras on the right column
+ triangle:k=>{tone(2400,2400,1.6,'sine',.06);tone(7200,7200,.8,'sine',.015);},
+ claves:k=>tone(2500,2500,.06,'sine',.2),
+ splash:k=>{noise(.6,6500,.1);metal(.5,.03,7000,1.6);},
+ laser:k=>tone(2400,90,.35,'sawtooth',.07),
+ boom:k=>{tone(55,30,1.6,'sine',.6);noise(.3,200,.15,0,'lowpass');},
+ scratch:k=>{tone(300,1100,.08,'sawtooth',.06);noise(.08,1800,.08,0,'bandpass');tone(900,250,.1,'sawtooth',.05,audioNow()+.09);noise(.1,1500,.07,audioNow()+.09,'bandpass');},
+ whistle:k=>{tone(2100,2100,.12,'sine',.08);tone(2100,2100,.3,'sine',.08,audioNow()+.16);},
+ applause:k=>{const t=audioNow();for(let i=0;i<24;i++)noise(.03,1000+Math.random()*1500,.06,t+Math.random()*1.4,'bandpass');}
+};
+
+// ---- Under water (Sjunkbomb): sonar ping with an echo, splash, depth charge boom, bubbles.
+const sea={
+ sonar:()=>{tone(1350,1350,.7,'sine',.07);tone(1350,1350,.6,'sine',.025,audioNow()+.55);},
+ splash:()=>{noise(.18,1800,.09,0,'bandpass');tone(520,230,.14,'sine',.06);},
+ boom:(big=1)=>{tone(95,28,.6,'sine',.5*big);noise(.7,350,.25*big,0,'lowpass');},
+ bubbles:()=>{const t=audioNow();for(let i=0;i<6;i++){const f=350+Math.random()*500;tone(f,f*1.8,.06,'sine',.04,t+Math.random()*.5);}},
+ mine:()=>tone(320,640,.09,'triangle',.04)
 };
 
 // The muted string scrape when you miss

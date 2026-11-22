@@ -7,7 +7,7 @@
 // something on 9–16 they play the same as 1–8 (shown a little dimmer).
 // Three layers on the top row: Session = bass, Drums = drums, Keys = melody (both on a pentatonic scale, so
 // anything sounds good). Hold a layer button to empty that layer. ▲ ▼ change the tempo.
-// The round buttons on the right mute and unmute their row (red = muted). Hold one to empty the row.
+// The buttons in the right column mute and unmute their row (red = muted). Hold one to empty the row.
 // Everything is kept in the browser, so the beat is still there next time.
 // =====================================================================
 const TM_DRUMS=[ // top → bottom
@@ -30,7 +30,7 @@ const TM_LAYERS=[
 const TM_SAVE='legends.trummaskin';
 const Trummaskin={
  id:'trummaskin',name:'Trummaskin',color:[1,0,.75],
- how:'En leksak att göra takter med. Varje rad är ett ljud och varje kolumn ett steg. Ljuset sveper från vänster till höger och spelar knapparna som lyser – tryck för att tända eller släcka. En takt är 16 steg: ◀ ▶ visar steg 1–8 eller 9–16 (9–16 spelar samma som 1–8 tills du ändrar något där). Översta raden: Session = bas, Drums = trummor, Keys = melodi. Håll in en av dem för att tömma den. ▲ ▼ ändrar tempot. De runda knapparna till höger stänger av och sätter på sin rad (röd = av), håll in en för att tömma raden. Takten sparas till nästa gång.',
+ how:'En leksak att göra takter med. Varje rad är ett ljud och varje kolumn ett steg. Ljuset sveper från vänster till höger och spelar knapparna som lyser – tryck för att tända eller släcka. En takt är 16 steg: ◀ ▶ visar steg 1–8 eller 9–16 (9–16 spelar samma som 1–8 tills du ändrar något där). Översta raden: Session = bas, Drums = trummor, Keys = melodi. Håll in en av dem för att tömma den. ▲ ▼ ändrar tempot. Knapparna i högerkolumnen stänger av och sätter på sin rad (röd = av), håll in en för att tömma raden. Takten sparas till nästa gång.',
  legend:TM_DRUMS.map(d=>[d.c,d.name]),
  start(now){
   this.phase='play';this.layer=1;this.page=0;this.load();
@@ -160,7 +160,7 @@ const Trummaskin={
 
 // =====================================================================
 // FYRVERKERIET – a toy. Press anywhere: a rocket goes up from the bottom and bursts where you pressed.
-// The bottom row makes a fountain instead. The round buttons on the right pick the kind of burst
+// The bottom row makes a fountain instead. The right column picks the kind of burst
 // (FW_TYPES; the first one mixes them). ▲ fires a finale, ▼ starts/stops a show that runs by itself.
 // Sparks are drawn between the pads (each spark lights the four nearest pads a little), added together.
 // =====================================================================
@@ -245,7 +245,7 @@ function fwDraw(S,now){
 }
 const Fyrverkeriet={
  id:'fyrverkeri',name:'Fyrverkeriet',color:[1,.85,.3],
- how:'En leksak, inget spel. Tryck var som helst på plattan: en raket skjuts upp från botten och smäller där du tryckte. Nedersta raden ger en fontän. De runda knapparna till höger väljer sort (den översta blandar). ▲ skjuter en final med massor av raketer, ▼ startar eller stänger av en show som går av sig själv.',
+ how:'En leksak, inget spel. Tryck var som helst på plattan: en raket skjuts upp från botten och smäller där du tryckte. Nedersta raden ger en fontän. Knapparna i högerkolumnen väljer sort (den översta blandar). ▲ skjuter en final med massor av raketer, ▼ startar eller stänger av en show som går av sig själv.',
  legend:FW_TYPES.slice(1).map(t=>[t.c,t.name]),
  start(now){this.phase='play';this.type=0;this.S=fwState();this.auto=false;this.autoAt=now+1;this.last=now;},
  update(dt,now){
@@ -308,7 +308,7 @@ function lifeNext(cells){
 const lifeCol=age=>hue(wrap01(.52-Math.min(age,13)*.037));
 const Livet={
  id:'livet',name:'Livet',color:[.2,1,.75],
- how:'En leksak, inget spel. Tänd celler genom att trycka på plattan och se dem leva. En cell med två eller tre grannar lever vidare, en tom ruta med precis tre grannar får en ny cell, alla andra dör. Kanterna hänger ihop: det som går ut på ena sidan kommer in på den andra. Färgen visar hur gammal cellen är, från vit till röd. De runda knapparna till höger lägger in kända mönster. Översta raden: ▲ ▼ fart, ◀ ▶ ett steg bakåt eller framåt, Session = start och paus, Drums = slumpa, Keys = töm.',
+ how:'En leksak, inget spel. Tänd celler genom att trycka på plattan och se dem leva. En cell med två eller tre grannar lever vidare, en tom ruta med precis tre grannar får en ny cell, alla andra dör. Kanterna hänger ihop: det som går ut på ena sidan kommer in på den andra. Färgen visar hur gammal cellen är, från vit till röd. Knapparna i högerkolumnen lägger in kända mönster. Översta raden: ▲ ▼ fart, ◀ ▶ ett steg bakåt eller framåt, Session = start och paus, Drums = slumpa, Keys = töm.',
  legend:LIFE_PATTERNS.map(p=>[p.c,p.name]),
  start(now){
   this.phase='play';this.cells=new Uint8Array(64);this.age=new Uint16Array(64);this.bornAt=new Float32Array(64).fill(-9);
@@ -398,5 +398,85 @@ const Livet={
   const born=new Float32Array(64).fill(-9),prev=this.demoGens[(g+this.demoGens.length-1)%this.demoGens.length];
   for(let k=0;k<64;k++)if(this.demoGens[g][k]&&!prev[k])born[k]=t-f/4;
   this.drawCells(this.demoGens[g],this.demoAges[g],born,new Float32Array(64).fill(-9),new Uint16Array(64),t);
+ }
+};
+
+// =====================================================================
+// TRUMSET – drums to play live, no sequencer. The grid is 16 big pads of 2 × 2 (TS_PADS, top → bottom:
+// cymbals and percussion, toms, hi-hats and shakers, kick/snare/rim/clap). Every hit flashes its pad and
+// sends a ring of its colour across the grid. The right column has 8 extra sounds (TS_EXTRA).
+// Top row: Drums = rock kit, Keys = electro kit (808-style), ▶ = metronome on/off, ▲ ▼ = its tempo.
+// The closed hi-hat cuts off the open one, like a foot on the pedal.
+// =====================================================================
+const TS_PADS=[
+ {s:'crash',name:'Crash',c:[1,.8,.2]},{s:'ride',name:'Ride',c:[1,1,.65]},{s:'cowbell',name:'Koskälla',c:[.2,.4,1]},{s:'bongo',name:'Bongo',c:[1,.5,.15]},
+ {s:'tom1',name:'Hög tom',c:[0,1,.75]},{s:'tom2',name:'Mellantom',c:[0,.85,.45]},{s:'tom3',name:'Låg tom',c:[0,.6,1]},{s:'tom4',name:'Golvtom',c:[.3,.3,1]},
+ {s:'hat',name:'Hihat',c:[.6,.2,1]},{s:'open',name:'Öppen hihat',c:[1,.2,.8]},{s:'shaker',name:'Shaker',c:[.8,.55,1]},{s:'tamb',name:'Tamburin',c:[1,.9,.3]},
+ {s:'kick',name:'Bastrumma',c:[1,0,0]},{s:'snare',name:'Virvel',c:[1,.45,0]},{s:'rim',name:'Kantslag',c:[1,.75,.1]},{s:'clap',name:'Handklapp',c:[1,.2,.4]}
+];
+const TS_EXTRA=[
+ {s:'triangle',name:'Triangel',c:[.8,.9,1]},{s:'claves',name:'Klaves',c:[1,.6,.3]},{s:'splash',name:'Splash',c:[1,.9,.5]},{s:'laser',name:'Laser',c:[0,1,.3]},
+ {s:'boom',name:'Basbom',c:[.7,0,1]},{s:'scratch',name:'Scratch',c:[1,.3,.1]},{s:'whistle',name:'Visselpipa',c:[.3,.9,1]},{s:'applause',name:'Applåder',c:[1,.85,0]}
+];
+const TS_KITS=[{name:'Rock',top:5,c:[1,.3,.1]},{name:'Elektro',top:6,c:[0,.8,1]}];
+const Trumset={
+ id:'trumset',name:'Trumset',color:[1,.45,0],
+ how:'Spela trummor direkt på plattan – ingen sekvens, bara du. Plattan är 16 stora trumplattor på 2 × 2 knappar: längst ner bastrumma, virvel, kantslag och handklapp, ovanför hihats, shaker och tamburin, sedan fyra tommar och överst crash, ride, koskälla och bongo. Knapparna i högerkolumnen är åtta extraljud. Översta raden: Drums = rockset, Keys = elektroset, ▶ = metronom på och av, ▲ ▼ = metronomens tempo.',
+ legend:[...TS_PADS.map(p=>[p.c,p.name]),...TS_EXTRA.map(p=>[p.c,p.name+' (höger)'])],
+ start(now){
+  this.phase='play';this.kit=this.kit||0;this.hitAt=new Array(16).fill(-9);this.extraAt=new Array(8).fill(-9);this.rings=[];this.last=null;
+  this.metro=false;this.tempo=this.tempo||100;this.nextAt=0;this.beatN=0;this.beatAt=-9;this.audioOff=null;this.tempoAt=-9;
+ },
+ hit(b,now){
+  const p=TS_PADS[b];KIT[p.s](this.kit);this.hitAt[b]=now;this.last=p.name;
+  this.rings.push({x:(b%4)*2+.5,y:(b>>2)*2+.5,c:p.c,at:now});if(this.rings.length>12)this.rings.shift();
+ },
+ update(dt,now){
+  if(!this.metro)return;
+  if(this.nextAt<now-.25)this.nextAt=now;
+  const ready=audioReady();
+  if(ready){const off=audioNow()-now-(ctx.outputLatency||ctx.baseLatency||0);if(this.audioOff===null||Math.abs(off-this.audioOff)>.03)this.audioOff=off;}
+  while(this.nextAt<now+.1){
+   const down=this.beatN%4===0,at=this.nextAt;
+   if(ready)tone(down?1700:1150,down?1700:1150,.03,'square',down?.06:.04,at+this.audioOff);
+   this.beats=(this.beats||[]).concat({at,down});this.beatN++;this.nextAt+=60/this.tempo;
+  }
+  while(this.beats&&this.beats.length&&this.beats[0].at<=now){this.beatAt=this.beats.shift().at;}
+ },
+ input(ev,now){
+  if(!ev.down)return;
+  if(ev.kind==='pad'){this.hit((ev.y>>1)*4+(ev.x>>1),now);return;}
+  if(ev.kind==='side'){const e=TS_EXTRA[ev.i];KIT[e.s](this.kit);this.extraAt[ev.i]=now;this.last=e.name;return;}
+  if(ev.kind!=='top')return;
+  const k=TS_KITS.findIndex(k=>k.top===ev.i);
+  if(k>=0){this.kit=k;KIT.kick(k);this.hitAt[12]=now;return;}
+  if(ev.i===3){this.metro=!this.metro;this.nextAt=now+.05;this.beatN=0;this.beats=[];sfx.tick();}
+  if(ev.i===0||ev.i===1){this.tempo=Math.max(50,Math.min(200,this.tempo+(ev.i===0?5:-5)));this.tempoAt=now;sfx.tick();}
+ },
+ drawPads(now,hitAt,rings){
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+   const b=(y>>1)*4+(x>>1),p=TS_PADS[b],k=Math.max(0,1-(now-hitAt[b])/.25);
+   px(x,y,k?mix(p.c,COL.white,.6*k):p.c,.2+.8*k);
+  }
+  for(const r of rings){ // rings of colour spreading from the pad you hit
+   const age=now-r.at;if(age>.6)continue;
+   for(let y=0;y<8;y++)for(let x=0;x<8;x++){const d=Math.hypot(x-r.x,y-r.y),a=Math.max(0,1-Math.abs(d-age*12)/1.1)*(1-age/.6);if(a>0)px(x,y,r.c,a*.8);}
+  }
+ },
+ draw(now){
+  this.rings=this.rings.filter(r=>now-r.at<.6);
+  this.drawPads(now,this.hitAt,this.rings);
+  TS_EXTRA.forEach((e,i)=>{const k=Math.max(0,1-(now-this.extraAt[i])/.25);sideLed(i,k?COL.white:e.c,.35+.65*k);});
+  TS_KITS.forEach((k,i)=>topLed(k.top,k.c,i===this.kit?.8:.15));
+  const beat=this.metro?Math.max(0,1-(now-this.beatAt)/.15):0;
+  topLed(3,COL.green,this.metro?.35+.65*beat:.12);
+  topLed(0,COL.white,.2+(now-this.tempoAt<.2?.6:0));topLed(1,COL.white,.2+(now-this.tempoAt<.2?.6:0));
+ },
+ hud(){return `${TS_KITS[this.kit].name}set${this.last?` · ${this.last}`:''}${this.metro?` · metronom ${this.tempo} slag/min`:''}`;},
+ demo(t){
+  const step=60/110/2,i=Math.floor(t/step),e=i%8,hitAt=new Array(16).fill(-9),at=i*step;
+  const pat={12:[0,3,4],13:[2,6],8:[0,1,2,3,4,5,7],9:[6]};
+  for(const b in pat)for(let k=0;k<3;k++){const ee=(e-k+8)%8;if(pat[b].includes(ee)){hitAt[b]=Math.max(hitAt[b],at-k*step);}}
+  this.drawPads(t,hitAt,[]);
  }
 };
