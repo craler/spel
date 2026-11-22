@@ -7,7 +7,7 @@
 //   input(ev, now)        – a pad or button went down/up: {kind:'pad',x,y,down} / {kind:'top'|'side',i,down}
 //   hud()                 – one or two lines for the screen
 //   demo(t)               – the looping animation the menu shows on the whole grid while the game is selected
-//   isNew, legend         – optional: blink as new in the menu; [[colour, text], …] shown on screen under the rules
+//   legend                – optional: [[colour, text], …] shown on screen under the rules
 // Top row button 7 (User) is reserved for "hold to go back to the menu" (main.js), so games use top 0..6.
 
 const COL={
@@ -17,6 +17,7 @@ const COL={
 const rnd=n=>Math.floor(Math.random()*n);
 const lerp=(a,b,k)=>a+(b-a)*Math.max(0,Math.min(1,k));
 const pulse=(t,speed=3)=>.55+.45*Math.sin(t*speed*Math.PI);
+const wrap01=v=>((v%1)+1)%1;
 
 // ---- 3 × 5 font (M and N are wider). Text colour can be a function of the letter index.
 const GLYPHS={
@@ -74,129 +75,197 @@ function topBar(k,c){const n=k*7;for(let i=0;i<7;i++){const a=Math.max(0,Math.mi
 
 
 // =====================================================================
-// TAKT – the rhythm game. Notes fall down four lanes (two pads wide) in time with the beat.
-// Hit any of the two bottom pads in a lane as the note reaches the bottom row.
+// TAKT – the rhythm game, Guitar Hero style. Coloured notes fall down the lanes in the middle of the grid.
+// Press the lane's pad on the bottom two rows just as the note reaches the bottom row: that plays the lead
+// guitar note. A miss makes the guitar clunk and breaks your streak. The longer the streak, the more of the
+// band plays along (×2 open guitar chords, ×3 crashes and fast hi-hats, ×4 sparkling arpeggios).
+// Levels: 1 = 4 lanes (easy with one hand), 2 = 6 lanes, 3 = 8 lanes. Hit 70 % of a song to go up a level.
+// The columns outside the lanes are speakers that pump with the beat and burn brighter with the multiplier.
 // =====================================================================
-const LANE_COL=[COL.cyan,COL.pink,COL.yellow,COL.green];
+const TAKT_LEVELS=[
+ {lanes:4,x0:2,bpm:100,cols:[COL.green,COL.red,COL.yellow,COL.blue],verse:'easy',chorus:'mid',chords:0},
+ {lanes:6,x0:1,bpm:112,cols:[COL.purple,COL.green,COL.red,COL.yellow,COL.blue,COL.orange],verse:'mid',chorus:'mid',chords:.15},
+ {lanes:8,x0:0,bpm:124,cols:[COL.cyan,COL.purple,COL.green,COL.red,COL.yellow,COL.blue,COL.orange,COL.pink],verse:'mid',chorus:'hard',chords:.25}
+];
+// Chords: bass root in Hz and whether it is major. The lanes are that chord's notes from low (left) to high (right),
+// so every note you hit fits the music.
+const TAKT_CH={Am:[110,0],F:[87.31,1],C:[130.81,1],G:[98,1]};
+const TAKT_SONG=[ // [section, bars, chord per bar (repeats)]
+ ['intro',2,['Am']],['verse',8,['Am','F','C','G']],['chorus',8,['F','G','Am','Am','F','G','C','C']],
+ ['verse',8,['Am','F','C','G']],['chorus',8,['F','G','Am','Am','F','G','C','C']],['outro',2,['Am']]
+];
+// One bar of eighth notes per pattern: 1 = a note.
+const TAKT_RHY={
+ easy:['10001000','10101000','10001010','10100000'],
+ mid:['10101010','10100110','10101000','11001010','10110010','10101011'],
+ hard:['11101010','10111010','11011011','10101111','11111010']
+};
+const TAKT_TONES=[[0,3,7,12,15,19,24,27,31],[0,4,7,12,16,19,24,28,31]]; // minor, major (semitones)
 const Takt={
  id:'takt',name:'Takt',color:COL.pink,
- how:'Ljusen faller i takt med musiken. Tryck på de två nedersta raderna i rätt fil precis när ljuset når botten. Träffa många i rad för dubbla, tredubbla och fyrdubbla poäng.',
- bpm:112,
+ how:'Som Guitar Hero: färgade ljus faller ner i filerna i mitten. Tryck på filens knapp längst ner (de två nedersta raderna) precis när ljuset når botten – då spelar du gitarren. Ju längre serie, desto mer av bandet spelar med. Nivå 1 har fyra filer, lätt att spela med en hand. Träffa 70 % av låten för att gå upp en nivå med fler filer.',
+ carry:0,
  start(now){
+  this.lv=this.carry;this.carry=0;
+  const L=this.L=TAKT_LEVELS[this.lv];
   this.phase='play';
-  this.row=60/this.bpm/2;            // one row per eighth note
-  this.t0=now+1.2;                   // when beat 0 hits the bottom row
-  this.notes=this.makeSong();
-  this.score=0;this.combo=0;this.maxCombo=0;this.hits=0;this.flash=[];this.missFlash=[0,0,0,0];this.laneHit=[0,0,0,0];
-  this.nextEvent=0;this.events=this.makeBacking();this.audioOff=null;
-  this.end=this.t0+this.bars*8*this.row+1.2;
+  this.row=60/L.bpm/2;               // one row per eighth note
+  this.t0=now+.6;                     // when the song starts (the intro is two bars of drums)
+  this.makeSong();
+  this.score=0;this.combo=0;this.maxCombo=0;this.hits=0;this.flash=[];this.missAt=new Array(8).fill(-9);this.laneAt=new Array(8).fill(-9);
+  this.nextSlot=0;this.audioOff=null;this.passed=false;
  },
- bars:24,
- // Seeded-feeling but fresh every time: a walking melody across the lanes, getting busier as the song goes on.
+ // The chart: each section is made of two-bar phrases that repeat (A B A C), like a real song, so it can be learned.
  makeSong(){
-  const notes=[];let lane=rnd(4);
-  for(let bar=1;bar<this.bars;bar++){
-   const busy=bar<4?0:bar<10?.25:bar<18?.45:.6;
-   for(let e=0;e<8;e++){
-    const onBeat=e%2===0;
-    if(!onBeat&&Math.random()>busy)continue;
-    if(onBeat&&bar<4&&e%4!==0)continue;           // first bars: only beats 1 and 3
-    if(onBeat&&Math.random()<.12)continue;          // a little air
-    lane=Math.max(0,Math.min(3,lane+[-1,-1,0,1,1,2,-2][rnd(7)]));
-    const time=this.t0+(bar*8+e)*this.row;
-    notes.push({lane,time,done:false});
-    if(bar>=12&&onBeat&&Math.random()<.18){ // a chord: two lanes at once
-     const other=(lane+1+rnd(3))%4;notes.push({lane:other,time,done:false});
+  const L=this.L,notes=[],slots=[];let bar=0;
+  for(const [sec,bars,prog] of TAKT_SONG){
+   const pool=sec==='verse'?TAKT_RHY[L.verse]:TAKT_RHY[L.chorus];
+   const phrase=()=>{let lane=rnd(L.lanes);const out=[];for(let b=0;b<2;b++){const r=pool[rnd(pool.length)];for(let e=0;e<8;e++)if(r[e]==='1'){lane=Math.max(0,Math.min(L.lanes-1,lane+[-1,-1,0,1,1,2,-2][rnd(7)]));out.push([b,e,lane]);}}return out;};
+   const A=phrase(),B=phrase(),C=phrase(),order=[A,B,A,C];
+   for(let b=0;b<bars;b++){
+    const chord=prog[b%prog.length];
+    for(let e=0;e<8;e++)slots.push({time:this.t0+((bar+b)*8+e)*this.row,sec,b,bars,e,chord});
+    if(sec==='intro')continue;
+    if(sec==='outro'){if(b===0)notes.push(this.note(0,this.t0+(bar+b)*8*this.row,chord));continue;}
+    for(const [pb,e,lane] of order[Math.floor(b/2)%4])if(pb===b%2){
+     const time=this.t0+((bar+b)*8+e)*this.row;
+     notes.push(this.note(lane,time,chord));
+     if(sec==='chorus'&&e%4===0&&Math.random()<L.chords)notes.push(this.note((lane+2)%L.lanes,time,chord));
     }
    }
+   bar+=bars;
   }
-  return notes;
+  this.notes=notes;this.slots=slots;this.bars=bar;
+  this.end=this.t0+bar*8*this.row+.8;
  },
- // Drums and bass on the audio clock, scheduled a little ahead in update().
- makeBacking(){
-  const ev=[],roots=[110,87.3,130.8,98];
-  for(let bar=0;bar<this.bars;bar++)for(let e=0;e<8;e++){
-   const time=this.t0+(bar*8+e)*this.row; // lands together with the notes
-   if(e%4===0||(bar>=12&&e%2===0))ev.push([time,'kick']);
-   if(e===2||e===6)ev.push([time,'snare']);
-   ev.push([time,'hat']);
-   if(e%2===0&&bar>=2)ev.push([time,'bass',roots[Math.floor(bar/2)%4]*(e===4?1.5:1)]);
+ note(lane,time,chord){
+  const [root,major]=TAKT_CH[chord],tones=TAKT_TONES[major],off=this.L.lanes===4?2:0; // 4 lanes: fifth up to the high fifth
+  return {lane,time,done:false,f:root*2*Math.pow(2,tones[lane+off]/12)};
+ },
+ // The band, one eighth note at a time, scheduled a little ahead on the audio clock.
+ playSlot(s,at){
+  const m=this.mult(),r=this.row,[root]=TAKT_CH[s.chord],last=s.b===s.bars-1;
+  if(s.sec==='intro'){
+   if(s.b===0){if(s.e%2===0)drum.stick(at);return;}            // count-in: 1, 2, 3, 4 on the sticks
+   if(s.e===0||s.e===4)drum.kick(at);if(s.e===2)drum.snare(at);
+   if(s.e>=5)drum.snare(at,.14+.04*(s.e-5));                   // a little fill into the song
+   if(s.e===7)drum.snare(at+r/2,.24);
+   chug(root,at,r*.85,true);
+   return;
   }
-  return ev;
+  if(s.sec==='outro'){
+   if(s.b===0&&s.e===0){drum.crash(at);drum.kick(at);chug(root,at,r*14,false);bassNote(root,at,r*14);}
+   return;
+  }
+  const chorus=s.sec==='chorus';
+  // Drums
+  if(s.e===0||s.e===4||(chorus&&s.e===3)||(m>=4&&s.e===7))drum.kick(at);
+  if(s.e===2||s.e===6)drum.snare(at);
+  if(last&&s.e>=4){drum.tom([330,262,196,147][s.e-4],at);if(m>=3)drum.snare(at+r/2,.12);}
+  else if(chorus&&s.e%2===1)drum.open(at);else drum.hat(at);
+  if(m>=3){drum.hat(at+r/2,.04);if(s.e===0&&(s.b%4===0||chorus&&s.b%2===0))drum.crash(at);}
+  else if(s.e===0&&s.b===0)drum.crash(at);
+  // Bass: eighths on the root, octave jumps when the band is going hard
+  bassNote(root*(m>=3&&s.e%2===1?2:1),at,r*.85);
+  // Rhythm guitar: palm-muted chugs, opening up to ringing power chords from ×2
+  const open=m>=2&&(chorus?s.e===0||s.e===3||s.e===6:s.e===0);
+  if(open)chug(root,at,r*(s.e===6?2:3)*.95,false);
+  else if(!(m>=2&&chorus&&(s.e===1||s.e===2||s.e===4||s.e===5||s.e===7)))chug(root,at,r*.8,true);
+  // ×4: a sparkling arpeggio on top
+  if(m>=4){const [, major]=TAKT_CH[s.chord],tn=TAKT_TONES[major];for(let k=0;k<2;k++){const f=root*8*Math.pow(2,tn[(s.e*2+k)%4]/12);tone(f,f,r*.45,'triangle',.035,at+k*r/2);}}
  },
  update(dt,now){
   if(this.phase==='over')return;
-  // Music
   if(audioReady()){
-   if(this.audioOff===null)this.audioOff=audioNow()-now;
-   while(this.nextEvent<this.events.length&&this.events[this.nextEvent][0]<now+.15){
-    const [time,kind,f]=this.events[this.nextEvent++],at=time+this.audioOff;
-    if(time>=now-.02){if(kind==='bass')drum.bass(f,at);else drum[kind](at);}
+   // Line the audio clock up with the game clock, minus the speaker delay so the sound lands with the lights.
+   if(this.audioOff===null)this.audioOff=audioNow()-now-(ctx.outputLatency||ctx.baseLatency||0);
+   while(this.nextSlot<this.slots.length&&this.slots[this.nextSlot].time<now+.12){
+    const s=this.slots[this.nextSlot++];
+    if(s.time>=now-.03)this.playSlot(s,s.time+this.audioOff);
    }
   }
-  // Missed notes
-  for(const n of this.notes)if(!n.done&&now-n.time>.16){n.done=true;n.missed=true;this.combo=0;this.missFlash[n.lane]=now;}
+  for(const n of this.notes)if(!n.done&&now-n.time>.15){n.done=true;this.combo=0;this.missAt[n.lane]=now;clunk();}
   if(now>this.end){
+   const total=this.notes.length||1;this.passed=this.hits/total>=.7;
    const best=saveBest(this.id,this.score);
-   gameOver(this,this.score,best?COL.gold:COL.pink,now);best?sfx.win():sfx.over();
+   gameOver(this,this.score,best?COL.gold:this.passed?COL.green:COL.pink,now);this.passed||best?sfx.win():sfx.over();
   }
  },
  mult(){return Math.min(4,1+Math.floor(this.combo/8));},
  input(ev,now){
-  if(this.phase==='over')return overInput(this,ev,now);
+  if(this.phase==='over'){
+   if(ev.kind==='pad'&&ev.down&&now-this.overAt>1){this.carry=this.passed?Math.min(this.lv+1,TAKT_LEVELS.length-1):this.lv;this.start(now);sfx.start();}
+   return;
+  }
   if(ev.kind!=='pad'||!ev.down||ev.y<6)return;
-  const lane=ev.x>>1;
-  let best=null,bd=.16;
+  const lane=ev.x-this.L.x0;
+  if(lane<0||lane>=this.L.lanes)return;
+  this.laneAt[lane]=now;
+  let best=null,bd=.15;
   for(const n of this.notes){if(n.done||n.lane!==lane)continue;const d=Math.abs(n.time-now);if(d<bd){bd=d;best=n;}}
-  this.laneHit[lane]=now;
-  if(!best){this.combo=0;tone(110,90,.06,'square',.05);return;}
+  if(!best){this.combo=0;clunk();return;}
   best.done=true;this.combo++;this.hits++;this.maxCombo=Math.max(this.maxCombo,this.combo);
-  const perfect=bd<.07;
+  const perfect=bd<.06;
   this.score+=(perfect?100:50)*this.mult();
   this.flash.push({lane,at:now,perfect});
-  sfx.hit(lane*2+(perfect?2:0));
+  lead(best.f,Math.max(.25,this.row*1.6));
  },
  draw(now){
-  if(this.phase==='over')return drawOver(this,now);
-  // Lanes: faint guide at the bottom, brighter where you press
-  for(let l=0;l<4;l++){
-   const c=LANE_COL[l],pressed=now-this.laneHit[l]<.12,miss=now-this.missFlash[l]<.25;
-   for(let k=0;k<2;k++){
-    px(l*2+k,7,miss?COL.red:c,miss?.8:pressed?.7:.18);
-    px(l*2+k,6,c,pressed?.35:.06);
-   }
+  if(this.phase==='over'){
+   drawOver(this,now);
+   // Up a level: the new number of lanes lights up on the top row
+   if(this.passed&&now-this.overAt>1){const n=TAKT_LEVELS[Math.min(this.lv+1,TAKT_LEVELS.length-1)].lanes;for(let i=0;i<Math.min(7,n);i++)topLed(i,COL.gold,.5+.5*pulse(now,2));}
+   return;
+  }
+  const L=this.L,m=this.mult(),song=now-this.t0,beat=song<0||now>this.end-.8?0:Math.max(0,1-(song/(2*this.row))%1*1.6); // 1 on every beat, fading
+  // Speakers outside the lanes: pump with the beat, taller and hotter with the multiplier, rainbow flames at ×4
+  const mc=[COL.cyan,COL.green,COL.yellow,COL.pink][m-1];
+  for(let x=0;x<8;x++){
+   if(x>=L.x0&&x<L.x0+L.lanes)continue;
+   const h=(m*2)*(.35+.65*beat);
+   for(let j=0;j<8;j++){const a=Math.max(0,Math.min(1,h-j));if(a>0)px(x,7-j,m===4?hue(wrap01(j/10+now*.6+x*.1)):mc,a*(.25+.55*beat));}
+  }
+  // Frets on the bottom row (always faintly lit), brighter where you press
+  for(let l=0;l<L.lanes;l++){
+   const x=L.x0+l,c=L.cols[l],pressed=now-this.laneAt[l]<.12,miss=now-this.missAt[l]<.25;
+   px(x,7,miss?COL.red:c,miss?.9:pressed?.8:.3+.15*beat);
+   px(x,6,c,pressed?.3:.05);
   }
   // Falling notes: y = 7 when it is time to hit
   for(const n of this.notes){
    if(n.done)continue;
    const y=7-(n.time-now)/this.row;
    if(y<-1||y>7.6)continue;
-   const yi=Math.round(y),c=LANE_COL[n.lane];
-   for(let k=0;k<2;k++){px(n.lane*2+k,yi,c);px(n.lane*2+k,yi-1,c,.25);}
+   const yi=Math.round(y),x=L.x0+n.lane,c=L.cols[n.lane];
+   px(x,yi,c);px(x,yi-1,c,.2);
   }
-  // Hit sparkles
-  this.flash=this.flash.filter(f=>now-f.at<.3);
+  // Hits: the fret flashes white and a spark shoots up the lane
+  this.flash=this.flash.filter(f=>now-f.at<.35);
   for(const f of this.flash){
-   const a=1-(now-f.at)/.3;
-   for(let k=0;k<2;k++){px(f.lane*2+k,7,COL.white,a);px(f.lane*2+k,6,f.perfect?COL.white:LANE_COL[f.lane],a*.6);}
-   if(f.perfect){px(f.lane*2-1,7,LANE_COL[f.lane],a*.5);px(f.lane*2+2,7,LANE_COL[f.lane],a*.5);}
+   const k=(now-f.at)/.35,a=1-k,x=L.x0+f.lane,c=L.cols[f.lane];
+   px(x,7,COL.white,a);px(x,Math.round(6-k*6),f.perfect?COL.white:c,a*.8);
+   if(f.perfect){px(x-1,7,c,a*.6);px(x+1,7,c,a*.6);}
   }
-  // Song progress on top, combo meter on the right (fills from the bottom, colour shows the multiplier)
+  // Song progress on top, streak meter on the right (fills from the bottom, colour shows the multiplier)
   topBar(Math.max(0,Math.min(1,(now-this.t0)/(this.end-this.t0))),COL.purple);
-  const m=this.mult(),mc=[COL.cyan,COL.green,COL.yellow,COL.pink][m-1];
   const fillN=m===4?8:this.combo%8;
-  for(let i=0;i<fillN;i++)sideLed(7-i,mc);
-  // Before the first note: count-in pulse on the bottom row
-  if(now<this.t0)for(let x=0;x<8;x++)px(x,7,COL.white,.15+.25*pulse(now,2));
+  for(let i=0;i<fillN;i++)sideLed(7-i,mc,m===4?.6+.4*pulse(now,4):1);
  },
  hud(){
-  if(this.phase==='over'){const total=this.notes.length||1;return `Poäng ${this.score} · träffar ${Math.round(100*this.hits/total)} % · längsta serie ${this.maxCombo}`;}
-  return `Poäng ${this.score} · serie ${this.combo} · ×${this.mult()}`;
+  const lvl=`Nivå ${this.lv+1} (${this.L.lanes} filer)`;
+  if(this.phase==='over'){
+   const total=this.notes.length||1,pct=Math.round(100*this.hits/total);
+   const next=this.passed?(this.lv+1<TAKT_LEVELS.length?` Klarat! Tryck på plattan för nivå ${this.lv+2}.`:' Klarat högsta nivån!'):' Träffa 70 % för nästa nivå – tryck för att försöka igen.';
+   return `${lvl} · poäng ${this.score} · träffar ${pct} % · längsta serie ${this.maxCombo}.${next}`;
+  }
+  return `${lvl} · poäng ${this.score} · serie ${this.combo} · ×${this.mult()}`;
  },
  demo(t){
+  const L=TAKT_LEVELS[0],beat=Math.max(0,1-(t%.6)/.6*1.6);
+  for(const x of [0,1,6,7])for(let j=0;j<4;j++){const a=Math.max(0,Math.min(1,4*(.35+.65*beat)-j));if(a>0)px(x,7-j,COL.cyan,a*(.25+.5*beat));}
   for(let l=0;l<4;l++){
-   const c=LANE_COL[l];for(let k=0;k<2;k++)px(l*2+k,7,c,.25);
-   for(let j=0;j<2;j++){const y=Math.floor((t*3.7+l*2.3+j*4)%9)-1;for(let k=0;k<2;k++){px(l*2+k,y,c);px(l*2+k,y-1,c,.25);}if(y===7)for(let k=0;k<2;k++)px(l*2+k,7,COL.white);}
+   const x=L.x0+l,c=L.cols[l];px(x,7,c,.3);
+   for(let j=0;j<2;j++){const y=Math.floor((t*3.3+l*2.1+j*4.5)%9)-1;px(x,y,c);px(x,y-1,c,.2);if(y===7)px(x,7,COL.white);}
   }
  }
 };
@@ -464,10 +533,11 @@ const FM_HZ=[329.6,440,277.2,220];
 const fmQuad=(x,y)=>(y<4?0:2)+(x<4?0:1);
 function fmFill(q,c,a){const ox=(q%2)*4,oy=q<2?0:4;for(let y=0;y<4;y++)for(let x=0;x<4;x++)px(ox+x,oy+y,c,a);}
 const Fargminne={
- id:'fargminne',name:'Färgminne',color:COL.yellow,isNew:true,
- how:'Plattan är fyra färgade fält. De lyser upp ett i taget i en viss ordning. Tryck sedan på fälten i samma ordning. Varje nivå blir ordningen ett steg längre.',
+ id:'fargminne',name:'Färgminne',color:COL.yellow,
+ how:'Plattan är fyra färgade fält. De lyser upp ett i taget i en viss ordning. Tryck sedan på fälten i samma ordning. Första nivån är tre färger, och varje nivå blir ordningen ett steg längre.',
  legend:[[COL.green,'Grön'],[COL.red,'Röd'],[COL.yellow,'Gul'],[COL.blue,'Blå']],
- start(now){this.phase='play';this.seq=[];this.level=0;this.press=null;this.next(now);},
+ start(now){this.phase='play';this.seq=[rnd(4),rnd(4)];this.level=0;this.press=null;this.next(now);},
+ levelFor:.85, // how long the level number is shown (it lights up in .2 s and fades out the last .2 s)
  next(now){
   this.level++;this.seq.push(rnd(4));this.pos=0;this.wrong=-1;this.shown=-1;
   this.step='level';this.stepAt=now;
@@ -478,8 +548,8 @@ const Fargminne={
  update(dt,now){
   if(this.phase==='over')return;
   const t=now-this.stepAt;
-  if(this.step==='level'&&t>1.8){this.step='pause';this.stepAt=now;}
-  else if(this.step==='pause'&&t>.4){this.step='show';this.stepAt=now;}
+  if(this.step==='level'&&t>this.levelFor){this.step='pause';this.stepAt=now;}
+  else if(this.step==='pause'&&t>.2){this.step='show';this.stepAt=now;}
   else if(this.step==='show'){
    const {on,gap}=this.timing(),i=Math.floor(t/(on+gap));
    if(i>=this.seq.length){this.step='input';this.stepAt=now;}
@@ -503,12 +573,15 @@ const Fargminne={
  draw(now){
   if(this.phase==='over')return drawOver(this,now);
   const t=now-this.stepAt;
-  for(let q=0;q<4;q++)fmFill(q,FM_COL[q],this.step==='level'?.07:.14);
   if(this.step==='level'){
-   // The level number lights up from the left in white, clearly over the four boards
-   drawBigNumber(this.level,COL.white,Math.min(1,t/.5),0);
-   for(let x=0;x<8;x++)px(x,7,FM_COL[fmQuad(x,7)],Math.min(1,t/.5)*.6);
-  }else if(this.step==='show'){
+   // Only the level number, white on black: lights up from the left, then fades out quickly
+   const out=Math.max(0,Math.min(1,(this.levelFor-t)/.2));
+   drawBigNumber(this.level,COL.white,Math.min(1,t/.2),0);
+   if(out<1)fill(BLACK,1-out);
+   return;
+  }
+  for(let q=0;q<4;q++)fmFill(q,FM_COL[q],this.step==='pause'?.14*Math.min(1,t/.2):.14);
+  if(this.step==='show'){
    const {on,gap}=this.timing(),i=Math.floor(t/(on+gap)),lt=t-i*(on+gap);
    if(i<this.seq.length&&lt<on)fmFill(this.seq[i],FM_COL[this.seq[i]],1);
   }else if(this.step==='good'){
