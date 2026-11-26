@@ -61,7 +61,7 @@ function onEventSquare(i,j){return events.some(e=>e.i===i&&e.j===j);}
 // The people of the event, added to the crowd every frame.
 function eventPeople(){for(const e of events)peopleOf(e);}
 function peopleOf(e){
- const id=n=>'ev'+e.serial+':'+n,add=(n,x,y,z,yaw,c,base,label,shout,extra={})=>people.push({x,y,z,id:id(n),i:e.i,j:e.j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:n*1.7,fixed:true,event:true,base,label,shout,star:base>=80,umb:false,...extra});
+ const id=n=>'ev'+e.serial+':'+n,add=(n,x,y,z,yaw,c,base,label,shout,extra={})=>people.push({x,y,z,id:id(n),i:e.i,j:e.j,route:0,walk:0,yaw,running:false,c,phase:n*1.7,fixed:true,event:true,base,label,shout,star:base>=80,umb:false,...extra});
  const t=elapsed;
  const R=(n,k)=>hash(e.serial,n,k); // fixed per event, so the crowd keeps its places from frame to frame
  if(e.kind==='konsert'){
@@ -132,7 +132,7 @@ function hudOf(e,row){
  const line=e.title+' · '+e.hits+'/'+e.goal+' · '+Math.ceil(e.left)+' s';
  text(line,width/2,96+row*20,15,e.done?'#6dff85':'#ffd24a','center',900);
  const v=cameraPoint([e.x,4,e.z]),far=Math.hypot(e.x-bird.x,e.z-bird.z),m=v[2]>.6&&screen(v),seen=m&&m[0]>40&&m[0]<width-40&&m[1]>60&&m[1]<height-60;
- if(seen){if(far>30&&e.age<12)text('▼ '+Math.round(far)+' m',m[0],m[1],14,'#ffd24a','center',900);return;}
+ if(seen){if(far>30&&e.age<12)text('▼ '+Math.round(far/5)*5+' m',m[0],m[1],14,'#ffd24a','center',900);return;}
  if(e.age>=12)return; // the arrow only shows for the first seconds
  const l=Math.hypot(v[0],v[1])||1,dx=(v[2]<0?-1:1)*v[0]/l,dy=-(v[2]<0?-1:1)*v[1]/l,reach=Math.min(width,height);
  ctx.save();ctx.translate(width/2+dx*reach*.4,height*.46+dy*reach*.36);ctx.rotate(Math.atan2(dy,dx));

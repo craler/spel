@@ -1,5 +1,5 @@
 'use strict';
-// Everything that lives in the city: pedestrians, traffic, food, the hawk.
+// Everything that lives in the city: pedestrians, traffic, the hawk, the helicopter and the tanks.
 // Where a walk of `distance` round block i,j's pavement ends up. pavePoint() leaves the answer in paveX and paveZ:
 // it is called for every pedestrian every frame, so it must not create anything.
 let paveX=0,paveZ=0;
@@ -33,7 +33,7 @@ function walkersOf(b){
   if(!jog&&hash(i,j,k+77)<.2)continue; // a fifth of the pedestrians stay at home, which saves drawing them
   const phase=hash(i,j,k)*tau;
   const h={id:i+','+j+','+k,i,j,phase,home:k*perimeter/8+phase,walk:(k%2?1.15:-.95)*(jog?3.6:1),jog,umbRoll:hash(i,j,k+20),
-   c:jog?'#d9f03a':colors[Math.floor(hash(i,j,k+8)*colors.length)],x:0,y:0,z:0,route:0,yaw:0,climbing:false,running:false,umb:false,chase:-1,run:null};
+   c:jog?'#d9f03a':colors[Math.floor(hash(i,j,k+8)*colors.length)],x:0,y:0,z:0,route:0,yaw:0,running:false,umb:false,chase:-1,run:null};
   // Joggers are worth more but get no star: they are everywhere, and the stars are for the rarer targets.
   if(jog){h.base=30;h.label='JOGGAREN';h.shout='MITT VARVREKORD!';h.star=false;}
   b.walkers.push(h);
@@ -63,18 +63,18 @@ function moveWalker(h,dt){
 function folkOf(b){
  if(b.folkPeople)return b.folkPeople;
  const {i,j}=b;
- return b.folkPeople=b.folk.map((f,n)=>({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,yaw:0,yaw0:hash(i,j,n+300)*tau,
+ return b.folkPeople=b.folk.map((f,n)=>({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,yaw:0,yaw0:hash(i,j,n+300)*tau,
   running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false}));
 }
 // The two rowers on a canal block.
 function rowersOf(b){
- if(!b.rowers)b.rowers=[0,1].map(n=>({x:0,y:WATER+.3,z:0,id:'boat'+n+','+b.i+','+b.j,i:b.i,j:b.j,route:0,walk:0,climbing:false,yaw:0,running:false,
+ if(!b.rowers)b.rowers=[0,1].map(n=>({x:0,y:WATER+.3,z:0,id:'boat'+n+','+b.i+','+b.j,i:b.i,j:b.j,route:0,walk:0,yaw:0,running:false,
   c:n?'#3f7fa8':'#e8e4da',phase:b.i+b.j,fixed:true,base:45,label:'BÅTTUREN',shout:'MAN ÖVER BORD!',star:true,umb:false}));
  const at=boatsAt(b);for(const [n,h] of b.rowers.entries()){h.x=at[n].x;h.z=at[n].z;h.yaw=at[n].yaw;}
  return b.rowers;
 }
 
-const brokeUmb=new Set(), eaten=new Map(), alarms=new Map();
+const brokeUmb=new Set(), alarms=new Map();
 let hawk=null;
 // ---- High-value targets (gold stars): they move, which is what makes them worth more.
 function jogger(i,j,k){return k===7&&hash(i,j,91)<.4;}
@@ -223,7 +223,7 @@ function slips(){
   crashCar(c);carsHit++;run.carSlips++;award(20,'BAJSHALKA',null,0,[c.x,2.5,c.z]);bubble(c.x,2.3,c.z,'JAG HALKAR!');
  }
  for(const h of people){
-  if(h.fixed||h.event||h.climbing||h.y>.1||scored.has(h.id))continue;
+  if(h.fixed||h.event||h.y>.1||scored.has(h.id))continue;
   const patch=near(h.x,h.z,.9);if(patch.length<2)continue;
   for(const s of patch)s.used=true;
   scored.add(h.id);fallen.set(h.id,elapsed);hits++;feedLine('HALKADE',5);addPoints(5);

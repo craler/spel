@@ -50,7 +50,7 @@ document.querySelector('.panel').addEventListener('click',e=>{
   if(what==='pitch'){reversePitch=!reversePitch;try{localStorage.setItem('fagelbajs.upClimbs',reversePitch?'yes':'no');}catch{}}
   if(what==='sound'){muted=!muted;setAudio();}
   if(what==='camera')view();
-  if(what==='graphics'){quality={auto:'high',high:'fast',fast:'fastest',fastest:'auto'}[quality];try{localStorage.setItem('fagelbajs.quality',quality);}catch{}setLevel(levelOf(quality));}
+  if(what==='graphics'){quality={auto:'high',high:'fast',fast:'fastest',fastest:'auto'}[quality];try{localStorage.setItem('fagelbajs.quality',quality);}catch{}setLevel(levelOf(quality));Object.assign(pace,{clock:0,calm:0,trial:null,capped:false,resTrial:null,resLocked:false});pace.triedUp.clear();}
   openView('settings');
  }
 });
@@ -122,19 +122,21 @@ applyLook();homeMenu();
 // (a phone in power-saving mode, say) nothing helps, and then the game should at least stay sharp and good-looking.
 // Only flying counts: a menu or a hidden tab says nothing about how the game itself runs.
 let paceNow=0; // the time of the frame being judged
-const pace={clock:0,calm:0,trial:null,capped:false,resTrial:null,resLocked:false,triedUp:new Set()};
+const pace={clock:0,calm:0,trial:null,capped:null,resTrial:null,resLocked:false,triedUp:new Set()};
 function setAuto(n){autoLevel=n;try{localStorage.setItem('fagelbajs.autoLevel',String(n));}catch{}setLevel(n);}
 // A step up that proved too much is remembered for a week, so it is not tried again on every visit.
+function cappedLately(){try{return Date.now()-(+localStorage.getItem('fagelbajs.paceCap')||0)<864e5;}catch{return false;}}
 function ceilingAllows(n){try{const c=JSON.parse(localStorage.getItem('fagelbajs.autoCeil')||'null');return !(c&&n<=c.level&&Date.now()-c.at<6048e5);}catch{return true;}}
 function keepPace(real,now){
  paceNow=now;frameTime=mix(frameTime,real,.04);quickFor=frameTime<1/52?quickFor+real:0;
  if(navigator.webdriver)return;
+ if(pace.capped===null)pace.capped=quality==='auto'&&cappedLately();
  const slow=frameTime>1/40;pace.clock+=real;pace.calm=frameTime<1/55?pace.calm+real:0;
  if(quality==='auto'&&!pace.capped){
   if(pace.trial){ // four seconds after a change: keep it, or take it back
    if(pace.clock<4)return;
    const t=pace.trial;pace.trial=null;pace.clock=0;
-   if(t.down&&frameTime>t.before*.87){pace.capped=true;setAuto(t.from);}        // no faster even on the lightest graphics: the screen sets the pace
+   if(t.down&&frameTime>t.before*.87){pace.capped=true;setAuto(t.from);try{localStorage.setItem('fagelbajs.paceCap',String(Date.now()));}catch{}}        // no faster even on the lightest graphics: the screen sets the pace
    else if(!t.down&&slow){setAuto(t.from);try{localStorage.setItem('fagelbajs.autoCeil',JSON.stringify({level:t.to,at:Date.now()}));}catch{}} // the step up was too much
    return;
   }
@@ -155,11 +157,11 @@ function keepPace(real,now){
  else if(quickFor>8&&density<top){density=Math.min(top,density+.25);lastTune=now;quickFor=0;fit();}
 }
 function frame(now){
- const real=Math.min(.05,(now-prev)/1000),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
+ const since=(now-prev)/1000,real=Math.min(.05,since),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
  // While paused the picture stands still, so it is drawn once and then left alone.
  if(state==='pause'&&pausedDrawn&&!previewLooks()){requestAnimationFrame(frame);return;}
  if(state==='pause')pausedDrawn=true;
- if(state==='play')keepPace(real,now);
+ if(state==='play')keepPace(Math.min(.25,since),now); // the true time between frames: the game itself never steps more than a twentieth of a second
  if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);if(state==='play')record();} // people and traffic move once per frame, on the second step
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu'||previewLooks())wingPhase+=dt*3;

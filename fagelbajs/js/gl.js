@@ -365,7 +365,7 @@ for(const s of skies){const l=Math.hypot(...s.dir);s.dir=s.dir.map(v=>v/l);}
 let sky=skies[0];
 const spot={on:0,pos:[0,0,0],dir:[0,-1,0]}; // the helicopter's searchlight, set each frame
 function setSky(n){sky=skies[n%skies.length];}
-const lightM=new Float32Array(16), viewM=new Float32Array(16), SHADOW_R=134, SHADOW_STEP=16;
+const lightM=new Float32Array(16), viewM=new Float32Array(16), SHADOW_R=141, SHADOW_STEP=32; // the map reaches 141 m from its centre, which is moved in steps of 32 m
 function lightMatrix(cx,cy,cz){
  const R=SHADOW_R,D=260,L=sky.dir,rl=Math.hypot(L[2],L[0]),r=[L[2]/rl,0,-L[0]/rl];
  const u=[L[1]*r[2]-L[2]*r[1],L[2]*r[0]-L[0]*r[2],L[0]*r[1]-L[1]*r[0]];
@@ -391,7 +391,7 @@ function lightUniforms(prog){
  if(u.uTime)gl.uniform1f(u.uTime,performance.now()/1000);
 }
 // The shadows of everything that stands still. drawStatics() must upload and draw the static meshes near the bird.
-// Redrawn only when the bird has moved SHADOW_STEP metres, the sun has changed or shadowDirty is set.
+// Redrawn only when the bird has moved SHADOW_STEP metres (every couple of seconds), the sun has changed or shadowDirty is set.
 function staticShadow(drawStatics){
  const ax=Math.round(bird.x/SHADOW_STEP)*SHADOW_STEP,az=Math.round(bird.z/SHADOW_STEP)*SHADOW_STEP;
  if(blitOk&&!shadowDirty&&ax===shadowAt[0]&&az===shadowAt[1]&&sky===shadowAt[2])return;

@@ -8,7 +8,7 @@ const stickInput={x:0,y:0,on:false};
 const keys=new Set(), gravity=16, tile=42;
 const colors=['#c8443a','#2f6f9f','#e0b23a','#3d8f6f','#8a5ca8','#e8e4da','#30343c','#d97b3a'];
 let state='menu', bird, elapsed=0, hits=0, drops=[], stains=[], scored=new Set(), cooldown=0, messageTime=0;
-let camView=0, above=false, muted=false, sound, people=[], camera={}, wingPhase=0, width,height,scale;
+let camView=0, muted=false, sound, people=[], camera={}, wingPhase=0, width,height,scale;
 let reversePitch=false, rig=null, crash=null, slowmo=0, shake=0;
 // Graphics: 'auto' decides by itself; 'high' (Snygg) always looks its best; 'fast' (Snabb) and 'fastest' (Snabbast)
 // are for weak computers, phones and Chromebooks. gfx is the level in use right now: 0 Snygg, 1 Snabb, 2 Snabbast,

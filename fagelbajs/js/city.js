@@ -14,11 +14,10 @@ const blockCache=new Map();
 function block(i,j){
  const key=i+','+j;let b=blockCache.get(key);if(b)return b;
  const x=i*tile,z=j*tile,type=blockType(i,j),R=n=>hash(i,j,n);
- b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],food:[],folk:[],parked:[],statue:null,cleaner:null};
+ b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],folk:[],parked:[],statue:null};
  // Heights follow whole 3.1 m storeys so the window rows line up with the roof.
  const storeys=(n,lo,hi)=>3.1*(lo+Math.floor(R(n)*(hi-lo+1)))+.8;
  const add=(a,c,w,d,h,n)=>b.blds.push([x+a,z+c,w,d,h,Math.floor(R(n)*wallPaint.length),R(n+1)]);
- const food=()=>{}; // the eat-to-reload mechanic is gone; tables and picnics are just scenery and targets now
  if(type===0){
   const v=Math.floor(R(5)*6);
   if(v===0){add(10,10,11,10,storeys(3,1,8),30);add(24,22,9,12,storeys(6,2,12),32);
@@ -28,17 +27,14 @@ function block(i,j){
   else if(v===4){add(9,9,24,24,storeys(3,1,2),30);add(15,15,12,12,storeys(6,7,12),32);} // a tower on a podium
   else if(v===5){add(9,9,15,24,storeys(3,3,6),30);add(26,13,7,16,storeys(6,6,11),32);}
   else{add(9,9,10,10,storeys(3,1,6),30);add(23,9,10,10,storeys(6,2,9),32);add(9,23,10,10,storeys(7,2,10),34);add(23,23,10,10,storeys(8,1,5),36);}
-  const tall=b.blds.find(q=>q[4]>18&&q[1]-z<12);
-  if(false&&tall&&R(160)<.6)b.cleaner= // window cleaners are switched off; set false to true to bring them back
-   [tall[0]+tall[2]/2,tall[1]-.75,tall[4],R(161)*9];
   if(R(13)<.55)for(let n=0;n<4;n++){ // street trees along two sides
    b.trees.push([x+11+n*6.8,z+5.9,.62+R(14+n)*.2,R(18+n)],[x+5.9,z+11+n*6.8,.62+R(22+n)*.2,R(26+n)]);}
  }else if(type===1){
   for(let n=0;n<13;n++){const a=n*tau/13+R(50+n)*.3,r=10.5+R(70+n)*3.2;
    b.trees.push([x+21+Math.cos(a)*r,z+21+Math.sin(a)*r,1+R(90+n)*.8,R(110+n)]);}
   for(let n=0;n<4;n++){const a=n*tau/4+.6;b.benches.push([x+21+Math.cos(a)*7.4,z+21+Math.sin(a)*7.4,a+Math.PI/2]);}
-  // Picnics on the lawn: the food sits low, so you have to skim the grass.
-  for(let n=0;n<3;n++){const a=n*tau/3+R(40)*tau,fx=21+Math.cos(a)*3.8,fz=21+Math.sin(a)*3.8;food(fx,.75,fz);
+  // Picnics on the lawn.
+  for(let n=0;n<3;n++){const a=n*tau/3+R(40)*tau,fx=21+Math.cos(a)*3.8,fz=21+Math.sin(a)*3.8;
    b.folk.push({x:x+fx+1.2,z:z+fz+.5,c:colors[n+1],base:15,label:'PICKNICK',shout:'MIN MACKA!'});}
  }else if(type===3){
   // Amsterdam-style: a row of narrow gabled houses on each side, a tree-lined quay, and the water in between.
@@ -52,9 +48,9 @@ function block(i,j){
   b.statue=[x+21,z+21];b.blds.push([x+20.1,z+20.1,1.8,1.8,5.6,-1,0]); // the plinth is solid, drawn as a statue
   const spots=[[12,12],[30,12],[12,30],[30,30],[21,10.5],[21,31.5]];
   for(const [n,[sx,sz]] of spots.entries()){
-   if(n<4){b.tables.push([x+sx,z+sz,Math.floor(R(60+n)*parasolPaint.length)]);food(sx,1.15,sz);
+   if(n<4){b.tables.push([x+sx,z+sz,Math.floor(R(60+n)*parasolPaint.length)]);
     b.folk.push({x:x+sx+1.15,z:z+sz+.3,c:colors[(n+2)%colors.length],base:15,label:'FIKAPAUS',shout:'MIN LATTE!'},{x:x+sx-1.1,z:z+sz-.4,c:colors[(n+5)%colors.length],base:15,label:'FIKAPAUS',shout:'MIN BULLE!'});}
-   else{b.stalls.push([x+sx,z+sz,Math.floor(R(66+n)*parasolPaint.length)]);food(sx,1.35,sz+(n===4?1.3:-1.3));}
+   else{b.stalls.push([x+sx,z+sz,Math.floor(R(66+n)*parasolPaint.length)]);}
   }
   if(R(61)<.5||(i===0&&j===1)){ // a wedding party in front of the statue
    b.folk.push({x:x+20.3,z:z+16.2,c:'#f4f1ea',base:60,label:'BRÖLLOPSKAOS',shout:'MIN KLÄNNING!',bride:true},{x:x+21.6,z:z+16.2,c:'#1d2026',base:60,label:'BRÖLLOPSKAOS',shout:'MIN KOSTYM!'});

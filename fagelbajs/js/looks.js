@@ -25,16 +25,12 @@ function wear(id){
  const l=lookList.find(l=>l.id===id);if(!l||!unlocked(l))return;
  worn[l.slot]=worn[l.slot]===id?null:id;try{localStorage.setItem('fagelbajs.look',JSON.stringify(worn));}catch{}applyLook();
 }
-// Colours that follow the look: a pink body and wings, golden droppings.
+// Colours that follow the look: golden droppings.
 const normalGoo=['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'],goldGoo=['#f6cf4a','#e8b830','#ffd85e','#d9a520','#f2c84a'];
-const plumeNormal={back:'#7c8aab',belly:'#a9b3c9',head:'#6a7697',rump:'#9aa6c0'},plumePink={back:'#c98bb0',belly:'#efc4dc',head:'#b8739e',rump:'#e0a8c8'};
 function applyLook(){
- const pal=wearing('body')==='rosa'?plumePink:plumeNormal;for(const k in pal)plumeCol[k]=rgb(pal[k]);bodyGeo=null;
  const gold=wearing('poop')==='guld',goo=(gold?goldGoo:normalGoo).map(rgb);gooShade.splice(0,gooShade.length,...goo);
  gooMat=gold?-2:-1;splatCol.splice(0,3,...rgb(gold?'#f2c84a':'#f4f1e6'));
 }
-// Wing and tail feathers get the body tint too, keeping their light and dark.
-function tintFeather(col){if(wearing('body')!=='rosa')return col;const l=.3*col[0]+.59*col[1]+.11*col[2];return [l*1.5,l*.78,l*1.12];}
 // The things it wears are modelled as smooth surfaces in the head's own frame (or the body's for the scarf), so they
 // turn with the head. surface() takes a grid of points, works out smooth normals and draws it; glossy parts go
 // into the wet-looking batch so they catch the light.
@@ -177,7 +173,6 @@ const lookIcon={
  brillor:'<ellipse cx="15" cy="24" rx="9" ry="7" fill="#111318"/><ellipse cx="33" cy="24" rx="9" ry="7" fill="#111318"/><path d="M22 22h4v3h-4z" fill="#111318"/>',
  pannband:'<path d="M6 20h32v8H6z" fill="#d01f26"/><path d="M38 22l8-6 2 4-6 6zM38 26l9 3-1 4-9-3z" fill="#a8161c"/>',
  hatt:'<path d="M14 8h20v26H14z" fill="#1d1e22"/><path d="M14 26h20v4H14z" fill="#a8252b"/><path d="M6 34h36v4H6z" fill="#16171a"/>',
- rosa:'<ellipse cx="22" cy="28" rx="15" ry="11" fill="#e0a8c8"/><circle cx="34" cy="17" r="8" fill="#c98bb0"/><path d="M41 17l6 2-6 2z" fill="#58445a"/>',
  krona:'<path d="M8 36V16l8 8 8-14 8 14 8-8v20z" fill="#e8b830"/><circle cx="24" cy="10" r="3" fill="#e8323a"/>',
  mantel:'<path d="M14 8h20l8 34c-6-3-11 2-18-2-7 4-12-1-18 2z" fill="#c8102e"/><path d="M14 8h20v4H14z" fill="#e8b830"/>',
  guld:'<path d="M14 38c-6 0-6-8 1-8-3-6 4-9 7-6 1-6 9-5 9 1 7-1 8 8 2 9z" fill="#e8b830"/><circle cx="21" cy="31" r="2" fill="#fff6c8"/>',

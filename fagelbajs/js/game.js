@@ -1,7 +1,7 @@
 'use strict';
 // Game rules and simulation: flight, spray, scoring, threats, crash.
 const thresholds=[100,400,1000,2000,3500], fallen=new Map(), wrecks=new Map();
-let combo=0,comboTime=0,bestCombo=0,feathers=3,shield=0,carsHit=0,foodEaten=0,best=0;
+let combo=0,comboTime=0,bestCombo=0,feathers=3,shield=0,carsHit=0,best=0;
 try{best=+localStorage.getItem('fagelbajs.best')||0;}catch{}
 const ranks=[[0,'Blyg sparv'],[100,'Parkens busfrö'],[400,'Torgets skräck'],[1000,'Stadens plåga'],[2000,'Efterlyst legend'],[3500,'Himlens härskare'],[6000,'Stadens mardröm']];
 const numberFormat=new Intl.NumberFormat('sv-SE'),number=n=>numberFormat.format(n); // one formatter, made once: toLocaleString builds a new one on every call
@@ -97,7 +97,7 @@ function updateThreats(dt){
  if(wanted){
   throwWait-=dt;
   if(throwWait<=0){
-   const v=forwardSpeed(),near=people.filter(h=>!h.climbing&&!h.fixed&&!h.event&&!scored.has(h.id)&&Math.abs(h.x-bird.x)<24&&Math.abs(h.z-bird.z)<24);
+   const v=forwardSpeed(),near=people.filter(h=>!h.fixed&&!h.event&&!scored.has(h.id)&&Math.abs(h.x-bird.x)<24&&Math.abs(h.z-bird.z)<24);
    throwWait=.23;
    for(let n=0;n<5&&near.length;n++){
     const h=near[Math.floor(Math.random()*near.length)],net=wanted>=3&&Math.random()<.3,t=.5+.55*Math.random();
@@ -235,7 +235,7 @@ function award(base,label,p,targetY=0,pos){
  addPoints(amount);
 }
 function reset(){
- resetChase();points=0;combo=comboTime=bestCombo=carsHit=foodEaten=shield=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=shield=slipTick=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  resetEvents();replay=[];killClip=null;killPending=null;killBest=0;killPlay=0;
@@ -250,7 +250,7 @@ function start(){if(state==='play')return;if(state!=='pause'){if($('save'))saveS
  reset();setSky(flights);flights++;try{localStorage.setItem('fagelbajs.flights',String(flights));}catch{}}state='play';$('overlay').hidden=true;document.body.classList.remove('menu');$('go').blur();try{sound ||= new AudioContext();sound.resume().catch(()=>{});setupAudio();}catch{}}
 // C cycles the camera: behind the bird, then through the bird's own eyes, then straight down from above.
 const viewNames=['bakom','ovanifrån','duvans ögon'];
-function view(){if(crash)return;camView=[2,0,1][camView];above=camView===1;rig=null;$('camera').textContent='Vy: '+viewNames[camView];}
+function view(){if(crash)return;camView=[2,0,1][camView];rig=null;$('camera').textContent='Vy: '+viewNames[camView];}
 // Convert the stored dive speed into horizontal travel as the nose tips down.
 function forwardSpeed(){
  // As the dive develops, the speed gained from falling goes mostly downwards.

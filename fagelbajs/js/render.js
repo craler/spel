@@ -171,7 +171,7 @@ function renderBird(){
   const a=hy*w,e=hp*w,py=y-.2,pz=z-.2,x1=x*Math.cos(a)+pz*Math.sin(a),z1=-x*Math.sin(a)+pz*Math.cos(a);
   return [x1,py*Math.cos(e)+z1*Math.sin(e)+.2,z1*Math.cos(e)-py*Math.sin(e)+.2];
  }
- const face=(pts,color)=>poly(pts.map(p=>world(head(p))),color),plain=(pts,color)=>poly(pts.map(world),color,true);
+ const face=(pts,color)=>poly(pts.map(p=>world(head(p))),color),plain=(pts,color)=>poly(pts.map(world),color);
  // Every flight feather flutters by itself in the airstream, harder the faster the bird goes.
  const wind=clamp(Math.hypot(forwardSpeed(),b.vy)/30,.3,1.7)*(1+2*fl),flutter=(i,rate)=>wind*Math.sin(elapsed*rate+i*2.1);
  // The same two steps (head turn, then body to world) for a bare point, written into out[k..k+2].
@@ -244,7 +244,6 @@ function renderBird(){
   patch([[.04,.116,.009],[.22,.129,.009],[.42,.086,.009],[.29,.039,.009],[.08,.048,.009]],'#c8d5e6');
   for(const u of [.32,.46])patch([[u+.018,.056,.012],[u+.065,.044,.012],[u-.009,-.177,.012],[u-.069,-.20,.012]],'#56658a');
  }
- paint();
 }
 // Outlined text is among the most expensive things a 2D canvas draws, and the same strings (the stars over the targets,
 // the score feed, warnings) are drawn frame after frame. So every string is drawn once into a small picture of its own
@@ -262,7 +261,9 @@ function textSprite(str,px,fill,weight){
  textCache.set(key,sp);return sp;
 }
 function text(str,x,y,size,fill='#fff',align='center',weight=800){
- const px=Math.max(8,Math.round(size)),sp=textSprite(str,px,fill,weight),k=size/px; // sizes that animate are scaled from the nearest whole one
+ // A whole size is drawn exactly. A size that is animating (a number popping up, a star growing as it comes closer)
+ // is scaled down from the next step of four, so that a pop does not need a new picture for every frame.
+ const px=Number.isInteger(size)?size:Math.max(8,Math.ceil(size/4)*4),sp=textSprite(str,px,fill,weight),k=size/px;
  ctx.drawImage(sp.c,x-(sp.bx+(align==='center'?sp.w/2:align==='right'?sp.w:0))*k,y-sp.by*k,sp.cw*k,sp.ch*k);
  return sp.w*k;
 }
@@ -295,21 +296,19 @@ const overlay=$('overlay2d'), ctx=overlay.getContext('2d');
 // The bird code above describes its feathers as polygons; they go straight into the per-frame triangle batch.
 // Each feather is shaded as if gently domed: the normals lean outwards towards its edges, so the light rolls
 // over it instead of the whole patch turning one flat colour.
-function poly(points,color,body){
- const col=body?tintFeather(rgb(color)):rgb(color),n=points.length,a=points[0],b=points[1],c=points[n-1];
+function poly(points,color){
+ const col=rgb(color),n=points.length,a=points[0],b=points[1],c=points[n-1];
  const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
  let f=[uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx];const fl=Math.hypot(...f)||1;f=f.map(q=>q/fl);
  const m=[0,1,2].map(k=>points.reduce((s,p)=>s+p[k],0)/n);
  const nrm=points.map(p=>{const d=[p[0]-m[0],p[1]-m[1],p[2]-m[2]],l=Math.hypot(...d)||1,q=[f[0]+.55*d[0]/l,f[1]+.55*d[1]/l,f[2]+.55*d[2]/l],ql=Math.hypot(...q)||1;return [q[0]/ql,q[1]/ql,q[2]/ql];});
  for(let i=2;i<n;i++)dyn.smooth([points[0],points[i-1],points[i]],[nrm[0],nrm[i-1],nrm[i]],[col,col,col]);
 }
-function paint(){}
 const M={
  cube:new Mesh().box(0,0,0,1,1,1,WHITE,1).build(),
  ball:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,10,6).build(),
  // Lighter balls for what is small on screen: falling drops (blob) and the mist, splashes and trails round them (dot).
  blob:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,7,4).build(),dot:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,5,3).build(),
- disc:(()=>{const m=new Mesh();for(let i=0;i<14;i++){const a=i*tau/14,b=(i+1)*tau/14;m.tri([0,0,0],[Math.cos(b),0,Math.sin(b)],[Math.cos(a),0,Math.sin(a)],WHITE,1);}return m.build();})(),
  people:[['#dba27e','#33271f','#2b323d',0],['#8a5a3c','#1d1612','#3a4a66',1],['#f0c4a4','#b9853e','#4a4038',1],['#c68a5e','#2a2019','#5c5f66',0],['#e6b08c','#7a3b1e','#2f3d55',0]].map(([skin,hair,pants,long])=>personMesh(rgb(skin),rgb(hair),rgb(pants),long)),
  peopleFar:[['#dba27e','#33271f','#2b323d',0],['#8a5a3c','#1d1612','#3a4a66',1],['#f0c4a4','#b9853e','#4a4038',1],['#c68a5e','#2a2019','#5c5f66',0],['#e6b08c','#7a3b1e','#2f3d55',0]].map(([skin,hair,pants,long])=>personMesh(rgb(skin),rgb(hair),rgb(pants),long,true)),
  umbrella:new Mesh().tube(0,2.02,2.42,0,.85,.03,WHITE,1,0,0,10,false).tube(.2,1.15,2.4,.1,.014,.014,rgb('#22252a'),0,0,0,5).build(),
@@ -327,7 +326,6 @@ const M={
   for(let i=0;i<n;i++)for(let k=1;k<prof.length;k++){const tint=(i%2===0)!==(k>6);m.quad(at(k-1,i),at(k-1,i+1),at(k,i+1),at(k,i),tint?WHITE:cream,tint?1:0);}
   for(let i=0;i<n;i++)m.quad(at(0,i),at(0,i+1),[at(0,i+1)[0]*.9,-1.07,at(0,i+1)[2]*.9],[at(0,i)[0]*.9,-1.07,at(0,i)[2]*.9],WHITE,1);
   return m.build();})(),
- big:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,14,8).build(),
  // Police helicopter, nose towards +z: white with a blue band, dark glass, tail boom, fin and skids.
  // Police helicopter, nose towards +z: white with a blue and yellow checkered band, a framed canopy, doors with windows,
  // an engine housing with exhausts, a tapered tail boom with stabilisers and fin, skids, and a searchlight turret.
@@ -445,8 +443,8 @@ function splatMesh(upright,simple){
 }
 M.cube.cull=true;
 const statics=[M.cube,M.tree,M.treeFar,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
-const moving=[...M.people,...M.peopleFar,M.umbrella,M.car,M.carFar,M.hatchFar,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.big,M.balloon,M.boat,M.ball,M.blob,M.dot,M.dome];
-const decals=[M.splat,M.splatWall,M.splatFar,M.splatWallFar,M.drip,M.disc];
+const moving=[...M.people,...M.peopleFar,M.umbrella,M.car,M.carFar,M.hatchFar,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,M.ball,M.blob,M.dot,M.dome];
+const decals=[M.splat,M.splatWall,M.splatFar,M.splatWallFar,M.drip];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 // ---- What the camera can see. A ball of radius r round a point is in view unless it lies wholly outside one side of the picture.
 const fr={kx:1,nx:1,ku:1,nu:1,kd:1,nd:1};
@@ -514,9 +512,10 @@ function fillStatics(keep){
  for(const g of visBlocks){
   appendInst(M.cube,g.cube);
   if(g.d<=treeEnd)appendInst(g.d>treeNear?M.treeFar:M.tree,g.tree);
+  appendInst(M.gable,g.gable);
   if(g.d<=lampNear)appendInst(M.lamp,g.lamp);
   if(!onEventSquare(g.i,g.j)){appendInst(M.table,g.table);appendInst(M.stall,g.stall);}
-  appendInst(M.bench,g.bench);appendInst(M.statue,g.statue);appendInst(M.gable,g.gable);
+  appendInst(M.bench,g.bench);appendInst(M.statue,g.statue);
  }
  for(const m of statics)m.upload();
 }
@@ -549,8 +548,8 @@ function buildMoving(){
   const down=scored.has(h.id),size=.93+.14*hash(h.phase,3,7),since=down?elapsed-fallen.get(h.id):0;
   // A hit knocks them flat. After a few seconds they get up again, turn to the bird and shake a fist.
   const t=down?clamp(since/.43,0,1)*(1-clamp((since-4.5)/.9,0,1)):0,lean=t*t*Math.PI*.49,angry=down&&since>5.2;
-  const stride=down?0:h.dance?.35:h.fixed?0:h.running?.95:h.climbing?.5:.55,pace=h.dance?h.dance:h.running?11:h.climbing?9:6.2;
-  const arms=h.climbing||winding.has(h.id)?1:angry?.55+.4*Math.sin(elapsed*9+h.phase):h.dance&&!down?h.armsUp??.5+.5*Math.sin(elapsed*h.dance*.5+h.phase):0;
+  const stride=down?0:h.dance?.35:h.fixed?0:h.running?.95:.55,pace=h.dance?h.dance:h.running?11:6.2;
+  const arms=winding.has(h.id)?1:angry?.55+.4*Math.sin(elapsed*9+h.phase):h.dance&&!down?h.armsUp??.5+.5*Math.sin(elapsed*h.dance*.5+h.phase):0;
   if(angry)h.yaw=Math.atan2(bird.x-h.x,bird.z-h.z);
   if(fastest)blob(h.x+shadeX*.85,h.y+.05,h.z+shadeZ*.85,.5,1.35,shadeYaw,.72); // a short shadow lying away from the sun
   (farAway?M.peopleFar:M.people)[Math.floor(hash(h.phase,9,2)*M.people.length)].add(h.x,h.y+(down?.13*t:0),h.z,h.yaw,size,size,size,rgb(h.c),0,elapsed*pace+h.phase,stride,lean,arms);
@@ -591,11 +590,9 @@ function buildMoving(){
   if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.dot.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol,gooMat);}
  }
  if(bird.snare>0)drawNet(bird.x,bird.y+.25,bird.z,1,true);
- // Star targets with their props: window cleaners on a lift, rowing boats on the canal, hot-air balloons.
+ // Star targets with their props: rowing boats on the canal, hot-air balloons.
  for(let i=Math.floor(bird.x/tile)-3;i<=Math.floor(bird.x/tile)+3;i++)for(let j=Math.floor(bird.z/tile)-3;j<=Math.floor(bird.z/tile)+3;j++){
   const b=block(i,j);
-  if(b.cleaner){const [cx,cz,top,s]=b.cleaner,y=2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s));M.box.add(cx-1.3,y-.14,cz-.5,0,2.6,.14,1.1,rgb('#8a8d90'));
-   for(const sx of [-1.25,1.25])ribbon([cx+sx,y,cz+.5],[cx+sx,top,cz+.6],.025);}
   if(b.type===3)for(const [n,q] of boatsAt(b).entries())M.boat.add(q.x,WATER+.04,q.z,q.yaw,1,1,1,rgb(n?'#2f5d7a':'#8a5a34'));
  }
  for(const q of balloons()){
@@ -954,7 +951,7 @@ function drawWorldText(){
   const age=elapsed-q.t,m=point([q.x,q.y,q.z]);if(!m||cameraPoint([q.x,q.y,q.z])[2]>95)continue;
   const grow=Math.min(1,.4+age*8);
   ctx.save();ctx.globalAlpha=clamp((1.5-age)/.3,0,1);ctx.translate(m[0],m[1]);ctx.scale(grow,grow);
-  ctx.font='800 12px system-ui,-apple-system,"Segoe UI",sans-serif';const wide=ctx.measureText(q.text).width+16;
+  ctx.font='800 12px system-ui,-apple-system,"Segoe UI",sans-serif';const wide=q.wide??=ctx.measureText(q.text).width+16; // measured once per bubble
   ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,-wide/2,-35,wide,22,8);ctx.moveTo(-5,-13.5);ctx.lineTo(0,-4);ctx.lineTo(5,-13.5);
   ctx.lineJoin='round';ctx.lineWidth=2.5;ctx.strokeStyle='#0b0e14';ctx.stroke();ctx.fillStyle='#fff';ctx.fill();
   ctx.fillStyle='#0b0e14';ctx.textAlign='center';ctx.fillText(q.text,0,-19.5);ctx.restore();

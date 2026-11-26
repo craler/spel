@@ -88,10 +88,21 @@ Bra att veta:
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
 - Affischen `poster.jpg` visas på startsidan.
 - Grafik (Inställningar): Auto, Snygg, Snabb eller Snabbast (`quality`/`gfx` i `core.js`, `setLevel()` i `main.js`).
-  Det som kostar mest är antalet trianglar, så träd, människor och bilar har en enklare modell på avstånd och lyktstolpar ritas bara nära.
-  Snabb: mindre skuggkarta med ett sampel, 9 × 9 kvarter, enklare duvkropp och shaders, lägre upplösning. Snabbast: inga skuggor alls, 7 × 7 kvarter och tätare dis,
-  människor bara inom 80 m, ännu lägre upplösning och ingen rök. Auto mäter de första sekunderna och stegar ner till Snabb och sedan Snabbast om det behövs (`fagelbajs.autoLevel`).
-- Skuggpasset ritar bara de närmaste kvarteren (`Mesh.near`, `drawShadow()` i `gl.js`), och fotgängare och trafik räknas om en gång per bildruta i stället för två.
+  Snabb: mindre skuggkarta med ett sampel, 9 × 9 kvarter, enklare duvkropp och shaders, lägre upplösning. Snabbast: inga riktiga skuggor (mjuka skuggfläckar i stället, `blob()` i `render.js`),
+  7 × 7 kvarter och tätare dis, människor bara inom 80 m, ännu lägre upplösning och ingen rök.
+- Auto (`keepPace()` i `main.js`) går direkt till Snabbast om bildrutorna kommer för långsamt, och provar sedan nivåerna ovanför en i taget när det går lugnt. En ändring behålls bara om den
+  gav fler bilder per sekund: på en skärm som är låst till 30 bilder per sekund (telefon i strömsparläge) hjälper ingenting, och då behålls Snygg och full upplösning. Samma test gäller upplösningen.
+
+Så hålls bildrutorna billiga (bra att känna till innan något läggs till):
+
+- Bara det som syns ritas. Statiska föremål packas en gång per kvarter (`packBlock()` i `render.js`) och varje bildruta kopieras de kvarter som ligger i bild, närmast först (`fillStatics()`).
+  Rörliga föremål prövas ett och ett mot bilden (`inView()`).
+- Skuggorna från allt som står still ligger i en egen skuggkarta som bara ritas om när duvan flugit 32 m eller något ändrats (`staticShadow()` i `gl.js`, `shadowDirty`).
+  Varje bildruta kopieras den och bara det som rör sig ritas ovanpå.
+- Detaljnivå efter avstånd: träd, människor, bilar och bajsfläckar har en enkel modell längre bort; lyktstolpar och fläckarnas upphöjda delar ritas bara nära.
+- Ritordning: hus och föremål först, sedan mark, sist himmel. De dyraste pixlarna (mark och himmel) räknas då bara där de syns.
+- Text på 2D-lagret ritas en gång till en liten bild och stämplas sedan ut (`text()` i `render.js`). Text med kontur var tidigare den enskilt dyraste delen av en bildruta.
+- Inget skapas i onödan varje bildruta: fotgängare (`walkersOf()`), bilar (`carFor()`) och duvans kropp (`bodyData()`) görs en gång och uppdateras på plats.
 
 Trimvärden att känna till: stjärngränser `thresholds` (game.js), riskbonus och kombo i `award()` (game.js),
 tankens påfyllning `recharge()` och hökens fart `updateHawk()` (world.js), kvarterstyper i `city.js`.
