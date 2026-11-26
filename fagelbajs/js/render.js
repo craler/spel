@@ -70,8 +70,7 @@ const bodyRings=(()=>{
  out.push(S.at(-1));return out;
 })();
 const plumeCol={back:rgb('#7c8aab'),belly:rgb('#a9b3c9'),green:rgb('#3f8a74'),purple:rgb('#7b5a98'),head:rgb('#6a7697'),rump:rgb('#9aa6c0')};
-let SEG=18,bodyColCache=null; // SEG: points round each ring of the body (fewer with fast graphics)
-const bodyRingsLow=()=>bodyRings.filter((_,k)=>k%2===0||k===bodyRings.length-1);
+const bodyRingsLow=bodyRings.filter((_,k)=>k%2===0||k===bodyRings.length-1); // every other ring, for fast graphics
 function plumageColor(z,a){
  const up=Math.sin(a),side=Math.abs(Math.cos(a)),lerp=(p,q,t)=>[mix(p[0],q[0],t),mix(p[1],q[1],t),mix(p[2],q[2],t)];
  let c=lerp(plumeCol.belly,plumeCol.back,clamp(up*.9+.55,0,1));
@@ -81,40 +80,66 @@ function plumageColor(z,a){
  if(z>.3)c=lerp(c,plumeCol.head,clamp((z-.3)/.04,0,1));
  return c;
 }
-function smoothBody(toWorld){
- SEG=fast?12:18;const R=fast?bodyRingsLow():bodyRings,grid=R.map(([z,y,w,h],j)=>Array.from({length:SEG},(_,i)=>{const a=i*tau/SEG;return toWorld([w*Math.cos(a),y+h*Math.sin(a),z]);}));
- if(!bodyColCache||bodyColCache.seg!==SEG||bodyColCache.n!==R.length){bodyColCache=R.map(([z])=>Array.from({length:SEG},(_,i)=>plumageColor(z,i*tau/SEG)));bodyColCache.seg=SEG;bodyColCache.n=R.length;}
- const cols=bodyColCache;
- const tip=toWorld([0,R.at(-1)[1],R.at(-1)[0]+.012]),tail=toWorld([0,R[0][1],R[0][0]-.02]);
- const norm=(j,i)=>{ // across the ring and along the body, from the neighbouring points
-  const g=grid,a=g[j][(i+1)%SEG],b=g[j][(i+SEG-1)%SEG],c=g[Math.min(R.length-1,j+1)][i],d=g[Math.max(0,j-1)][i];
-  const u=[a[0]-b[0],a[1]-b[1],a[2]-b[2]],v=[c[0]-d[0],c[1]-d[1],c[2]-d[2]],n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],l=Math.hypot(...n)||1;
-  return [n[0]/l,n[1]/l,n[2]/l];
- };
- const N=grid.map((r,j)=>r.map((_,i)=>norm(j,i)));
- for(let j=1;j<R.length;j++)for(let i=0;i<SEG;i++){
-  const k=(i+1)%SEG,A=[j-1,i],B=[j-1,k],C=[j,k],D=[j,i],P=([a,b])=>grid[a][b],Nn=([a,b])=>N[a][b],Cc=([a,b])=>cols[a][b];
-  dyn.smooth([P(A),P(B),P(C)],[Nn(A),Nn(B),Nn(C)],[Cc(A),Cc(B),Cc(C)]);dyn.smooth([P(A),P(C),P(D)],[Nn(A),Nn(C),Nn(D)],[Cc(A),Cc(C),Cc(D)]);
+// The skin and its feathers are kept as flat arrays of numbers. What never changes is worked out once (bodyData): the ring
+// points in the bird's own space, their colours, and how much each small feather varies. Every frame the points are
+// moved to where the bird is (into), the normals follow from their neighbours, and the triangles are written straight
+// into the batch. Building it from small arrays, as before, made tens of thousands of them a second.
+let bodyGeo=null,bodyFeathers=true;
+function bodyData(){
+ const seg=fast?12:18,R=fast?bodyRingsLow:bodyRings,n=R.length;
+ if(bodyGeo&&bodyGeo.seg===seg&&bodyGeo.R===R)return bodyGeo;
+ const g=bodyGeo={seg,R,n,local:new Float32Array(n*seg*3),col:new Float32Array(n*seg*3),vary:new Float32Array(n*seg),at:new Float64Array(n*seg*3),nor:new Float64Array(n*seg*3),end:new Float64Array(6)};
+ for(let j=0;j<n;j++)for(let i=0;i<seg;i++){
+  const [z,y,w,h]=R[j],a=i*tau/seg,k=(j*seg+i)*3,c=plumageColor(z,a);
+  g.local[k]=w*Math.cos(a);g.local[k+1]=y+h*Math.sin(a);g.local[k+2]=z;g.col[k]=c[0];g.col[k+1]=c[1];g.col[k+2]=c[2];g.vary[j*seg+i]=.97+.08*hash(i,j,7);
  }
- const last=R.length-1,end=(pt,j,flip)=>{const n=[pt[0]-grid[j][0][0],0,0];for(let i=0;i<SEG;i++){const k=(i+1)%SEG;
-  dyn.smooth(flip?[pt,grid[j][k],grid[j][i]]:[pt,grid[j][i],grid[j][k]],[N[j][i],N[j][flip?k:i],N[j][flip?i:k]],[cols[j][i],cols[j][i],cols[j][k]]);}};
- end(tip,last,false);end(tail,0,true);
- if(bodyFeathers&&!fast)featherCoat(R,grid,N,cols);
+ return g;
+}
+function smoothBody(into){
+ const g=bodyData(),{seg,R,n,local,col,at:W,nor:N}=g,count=n*seg;
+ for(let k=0;k<count*3;k+=3)into(local[k],local[k+1],local[k+2],W,k);
+ for(let j=0;j<n;j++){ // normals: across the ring and along the body, from the neighbouring points
+  const up=Math.min(n-1,j+1)*seg,down=Math.max(0,j-1)*seg;
+  for(let i=0;i<seg;i++){
+   const a=(j*seg+(i+1)%seg)*3,b=(j*seg+(i+seg-1)%seg)*3,c=(up+i)*3,d=(down+i)*3,o=(j*seg+i)*3;
+   const ux=W[a]-W[b],uy=W[a+1]-W[b+1],uz=W[a+2]-W[b+2],vx=W[c]-W[d],vy=W[c+1]-W[d+1],vz=W[c+2]-W[d+2];
+   const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,l=Math.hypot(nx,ny,nz)||1;N[o]=nx/l;N[o+1]=ny/l;N[o+2]=nz/l;
+  }
+ }
+ const put=k=>dyn.vert(W[k],W[k+1],W[k+2],N[k],N[k+1],N[k+2],col[k],col[k+1],col[k+2]);
+ for(let j=1;j<n;j++)for(let i=0;i<seg;i++){
+  const k=(i+1)%seg,A=((j-1)*seg+i)*3,B=((j-1)*seg+k)*3,C=(j*seg+k)*3,D=(j*seg+i)*3;
+  put(A);put(B);put(C);put(A);put(C);put(D);
+ }
+ // The two ends are closed with a point each: the tip of the forehead and the rump.
+ const E=g.end,last=(n-1)*seg;into(0,R[n-1][1],R[n-1][0]+.012,E,0);into(0,R[0][1],R[0][0]-.02,E,3);
+ for(let i=0;i<seg;i++){
+  const k=(i+1)%seg,a=(last+i)*3,b=(last+k)*3,c=i*3,d=k*3;
+  dyn.vert(E[0],E[1],E[2],N[a],N[a+1],N[a+2],col[a],col[a+1],col[a+2]);put(a);put(b);
+  dyn.vert(E[3],E[4],E[5],N[c],N[c+1],N[c+2],col[c],col[c+1],col[c+2]);put(d);put(c);
+ }
+ if(bodyFeathers&&!fast)featherCoat(g);
 }
 // Contour feathers over the skin: small rounded vanes laid like roof tiles, each pointing back towards the tail,
-// lifted a little at the tip and darker at its edge, staggered row by row.
-let bodyFeathers=true;
-function featherCoat(R,grid,N,cols){
- const shade=(c,k)=>[c[0]*k,c[1]*k,c[2]*k];
- for(let j=2;j<R.length-1;j++){
+// lifted a little at the tip and darker at its edge.
+function featherCoat(g){
+ const {seg,R,n,at:W,nor:N,col,vary}=g;
+ let px,py,pz,bx,by,bz,sx,sy,sz,nx,ny,nz,cr,cg,cb;
+ // a corner of the feather: u back along the body, v across it, lifted off the skin; k darkens it
+ const corner=(u,v,lift,k)=>dyn.vert(px+bx*u+sx*v+nx*lift,py+by*u+sy*v+ny*lift,pz+bz*u+sz*v+nz*lift,nx,ny,nz,cr*k,cg*k,cb*k);
+ for(let j=2;j<n-1;j++){
   if(R[j][0]>.19)continue; // the head is smooth: its plumage is too fine, and hats sit on it
-  for(let i=(j%2);i<SEG;i+=1){
-   const P=grid[j][i],n=N[j][i],B=grid[j-1][i],bx=B[0]-P[0],by=B[1]-P[1],bz=B[2]-P[2],bl=Math.hypot(bx,by,bz)||1,b=[bx/bl,by/bl,bz/bl];
-   const sd=[n[1]*b[2]-n[2]*b[1],n[2]*b[0]-n[0]*b[2],n[0]*b[1]-n[1]*b[0]],size=.045+.35*Math.min(R[j][2],R[j][3])*.4,len=size*1.5,w=size*.62;
-   const at=(u,v,lift)=>[P[0]+b[0]*u+sd[0]*v+n[0]*lift,P[1]+b[1]*u+sd[1]*v+n[1]*lift,P[2]+b[2]*u+sd[2]*v+n[2]*lift];
-   const root=at(-len*.25,0,.002),tipP=at(len,0,.014),l1=at(len*.45,-w,.008),r1=at(len*.45,w,.008),l2=at(len*.85,-w*.6,.012),r2=at(len*.85,w*.6,.012);
-   const c=cols[j][i],k=.97+.08*hash(i,j,7),cc=shade(c,k),edge=shade(c,k*.87);
-   dyn.smooth([root,l1,r1],[n,n,n],[cc,edge,edge]);dyn.smooth([l1,l2,r2],[n,n,n],[edge,edge,edge]);dyn.smooth([l1,r2,r1],[n,n,n],[edge,edge,edge]);dyn.smooth([l2,tipP,r2],[n,n,n],[edge,shade(c,k*.8),edge]);
+  const size=.045+.35*Math.min(R[j][2],R[j][3])*.4,len=size*1.5,w=size*.62;
+  for(let i=j%2;i<seg;i++){
+   const o=(j*seg+i)*3,q=((j-1)*seg+i)*3,k=vary[j*seg+i];
+   px=W[o];py=W[o+1];pz=W[o+2];nx=N[o];ny=N[o+1];nz=N[o+2];cr=col[o];cg=col[o+1];cb=col[o+2];
+   bx=W[q]-px;by=W[q+1]-py;bz=W[q+2]-pz;const bl=Math.hypot(bx,by,bz)||1;bx/=bl;by/=bl;bz/=bl;
+   sx=ny*bz-nz*by;sy=nz*bx-nx*bz;sz=nx*by-ny*bx;
+   const e=k*.87;
+   corner(-len*.25,0,.002,k);corner(len*.45,-w,.008,e);corner(len*.45,w,.008,e);                 // root to the widest part
+   corner(len*.45,-w,.008,e);corner(len*.85,-w*.6,.012,e);corner(len*.85,w*.6,.012,e);          // the vane
+   corner(len*.45,-w,.008,e);corner(len*.85,w*.6,.012,e);corner(len*.45,w,.008,e);
+   corner(len*.85,-w*.6,.012,e);corner(len,0,.014,k*.8);corner(len*.85,w*.6,.012,e);            // the rounded tip
   }
  }
 }
@@ -149,7 +174,18 @@ function renderBird(){
  const face=(pts,color)=>poly(pts.map(p=>world(head(p))),color),plain=(pts,color)=>poly(pts.map(world),color,true);
  // Every flight feather flutters by itself in the airstream, harder the faster the bird goes.
  const wind=clamp(Math.hypot(forwardSpeed(),b.vy)/30,.3,1.7)*(1+2*fl),flutter=(i,rate)=>wind*Math.sin(elapsed*rate+i*2.1);
- smoothBody(p=>world(head(p)));
+ // The same two steps (head turn, then body to world) for a bare point, written into out[k..k+2].
+ const cosYaw=Math.cos(hy),sinYaw=Math.sin(hy),cosNod=Math.cos(hp),sinNod=Math.sin(hp);
+ function into(x,y,z,out,k){
+  const w=clamp((z-.2)/.07,0,1);
+  if(w){
+   const full=w===1,ca=full?cosYaw:Math.cos(hy*w),sa=full?sinYaw:Math.sin(hy*w),ce=full?cosNod:Math.cos(hp*w),se=full?sinNod:Math.sin(hp*w);
+   const py=y-.2,pz=z-.2,x1=x*ca+pz*sa,z1=-x*sa+pz*ca;x=x1;y=py*ce+z1*se+.2;z=z1*ce-py*se+.2;
+  }
+  y+=bob;const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
+  out[k]=b.x+bx*cy+bz*sy;out[k+1]=b.y+by*cp+z*sp;out[k+2]=b.z-bx*sy+bz*cy;
+ }
+ smoothBody(into);
  // Wedge bill, pale cere, and lateral amber eyes.
  for(const side of [-1,1]){
   face([[0,.316,.411],[side*.052,.264,.406],[0,.245,.565]],'#58445a');
@@ -504,6 +540,7 @@ function strand(p,q,w0,w1,col){
 const splatCol=[...rgb('#f4f1e6')], smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
  spot.on=0;goo.mat=gooMat;for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
+ {const l=Math.hypot(sky.dir[0],sky.dir[2])||1;shadeX=-sky.dir[0]/l;shadeZ=-sky.dir[2]/l;shadeYaw=Math.atan2(shadeX,shadeZ);}
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  const far2=(fastest?30:45)**2,range=fastest?80:130;
  for(const h of people){
@@ -515,6 +552,7 @@ function buildMoving(){
   const stride=down?0:h.dance?.35:h.fixed?0:h.running?.95:h.climbing?.5:.55,pace=h.dance?h.dance:h.running?11:h.climbing?9:6.2;
   const arms=h.climbing||winding.has(h.id)?1:angry?.55+.4*Math.sin(elapsed*9+h.phase):h.dance&&!down?h.armsUp??.5+.5*Math.sin(elapsed*h.dance*.5+h.phase):0;
   if(angry)h.yaw=Math.atan2(bird.x-h.x,bird.z-h.z);
+  if(fastest)blob(h.x+shadeX*.85,h.y+.05,h.z+shadeZ*.85,.5,1.35,shadeYaw,.72); // a short shadow lying away from the sun
   (farAway?M.peopleFar:M.people)[Math.floor(hash(h.phase,9,2)*M.people.length)].add(h.x,h.y+(down?.13*t:0),h.z,h.yaw,size,size,size,rgb(h.c),0,elapsed*pace+h.phase,stride,lean,arms);
   if(down){ // a white cap of it on the head and shoulders
    const fx=Math.sin(h.yaw)*Math.sin(lean),fz=Math.cos(h.yaw)*Math.sin(lean),up=Math.cos(lean);
@@ -526,6 +564,7 @@ function buildMoving(){
  for(const c of cars){
   if(!inView(c.x,2,c.z,wrecks.has(c.id)?14:c.bus?9:6))continue;
   const carFar=(c.x-camera.x)**2+(c.z-camera.z)**2>(fastest?40:60)**2;
+  if(fastest)blob(c.x+shadeX*(c.bus?1.7:.9),.05,c.z+shadeZ*(c.bus?1.7:.9),c.bus?2.1:1.6,c.bus?6.3:2.8,c.yaw,.75);
   (c.bus?M.bus:c.cab?(carFar?M.carFar:M.cab):c.hatch?(carFar?M.hatchFar:M.hatch):carFar?M.carFar:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
   if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol,gooMat);
   const alarm=alarms.get(c.id);
@@ -629,6 +668,7 @@ function buildMoving(){
  }
  // The hawk is drawn at its real size; a much larger copy goes only into the shadow map.
  if(sky.night)nightLights();
+ if(fastest)blobShadows();
  drawEvent();
  if(hawk){drawHawk(dyn,2.3);hawkShadow();}
  if(heli)drawHeli();
@@ -680,12 +720,37 @@ function nightLights(){
 // Smoke as soft, see-through puffs that always face the camera: thick and dark where it leaves the wreck, then
 // rising, swelling, drifting off with the wind, turning paler and thinning out. A small engine fire flickers at
 // its foot for the first seconds.
+// Snabbast has no real shadows, and without any, people, cars and trees seem to float. A soft dark patch under each of
+// them costs next to nothing and puts them back on the ground. The one under the bird also shows how high it is flying.
+const blobCol=[.012,.014,.02];
+let shadeX=0,shadeZ=1,shadeYaw=0; // which way shadows fall this flight: away from the sun, along the ground
+function blob(x,y,z,rx,rz,yaw,alpha){
+ const s=Math.sin(yaw),c=Math.cos(yaw),N=10,k=.72,[r,g,b]=blobCol,soft=.001; // (an alpha of exactly 0 means "solid" to the shader)
+ const v=(px,pz,q,al)=>veil.vert(x+(px*c+pz*s)*q,y,z+(pz*c-px*s)*q,0,1,0,r,g,b,al);
+ let ox=rx,oz=0;
+ for(let i=1;i<=N;i++){const a=i/N*tau,px=Math.cos(a)*rx,pz=Math.sin(a)*rz; // a dark core and a soft rim
+  veil.vert(x,y,z,0,1,0,r,g,b,alpha);v(px,pz,k,alpha);v(ox,oz,k,alpha);
+  v(ox,oz,k,alpha);v(px,pz,k,alpha);v(px,pz,1,soft);
+  v(ox,oz,k,alpha);v(px,pz,1,soft);v(ox,oz,1,soft);
+  ox=px;oz=pz;}
+}
+function blobShadows(){
+ for(const g of visBlocks){ // trees, straight from the blocks that are in view
+  const t=g.tree;if(!t||g.d>2.5)continue;
+  for(let k=0;k<t.length;k+=ISTRIDE){const q=t[k+4];blob(t[k]+shadeX*2.6*q,.05,t[k+2]+shadeZ*2.6*q,2.9*q,3.9*q,shadeYaw,.72);}
+ }
+ const below=supportAt(bird.x,bird.z),high=bird.y-below;
+ if(high>0&&(camView!==2||crash))blob(bird.x,below+.07,bird.z,.6+high*.012,.6+high*.012,0,.8*clamp(1-high/70,.4,1));
+}
 function puff(x,y,z,r,alpha,col){
- const c=camera,R=[c.c,0,-c.s],U=[c.sp*c.s,c.cp,c.sp*c.c],n=[-c.cp*c.s,c.sp,-c.cp*c.c],N=10,m=[x,y,z];
- const p=a=>[x+(R[0]*Math.cos(a)+U[0]*Math.sin(a))*r,y+(R[1]*Math.cos(a)+U[1]*Math.sin(a))*r,z+(R[2]*Math.cos(a)+U[2]*Math.sin(a))*r];
- const q=a=>{const k=.6;return [x+(R[0]*Math.cos(a)+U[0]*Math.sin(a))*r*k,y+(R[1]*Math.cos(a)+U[1]*Math.sin(a))*r*k,z+(R[2]*Math.cos(a)+U[2]*Math.sin(a))*r*k];};
- for(let i=0;i<N;i++){const a0=i/N*tau,a1=(i+1)/N*tau; // a dense core and a soft rim
-  veil.smooth([m,q(a0),q(a1)],[n,n,n],[col,col,col],[alpha,alpha*.9,alpha*.9]);veil.smooth([q(a0),p(a0),p(a1)],[n,n,n],[col,col,col],[alpha*.9,.001,.001]);veil.smooth([q(a0),p(a1),q(a1)],[n,n,n],[col,col,col],[alpha*.9,.001,alpha*.9]);}
+ const c=camera,rx=c.c,rz=-c.s,ux=c.sp*c.s,uy=c.cp,uz=c.sp*c.c,nx=-c.cp*c.s,ny=c.sp,nz=-c.cp*c.c,N=8,inner=.6,a9=alpha*.9;
+ const v=(ca,sa,k,al)=>veil.vert(x+(rx*ca+ux*sa)*r*k,y+uy*sa*r*k,z+(rz*ca+uz*sa)*r*k,nx,ny,nz,col[0],col[1],col[2],al);
+ let c0=1,s0=0;
+ for(let i=1;i<=N;i++){const a=i/N*tau,c1=Math.cos(a),s1=Math.sin(a); // a dense core and a soft rim
+  veil.vert(x,y,z,nx,ny,nz,col[0],col[1],col[2],alpha);v(c0,s0,inner,a9);v(c1,s1,inner,a9);
+  v(c0,s0,inner,a9);v(c0,s0,1,.001);v(c1,s1,1,.001);
+  v(c0,s0,inner,a9);v(c1,s1,1,.001);v(c1,s1,inner,a9);
+  c0=c1;s0=s1;}
 }
 const smokeDark=rgb('#4a4a50'),smokePale=rgb('#d2d2d8'),fire=rgb('#ff8a1e');
 function smokeColumn(x,y,z,age,seed,size=1){

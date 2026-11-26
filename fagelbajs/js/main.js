@@ -6,6 +6,7 @@
 function topDensity(){const d=devicePixelRatio||1;return fastest?Math.min(d,1)*.7:fast?Math.min(d,1)*.85:Math.min(d,1.5);}
 function setLevel(n){
  if(n===gfx)return;gfx=n;fast=n>=1;fastest=n>=2;shadowSize(fastest?512:fast?1024:2048);density=topDensity();fit();
+ lastTune=paceNow||performance.now();quickFor=0; // let the frame times settle at the new level before the resolution is judged
 }
 const qualityNames={auto:'Auto',high:'Snygg',fast:'Snabb',fastest:'Snabbast'};
 const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+'</kbd><span>'+does+'</span></div>';
@@ -106,7 +107,7 @@ function showTips(){
  const el=$('tip');if(el.textContent!==text){el.textContent=text;el.classList.toggle('on',!!text);}
 }
 // The picture is rendered at up to 1.5 device pixels. If the machine cannot keep up, the resolution steps down.
-let density=topDensity(),frameTime=1/60,lastTune=0,judged=0;
+let density=topDensity(),frameTime=1/60,lastTune=0;
 let pausedDrawn=false,quickFor=0;
 function fit(){
  pausedDrawn=false;textCache.clear();width=innerWidth;height=innerHeight;
@@ -116,22 +117,49 @@ function fit(){
 onresize=fit;fit();
 reset();gather();traffic();let prev=0;
 applyLook();homeMenu();
+// ---- Keeping the pace. Two things can be traded for speed: the graphics level (when Grafik is on Auto) and the resolution.
+// A change is only kept if it really made the frames come faster. On a screen that is held at 30 pictures a second
+// (a phone in power-saving mode, say) nothing helps, and then the game should at least stay sharp and good-looking.
+// Only flying counts: a menu or a hidden tab says nothing about how the game itself runs.
+let paceNow=0; // the time of the frame being judged
+const pace={clock:0,calm:0,trial:null,capped:false,resTrial:null,resLocked:false,triedUp:new Set()};
+function setAuto(n){autoLevel=n;try{localStorage.setItem('fagelbajs.autoLevel',String(n));}catch{}setLevel(n);}
+// A step up that proved too much is remembered for a week, so it is not tried again on every visit.
+function ceilingAllows(n){try{const c=JSON.parse(localStorage.getItem('fagelbajs.autoCeil')||'null');return !(c&&n<=c.level&&Date.now()-c.at<6048e5);}catch{return true;}}
+function keepPace(real,now){
+ paceNow=now;frameTime=mix(frameTime,real,.04);quickFor=frameTime<1/52?quickFor+real:0;
+ if(navigator.webdriver)return;
+ const slow=frameTime>1/40;pace.clock+=real;pace.calm=frameTime<1/55?pace.calm+real:0;
+ if(quality==='auto'&&!pace.capped){
+  if(pace.trial){ // four seconds after a change: keep it, or take it back
+   if(pace.clock<4)return;
+   const t=pace.trial;pace.trial=null;pace.clock=0;
+   if(t.down&&frameTime>t.before*.87){pace.capped=true;setAuto(t.from);}        // no faster even on the lightest graphics: the screen sets the pace
+   else if(!t.down&&slow){setAuto(t.from);try{localStorage.setItem('fagelbajs.autoCeil',JSON.stringify({level:t.to,at:Date.now()}));}catch{}} // the step up was too much
+   return;
+  }
+  // Too slow: go straight to the lightest graphics. If that helps, the levels above are tried one at a time once things are calm.
+  if(pace.clock>4&&slow&&gfx<2){pace.trial={down:true,before:frameTime,from:gfx};pace.clock=0;setAuto(2);return;}
+  if(pace.calm>15&&gfx>0&&!pace.triedUp.has(gfx-1)&&ceilingAllows(gfx-1)){pace.triedUp.add(gfx-1);pace.trial={down:false,from:gfx,to:gfx-1};pace.clock=0;pace.calm=0;setAuto(gfx-1);return;}
+  if(gfx<2)return; // the resolution is only touched once the graphics level cannot go any lower
+ }
+ if(pace.capped||pace.resLocked)return;
+ const top=topDensity(),floor=fastest?.5:.75;
+ if(pace.resTrial){ // the same test for a step down in resolution
+  if(now-lastTune<2500)return;
+  const t=pace.resTrial;pace.resTrial=null;lastTune=now;
+  if(frameTime>t.before*.9){density=t.from;pace.resLocked=true;fit();}
+  return;
+ }
+ if(now-lastTune>2500&&frameTime>1/38&&density>floor){pace.resTrial={before:frameTime,from:density};density=Math.max(floor,density-.25);lastTune=now;quickFor=0;fit();}
+ else if(quickFor>8&&density<top){density=Math.min(top,density+.25);lastTune=now;quickFor=0;fit();}
+}
 function frame(now){
  const real=Math.min(.05,(now-prev)/1000),dt=real*(slowmo>0?.35:1);prev=now;slowmo=Math.max(0,slowmo-real);
  // While paused the picture stands still, so it is drawn once and then left alone.
  if(state==='pause'&&pausedDrawn&&!previewLooks()){requestAnimationFrame(frame);return;}
  if(state==='pause')pausedDrawn=true;
- // The resolution steps down when frames are slow and back up after a long run of quick ones.
- // Only flying counts: a menu or a hidden tab says nothing about how the game itself runs.
- if(state==='play'){
-  frameTime=mix(frameTime,real,.04);quickFor=frameTime<1/52?quickFor+real:0;
-  const top=topDensity();
-  // Auto: watch the first seconds of flight. A computer that cannot keep up gets the fast graphics, now and on later visits.
-  // If it is still too slow a few seconds later, it steps down once more, to Snabbast.
-  if(quality==='auto'&&gfx<2&&!navigator.webdriver){judged+=real;if(judged>4&&frameTime>1/40){autoLevel=gfx+1;try{localStorage.setItem('fagelbajs.autoLevel',String(autoLevel));}catch{}setLevel(autoLevel);judged=0;frameTime=1/45;feedLine(fastest?'SNABBASTE GRAFIK PÅ':'SNABB GRAFIK PÅ');}}
-  if(!navigator.webdriver&&now-lastTune>2500&&frameTime>1/38&&density>(fastest?.5:.75)){density=Math.max(fastest?.5:.75,density-.25);lastTune=now;quickFor=0;fit();}
-  else if(quickFor>8&&density<top){density=Math.min(top,density+.25);lastTune=now;quickFor=0;fit();}
- }
+ if(state==='play')keepPace(real,now);
  if(state==='play'){halfStep=true;simulate(dt/2);halfStep=false;if(state==='play')simulate(dt/2);if(state==='play')record();} // people and traffic move once per frame, on the second step
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu'||previewLooks())wingPhase+=dt*3;

@@ -150,18 +150,19 @@ function traffic(){
  // Once the way is clear it drives a little faster until it is back in its place. Only a car that had no room to stop crashes.
  const moving=cars.filter(c=>!c.parked),blockers=[...moving,...wrecks.values()];
  // Only vehicles in the neighbouring 14 m squares can be in the way, so each car checks those instead of all of them.
- const grid=new Map(),cell=(x,z)=>Math.floor(x/14)+','+Math.floor(z/14);
- blockers.forEach((o,k)=>{o.rank=k;const key=cell(o.x,o.z);let l=grid.get(key);if(!l)grid.set(key,l=[]);l.push(o);});
+ // (Any one vehicle in the way is enough to stop, so the order they are looked at in makes no difference.)
+ const grid=new Map(),cellKey=(gx,gz)=>(gx+50000)*100000+gz+50000;
+ for(const o of blockers){const key=cellKey(Math.floor(o.x/14),Math.floor(o.z/14));let l=grid.get(key);if(!l)grid.set(key,l=[]);l.push(o);}
  for(const c of moving){
-  const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),held=lag.get(c.id)||0;let stop=false;
-  const gx=Math.floor(c.x/14),gz=Math.floor(c.z/14),near=[];
-  for(let i=gx-1;i<=gx+1;i++)for(let j=gz-1;j<=gz+1;j++){const l=grid.get(i+','+j);if(l)near.push(...l);}
-  near.sort((a,b)=>a.rank-b.rank); // same order as before, since a stopped car can stop the one behind it
-  for(const o of near){
-   if(o===c)continue;
-   const dx=o.x-c.x,dz=o.z-c.z,ahead=dx*fx+dz*fz;
-   if(ahead<=0||ahead>(o.bus||c.bus?13:8.5)||Math.abs(dx*fz-dz*fx)>2.1)continue;
-   if(wrecks.has(o.id)||o.stopped||(o.across===c.across&&o.lane===c.lane)||(c.across&&!o.across)){stop=true;break;}
+  const fx=Math.sin(c.yaw),fz=Math.cos(c.yaw),held=lag.get(c.id)||0,gx=Math.floor(c.x/14),gz=Math.floor(c.z/14);let stop=false;
+  for(let i=gx-1;i<=gx+1&&!stop;i++)for(let j=gz-1;j<=gz+1&&!stop;j++){
+   const l=grid.get(cellKey(i,j));if(!l)continue;
+   for(const o of l){
+    if(o===c)continue;
+    const dx=o.x-c.x,dz=o.z-c.z,ahead=dx*fx+dz*fz;
+    if(ahead<=0||ahead>(o.bus||c.bus?13:8.5)||Math.abs(dx*fz-dz*fx)>2.1)continue;
+    if(wrecks.has(o.id)||o.stopped||(o.across===c.across&&o.lane===c.lane)||(c.across&&!o.across)){stop=true;break;}
+   }
   }
   c.stopped=stop;
   if(stop)lag.set(c.id,held+moved);else if(held>0){const left=held-moved*.6;if(left>0)lag.set(c.id,left);else lag.delete(c.id);}
@@ -201,8 +202,20 @@ function recharge(dt,pressed){
 }
 // Fresh droppings on the ground are slippery: cars spin out on a big patch, people on a small one.
 function slips(){
- const fresh=stains.filter(s=>!s.used&&s.wall===undefined&&s.y<.3&&elapsed-s.t<25);if(fresh.length<2)return;
- const near=(x,z,r)=>fresh.filter(s=>!s.used&&(s.x-x)**2+(s.z-z)**2<r*r);
+ // The fresh puddles on the ground go into 2 m squares, so that each car and person only looks at the few beside it.
+ const cells=new Map(),cellKey=(gx,gz)=>(gx+50000)*100000+gz+50000;let fresh=0;
+ for(const s of stains){
+  if(s.used||s.wall!==undefined||s.y>=.3||elapsed-s.t>=25)continue;
+  const key=cellKey(Math.floor(s.x/2),Math.floor(s.z/2));let l=cells.get(key);if(!l)cells.set(key,l=[]);l.push(s);fresh++;
+ }
+ if(fresh<2)return;
+ const near=(x,z,r)=>{
+  const patch=[],r2=r*r;
+  for(let i=Math.floor((x-r)/2);i<=Math.floor((x+r)/2);i++)for(let j=Math.floor((z-r)/2);j<=Math.floor((z+r)/2);j++){
+   const l=cells.get(cellKey(i,j));if(l)for(const s of l)if(!s.used&&(s.x-x)**2+(s.z-z)**2<r2)patch.push(s);
+  }
+  return patch;
+ };
  for(const c of cars){
   if(c.parked||wrecks.has(c.id))continue;
   const patch=near(c.x,c.z,1.8);if(patch.length<6)continue;

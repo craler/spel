@@ -35,8 +35,7 @@ vec3 lit(vec3 alb,vec3 n,vec3 wp,float spec){
  if(uFast<.5)sh*=mix(1.,.5,smoothstep(.52,.74,vnoise(wp.xz*.011+uTime*.012))); // drifting cloud shadows
  float d=max(dot(n,uSun),0.)*sh;
  vec3 c=alb*(mix(uGroundCol,uSkyCol,n.y*.5+.5)+uSunCol*d);
- vec3 h=normalize(normalize(uEye-wp)+uSun);
- c+=uSunCol*spec*pow(max(dot(n,h),1e-4),60.)*sh;
+ if(spec>0.){vec3 h=normalize(normalize(uEye-wp)+uSun);c+=uSunCol*spec*pow(max(dot(n,h),1e-4),60.)*sh;} // the highlight, only where something is glossy
  // A searchlight: a real light with a soft-edged cone and inverse-square falloff, so it is a bright pool close by
  // and fades with distance. In daylight it hardly shows next to the sun, at night it lights up the street.
  if(uSpot>0.){vec3 L=uSpotPos-wp;float d=length(L);L/=d;float cone=smoothstep(.972,.993,dot(-L,uSpotDir));
@@ -309,6 +308,12 @@ function triBatch(mat=0){
    const d=this.data; // written in place: no temporary arrays, so less work for the garbage collector
    for(let k=0;k<3;k++){const a=p[k],n=nrm[k],c=col[k],o=this.n++*STRIDE;d[o]=a[0];d[o+1]=a[1];d[o+2]=a[2];d[o+3]=n[0];d[o+4]=n[1];d[o+5]=n[2];d[o+6]=c[0];d[o+7]=c[1];d[o+8]=c[2];d[o+9]=0;d[o+10]=0;d[o+11]=alpha?alpha[k]:0;}
   },
+  // One corner written straight into the batch. For the parts that are rebuilt every frame from thousands of points
+  // (the bird's skin and feathers, smoke): nothing is created along the way, so the garbage collector has nothing to do.
+  vert(x,y,z,nx,ny,nz,r,g,b,alpha=0){
+   if((this.n+1)*STRIDE>this.data.length){const big=new Float32Array(this.data.length*2);big.set(this.data);this.data=big;}
+   const d=this.data,o=this.n++*STRIDE;d[o]=x;d[o+1]=y;d[o+2]=z;d[o+3]=nx;d[o+4]=ny;d[o+5]=nz;d[o+6]=r;d[o+7]=g;d[o+8]=b;d[o+9]=0;d[o+10]=0;d[o+11]=alpha;
+  },
   tri(a,b,c,col){
    if((this.n+3)*STRIDE>this.data.length){const g=new Float32Array(this.data.length*2);g.set(this.data);this.data=g;}
    const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
@@ -434,8 +439,10 @@ function drawFrame(casters,scene,decals){
  // Flat decals: pulled towards the camera, and not written to the depth buffer so they can overlap in order.
  lightUniforms(progMesh);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);
  for(const m of decals)m.draw();
- gl.disable(gl.POLYGON_OFFSET_FILL);
+ // See-through things (smoke, and the soft shadow patches of the fastest graphics) share the decals' pull towards the camera:
+ // the ground is one huge quad, and what lies a few centimetres above it would otherwise flicker or vanish.
  if(veil.n){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);veil.draw();gl.disable(gl.BLEND);}
+ gl.disable(gl.POLYGON_OFFSET_FILL);
  if(glow.n){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);glow.draw();gl.disable(gl.BLEND);}
  gl.depthMask(true);gl.bindVertexArray(null);
 }
