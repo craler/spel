@@ -4,7 +4,7 @@ const thresholds=[100,400,1000,2000,3500], fallen=new Map(), wrecks=new Map();
 let combo=0,comboTime=0,bestCombo=0,feathers=3,shield=0,carsHit=0,foodEaten=0,best=0;
 try{best=+localStorage.getItem('fagelbajs.best')||0;}catch{}
 const ranks=[[0,'Blyg sparv'],[100,'Parkens busfrö'],[400,'Torgets skräck'],[1000,'Stadens plåga'],[2000,'Efterlyst legend'],[3500,'Himlens härskare'],[6000,'Stadens mardröm']];
-const number=n=>n.toLocaleString('sv-SE');
+const numberFormat=new Intl.NumberFormat('sv-SE'),number=n=>numberFormat.format(n); // one formatter, made once: toLocaleString builds a new one on every call
 function rankOf(score){return ranks.filter(r=>score>=r[0]).at(-1)[1];}
 // ---- Topplista: one list for everybody, kept in Supabase. The browser keeps its own copy as well,
 // which is what is shown if the shared list cannot be reached.
@@ -82,9 +82,8 @@ let points=0,cars=[],sprayCount=0,halfStep=false,crowdTime=0;
 const carPaint=['#c8382e','#2f8fa0','#e0b030','#4f74b8','#d9d6cf','#8a3f6a','#3f7a52'];
 const maxWanted=5, sidewalkEdge=6.45, sidewalkLength=tile-2*sidewalkEdge;
 let wanted=0,trafficClock=0,trafficFactor=1,throwWait=1,thrown=[],mist=[],tank=1,refillWait=0,emptyTank=false;
-const runners=new Map();
 function resetChase(){
- wanted=0;trafficClock=0;trafficFactor=1;throwWait=1;thrown=[];mist=[];tank=1;refillWait=0;emptyTank=false;runners.clear();
+ wanted=0;trafficClock=0;trafficFactor=1;throwWait=1;thrown=[];mist=[];tank=1;refillWait=0;emptyTank=false;chaseSerial++;
 }
 // People throw by hand, so what they throw obeys gravity: nothing leaves an arm faster than this,
 // which with the game's gravity reaches roughly nine metres up. Height is safety from fruit, not from hawks or tanks.

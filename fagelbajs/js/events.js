@@ -11,7 +11,7 @@ const eventKinds={
 // appeared, a new one starts on a square ahead, of a random kind, and never close to one that is already on.
 // Up to two can be running at once. Each shows an arrow for its first seconds; after that you have to remember where it was.
 let events=[],eventSerial=0,lastEventAt=null,eventGap=0,lastKind='';
-function resetEvents(){if(events.length)staticKey='';events=[];lastEventAt=null;eventGap=150;}
+function resetEvents(){if(events.length)shadowDirty=true;events=[];lastEventAt=null;eventGap=150;}
 function startEvent(){
  const bi=Math.floor(bird.x/tile),bj=Math.floor(bird.z/tile),fx=Math.sin(bird.angle),fz=Math.cos(bird.angle),cands=[];
  for(let i=bi-7;i<=bi+7;i++)for(let j=bj-7;j<=bj+7;j++){
@@ -24,7 +24,7 @@ function startEvent(){
  if(!cands.length)return false;
  cands.sort((a,b)=>b[2]-a[2]);const [i,j]=cands[0],keys=Object.keys(eventKinds).filter(k=>k!==lastKind),kind=keys[Math.floor(Math.random()*keys.length)];lastKind=kind; // random, but never the same kind twice in a row
  const e={kind,i,j,x:i*tile+21,z:j*tile+21,left:kind==='bilsalong'?40:48,age:0,hits:0,serial:++eventSerial,done:false,...eventKinds[kind]};
- events.push(e);staticKey='';
+ events.push(e);shadowDirty=true; // its tables and stalls go, and so do their shadows
  banner(e.title,'Hinn dit! '+e.goal+' träffar ger +'+e.bonus,'alert',3.4);tone(520,780,.18,'triangle',.07);tone(780,1040,.2,'triangle',.07,.16);
  return true;
 }
@@ -45,7 +45,7 @@ function updateEvent(dt){
  }
  // When the time is up it counts as over at once, but the square only goes back to normal once it is out of sight.
  for(const e of events){e.left-=dt;e.age+=dt;if(e.left<=0&&!e.over){e.over=true;if(!e.done)feedLine(e.title.split(' ')[0]+' ÖVER');}}
- const gone=events.filter(e=>e.over&&!inSight(e.x,e.z));if(gone.length){staticKey='';events=events.filter(e=>!gone.includes(e));}
+ const gone=events.filter(e=>e.over&&!inSight(e.x,e.z));if(gone.length){shadowDirty=true;events=events.filter(e=>!gone.includes(e));}
 }
 // Called for every hit on a person or a vehicle; counts it for the event it belongs to.
 function eventHit(id){

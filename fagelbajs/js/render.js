@@ -210,9 +210,25 @@ function renderBird(){
  }
  paint();
 }
+// Outlined text is among the most expensive things a 2D canvas draws, and the same strings (the stars over the targets,
+// the score feed, warnings) are drawn frame after frame. So every string is drawn once into a small picture of its own
+// and after that only stamped out. Returns the width of the text.
+const textCache=new Map();
+function textSprite(str,px,fill,weight){
+ const key=str+'|'+px+'|'+fill+'|'+weight;let sp=textCache.get(key);if(sp)return sp;
+ const font=weight+' '+px+'px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif',line=Math.max(3,px*.22),pad=Math.ceil(line)+2;
+ ctx.font=font;const w=ctx.measureText(str).width,cw=Math.ceil(w+2*pad),ch=Math.ceil(px*1.5+2*pad);
+ const c=document.createElement('canvas');c.width=Math.ceil(cw*density);c.height=Math.ceil(ch*density);
+ const g=c.getContext('2d');g.scale(density,density);g.font=font;g.lineJoin='round';g.lineWidth=line;g.strokeStyle='#0b0e14d9';
+ const bx=pad,by=pad+px*1.1;g.strokeText(str,bx,by);g.fillStyle=fill;g.fillText(str,bx,by);
+ sp={c,w,bx,by,cw,ch};
+ if(textCache.size>240)textCache.delete(textCache.keys().next().value); // the oldest one goes
+ textCache.set(key,sp);return sp;
+}
 function text(str,x,y,size,fill='#fff',align='center',weight=800){
- ctx.font=weight+' '+size+'px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';ctx.textAlign=align;ctx.lineJoin='round';
- ctx.lineWidth=Math.max(3,size*.22);ctx.strokeStyle='#0b0e14d9';ctx.strokeText(str,x,y);ctx.fillStyle=fill;ctx.fillText(str,x,y);
+ const px=Math.max(8,Math.round(size)),sp=textSprite(str,px,fill,weight),k=size/px; // sizes that animate are scaled from the nearest whole one
+ ctx.drawImage(sp.c,x-(sp.bx+(align==='center'?sp.w/2:align==='right'?sp.w:0))*k,y-sp.by*k,sp.cw*k,sp.ch*k);
+ return sp.w*k;
 }
 function drawSight([x,y],target){
  ctx.save();ctx.translate(x,y);ctx.lineCap='round';ctx.beginPath();
@@ -255,6 +271,8 @@ function paint(){}
 const M={
  cube:new Mesh().box(0,0,0,1,1,1,WHITE,1).build(),
  ball:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,10,6).build(),
+ // Lighter balls for what is small on screen: falling drops (blob) and the mist, splashes and trails round them (dot).
+ blob:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,7,4).build(),dot:new Mesh().ball(0,0,0,1,1,1,WHITE,1,0,0,5,3).build(),
  disc:(()=>{const m=new Mesh();for(let i=0;i<14;i++){const a=i*tau/14,b=(i+1)*tau/14;m.tri([0,0,0],[Math.cos(b),0,Math.sin(b)],[Math.cos(a),0,Math.sin(a)],WHITE,1);}return m.build();})(),
  people:[['#dba27e','#33271f','#2b323d',0],['#8a5a3c','#1d1612','#3a4a66',1],['#f0c4a4','#b9853e','#4a4038',1],['#c68a5e','#2a2019','#5c5f66',0],['#e6b08c','#7a3b1e','#2f3d55',0]].map(([skin,hair,pants,long])=>personMesh(rgb(skin),rgb(hair),rgb(pants),long)),
  peopleFar:[['#dba27e','#33271f','#2b323d',0],['#8a5a3c','#1d1612','#3a4a66',1],['#f0c4a4','#b9853e','#4a4038',1],['#c68a5e','#2a2019','#5c5f66',0],['#e6b08c','#7a3b1e','#2f3d55',0]].map(([skin,hair,pants,long])=>personMesh(rgb(skin),rgb(hair),rgb(pants),long,true)),
@@ -306,8 +324,8 @@ const M={
   m.ball(.45,2.32,-.3,.32,.14,.32,[.75,.75,.75],1,0,0,8,4);return m.build();})(),
  // Trees, lamps, people and cars come in a near and a far version: past a few blocks the haze hides the detail,
  // so they are drawn with far fewer triangles. Most of the time a frame takes goes into drawing triangles.
- tree:new Mesh().tube(0,0,2.6,0,.24,.15,rgb('#463222'),0,0,0,5).ball(0,4.3,0,2.3,2.1,2.3,WHITE,1,0,0,8,5).ball(1.25,3.3,.55,1.5,1.3,1.5,[.85,.9,.85],1,0,0,7,4).ball(-1,3.5,-.8,1.65,1.45,1.6,[.92,1.08,.9],1,0,0,7,4).build(),
- treeFar:new Mesh().tube(0,0,2.4,0,.24,.17,rgb('#463222'),0,0,0,4,false).ball(0,3.95,0,2.5,2.35,2.5,WHITE,1,0,0,7,4).build(),
+ tree:new Mesh().tube(0,0,2.6,0,.24,.15,rgb('#463222'),0,0,0,5).ball(0,4.3,0,2.3,2.1,2.3,WHITE,1,0,0,8,5,.3).ball(1.25,3.3,.55,1.5,1.3,1.5,[.85,.9,.85],1,0,0,7,4,.3).ball(-1,3.5,-.8,1.65,1.45,1.6,[.92,1.08,.9],1,0,0,7,4,.3).build(),
+ treeFar:new Mesh().tube(0,0,2.4,0,.24,.17,rgb('#463222'),0,0,0,4,false).ball(0,3.95,0,2.5,2.35,2.5,WHITE,1,0,0,7,4,.3).build(),
  lamp:new Mesh().tube(0,0,5.4,0,.08,.05,rgb('#24272b'),0,0,0,4,false).box(-.05,5.3,-.05,.05,5.4,.9,rgb('#24272b')).box(-.16,5.18,.62,.16,5.32,1.08,rgb('#fff1c0'),0,0,0,.7).build(), // a plain tapered lamp head
  table:new Mesh().tube(0,0,.98,0,.05,.05,rgb('#5a5d60'),0,0,0,6).tube(0,.98,1.04,0,.62,.62,rgb('#d8d0c0'),0,0,0,10).tube(0,1.04,2.55,0,.03,.03,rgb('#3a3d40'),0,0,0,5)
   .tube(0,2.2,2.8,0,1.55,.03,WHITE,1,0,0,10,false).build(),
@@ -320,7 +338,7 @@ const M={
   m.box(-.9,0,-.9,.9,2.3,.9,stone,0,0,0,.86).box(-1.15,0,-1.15,1.15,.35,1.15,stone);
   m.ball(0,3.55,0,.44,1.15,.38,bronze,0,0,0,8,6).ball(0,4.95,0,.27,.3,.27,bronze,0,0,0,8,5).tube(.5,3.9,5.5,.1,.1,.07,bronze,0,0,0,6).tube(-.2,2.3,3,0,.2,.16,bronze,0,0,0,6).tube(.2,2.3,3,0,.2,.16,bronze,0,0,0,6);return m.build();})(),
 // Splatter shapes: an uneven blob with a few long rays (flat for the ground, upright for walls) and a drip.
- splat:splatMesh(false),splatWall:splatMesh(true),
+ splat:splatMesh(false),splatWall:splatMesh(true),splatFar:splatMesh(false,true),splatWallFar:splatMesh(true,true),
  dome:(()=>{const m=new Mesh();for(let j=0;j<3;j++)for(let i=0;i<9;i++){const q=(a,b)=>{const t=a*tau/9,u=b*Math.PI/6,n=[Math.sin(u)*Math.cos(t),Math.cos(u),Math.sin(u)*Math.sin(t)];return [n,n];};
   const c=[q(i,j),q(i+1,j),q(i+1,j+1),q(i,j+1)];for(const k of [0,1,2,0,2,3])m.v(c[k][0],c[k][1],WHITE,1);}return m.build();})(),
  drip:(()=>{const m=new Mesh(),pts=[[-.5,0,0],[-.5,-.8,0]];
@@ -368,63 +386,110 @@ function carMesh(kind,far){ // far: no mirrors, people or small parts, and plain
 }
 // A splatter: a dark wet core, a paler body with four rounded fingers, and a cream rim. The vertex colours
 // multiply the instance colour, so one mesh serves every stain.
-function splatMesh(upright){
- const m=new Mesh(),n=36,P=(x,y)=>upright?[x,y,0]:[x,0,y],N=upright?[0,0,1]:[0,1,0];
- const core=[.6,.56,.34],body=[.86,.83,.64],rim=[1,1,1];
- const ring=Array.from({length:n},(_,i)=>{
-  const a=i*tau/n;let r=.66+.16*Math.sin(a*3+1)+.09*Math.sin(a*7+2.4);
-  for(const ray of [.4,1.9,3.3,4.9]){const d=Math.atan2(Math.sin(a-ray),Math.cos(a-ray))/.17;r+=.5*Math.exp(-d*d);}
+function splatMesh(upright,simple){
+ // simple: the same outline with a third of the points and two rings instead of three, for stains seen from a distance
+ const m=new Mesh(),P=(x,y)=>upright?[x,y,0]:[x,0,y],N=upright?[0,0,1]:[0,1,0];
+ const core=[.6,.56,.34],body=[.86,.83,.64],rim=[1,1,1],rays=[.4,1.9,3.3,4.9];
+ const angles=simple?[...Array.from({length:10},(_,i)=>i*tau/10+.1),...rays].sort((a,b)=>a-b):Array.from({length:36},(_,i)=>i*tau/36);
+ const ring=angles.map(a=>{
+  let r=.66+.16*Math.sin(a*3+1)+.09*Math.sin(a*7+2.4);
+  for(const ray of rays){const d=Math.atan2(Math.sin(a-ray),Math.cos(a-ray))/.17;r+=.5*Math.exp(-d*d);}
   return [a,r];
- });
+ }),n=ring.length;
  const pt=(a,r)=>P(Math.cos(a)*r,Math.sin(a)*r);
  for(let i=0;i<n;i++){
   const [a0,r0]=ring[i],[a1,r1]=ring[(i+1)%n],k0=.34+.08*Math.sin(a0*5),k1=.34+.08*Math.sin(a1*5);
   m.v(P(.04,-.03),N,core,1);m.v(pt(a0,r0*k0),N,core,1);m.v(pt(a1,r1*k1),N,core,1);
-  for(const [p,c] of [[pt(a0,r0*k0),core],[pt(a0,r0*.8),body],[pt(a1,r1*.8),body],[pt(a0,r0*k0),core],[pt(a1,r1*.8),body],[pt(a1,r1*k1),core],
-   [pt(a0,r0*.8),body],[pt(a0,r0),rim],[pt(a1,r1),rim],[pt(a0,r0*.8),body],[pt(a1,r1),rim],[pt(a1,r1*.8),body]])m.v(p,N,c,1);
+  const quads=simple?[[pt(a0,r0*k0),core],[pt(a0,r0),rim],[pt(a1,r1),rim],[pt(a0,r0*k0),core],[pt(a1,r1),rim],[pt(a1,r1*k1),core]]:
+   [[pt(a0,r0*k0),core],[pt(a0,r0*.8),body],[pt(a1,r1*.8),body],[pt(a0,r0*k0),core],[pt(a1,r1*.8),body],[pt(a1,r1*k1),core],
+    [pt(a0,r0*.8),body],[pt(a0,r0),rim],[pt(a1,r1),rim],[pt(a0,r0*.8),body],[pt(a1,r1),rim],[pt(a1,r1*.8),body]];
+  for(const [p,c] of quads)m.v(p,N,c,1);
  }
  return m.build();
 }
 M.cube.cull=true;
 const statics=[M.cube,M.tree,M.treeFar,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
-const moving=[...M.people,...M.peopleFar,M.umbrella,M.car,M.carFar,M.hatchFar,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.big,M.balloon,M.boat,M.ball,M.dome];
-const decals=[M.splat,M.splatWall,M.drip,M.disc];
+const moving=[...M.people,...M.peopleFar,M.umbrella,M.car,M.carFar,M.hatchFar,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.big,M.balloon,M.boat,M.ball,M.blob,M.dot,M.dome];
+const decals=[M.splat,M.splatWall,M.splatFar,M.splatWallFar,M.drip,M.disc];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
-let staticKey='';
-// Buildings, trees and street furniture only change when the bird crosses into a new block.
-function buildStatics(){
- const ix=Math.round(bird.x/tile),iz=Math.round(bird.z/tile),key=ix+','+iz;if(key===staticKey)return;staticKey=key;
- for(const m of statics)m.clear();
- // Nearest blocks first, so the shadow pass can stop after the ones its map covers (see Mesh.drawShadow).
- // Fast graphics draw 9 x 9 blocks instead of 14 x 14 and let the haze close in a little sooner.
- // Draw distance in blocks; trees are left out beyond treeFar (tiny dots in the haze by then), lamp posts beyond lampNear.
- const reach=fastest?3.5:fast?4.5:6,treeNear=fastest?1.5:2.5,treeEnd=fastest?2.5:fast?3.5:4.5,lampNear=fastest?2.5:3.5,list=[];
- for(let i=Math.ceil(ix-.5-reach);i<=Math.floor(ix-.5+reach);i++)for(let j=Math.ceil(iz-.5-reach);j<=Math.floor(iz-.5+reach);j++)list.push([i,j,Math.max(Math.abs(i-ix+.5),Math.abs(j-iz+.5))]);
- list.sort((a,b)=>a[2]-b[2]);let marked=false;
- for(const [i,j,d] of list){
-  if(!marked&&d>4.5){marked=true;for(const m of statics)m.near=m.n;}
-  const b=block(i,j);
-  for(const [a,c,w,d,h,paint,seed] of b.blds){
-   if(paint<0)continue;
-   M.cube.add(a,0,c,0,w,h,d,rgb(wallPaint[paint]),1,seed);
-   // Roof plant: purely for looks, kept low.
-   M.cube.add(a+w*.25+seed*2,h,c+d*.3,0,1.8,.8,1.3,roofKit);if(w*d>150)M.cube.add(a+w*.62,h,c+d*.6,0,2.4,1,2.2,roofKit);
-  }
-  if(d<=treeEnd)for(const [x,z,s,seed] of b.trees)(d>treeNear?M.treeFar:M.tree).add(x,0,z,seed*tau,s,s*(.9+.25*seed),s,rgb(leaf[Math.floor(seed*leaf.length)]));
-  if(d<=lampNear)for(const [n,[x,z]] of b.lamps.entries())M.lamp.add(x,0,z,[.8,-.8,2.4,-2.4][n]);
-  if(!onEventSquare(i,j))for(const [x,z,p] of b.tables)M.table.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
-  if(!onEventSquare(i,j))for(const [x,z,p] of b.stalls)M.stall.add(x,0,z,0,1,1,1,rgb(parasolPaint[p]));
-  for(const [x,z,yaw] of b.benches)M.bench.add(x,0,z,yaw);
-  if(b.statue)M.statue.add(b.statue[0],0,b.statue[1],.6);
-  if(b.type===3){ // canal: quay walls down to the water, bridge edges and railings, gabled roofs
-   const {x,z}=b,stone=rgb('#5d5850'),iron=rgb('#1e2124');
-   for(const wx of [16.2,25.5]){M.cube.add(x+wx,WATER-.2,z+8,0,.3,.2-WATER,26,stone);M.cube.add(x+wx-.05,0,z+8,0,.4,.28,26,stone);}
-   for(const wz of [7.6,34]){M.cube.add(x+16.5,-.7,z+wz,0,9,.7,.4,stone);M.cube.add(x+16.4,.0,z+wz+.1,0,9.2,.16,.2,stone);
-    M.cube.add(x+16.4,.95,z+wz+.14,0,9.2,.08,.1,iron);for(let n=0;n<=9;n++)M.cube.add(x+16.45+n,.16,z+wz+.15,0,.07,.8,.07,iron);}
-   for(const [gx,gz,h,seed] of b.gables)M.gable.add(gx,h,gz,0,5.5,1.6+1.6*seed,5,rgb(seed<.5?'#5a2f26':'#3a3d42'));
-  }
+// ---- What the camera can see. A ball of radius r round a point is in view unless it lies wholly outside one side of the picture.
+const fr={kx:1,nx:1,ku:1,nu:1,kd:1,nd:1};
+function frustumSetup(){
+ fr.kx=width/(2*scale);fr.ku=height*.43/scale;fr.kd=height*.57/scale;
+ fr.nx=Math.hypot(1,fr.kx);fr.nu=Math.hypot(1,fr.ku);fr.nd=Math.hypot(1,fr.kd);
+}
+function inView(x,y,z,r){
+ const c=camera,dx=x-c.x,dy=y-c.y,dz=z-c.z,f=dx*c.s+dz*c.c,Z=f*c.cp-dy*c.sp;
+ if(Z<-r)return false;
+ const X0=dx*c.c-dz*c.s,Y0=dy*c.cp+f*c.sp,cr=c.cr??1,sr=c.sr??0,X=X0*cr+Y0*sr,Y=Y0*cr-X0*sr;
+ return Math.abs(X)-fr.kx*Z<=r*fr.nx&&Y-fr.ku*Z<=r*fr.nu&&-Y-fr.kd*Z<=r*fr.nd;
+}
+// ---- Statics: buildings, trees and street furniture. Each block's instances are packed once and kept (packBlock).
+// Every frame the blocks that are in view are copied, nearest first, into the meshes' instance buffers; what is behind
+// the camera or outside the picture is never sent to the graphics card. Nearest first also means near buildings hide
+// far ones before their pixels are shaded.
+const blockGeo=new Map(),visBlocks=[];
+function packBlock(i,j){
+ const key=i+','+j;let g=blockGeo.get(key);if(g)return g;
+ const b=block(i,j),lists={};let top=7;
+ const put=(name,x,y,z,yaw=0,sx=1,sy=1,sz=1,col=WHITE,mat=0,a0=0)=>(lists[name]||(lists[name]=[])).push(x,y,z,yaw,sx,sy,sz,col[0],col[1],col[2],mat,a0,0,0,0);
+ for(const [a,c,w,d,h,paint,seed] of b.blds){
+  if(paint<0)continue;top=Math.max(top,h+1);
+  put('cube',a,0,c,0,w,h,d,rgb(wallPaint[paint]),1,seed);
+  // Roof plant: purely for looks, kept low.
+  put('cube',a+w*.25+seed*2,h,c+d*.3,0,1.8,.8,1.3,roofKit);if(w*d>150)put('cube',a+w*.62,h,c+d*.6,0,2.4,1,2.2,roofKit);
+ }
+ for(const [x,z,s,seed] of b.trees){put('tree',x,0,z,seed*tau,s,s*(.9+.25*seed),s,rgb(leaf[Math.floor(seed*leaf.length)]));top=Math.max(top,7.5*s);}
+ for(const [n,[x,z]] of b.lamps.entries())put('lamp',x,0,z,[.8,-.8,2.4,-2.4][n]);
+ for(const [x,z,p] of b.tables)put('table',x,0,z,0,1,1,1,rgb(parasolPaint[p]));
+ for(const [x,z,p] of b.stalls)put('stall',x,0,z,0,1,1,1,rgb(parasolPaint[p]));
+ for(const [x,z,yaw] of b.benches)put('bench',x,0,z,yaw);
+ if(b.statue)put('statue',b.statue[0],0,b.statue[1],.6);
+ if(b.type===3){ // canal: quay walls down to the water, bridge edges and railings, gabled roofs
+  const {x,z}=b,stone=rgb('#5d5850'),iron=rgb('#1e2124');
+  for(const wx of [16.2,25.5]){put('cube',x+wx,WATER-.2,z+8,0,.3,.2-WATER,26,stone);put('cube',x+wx-.05,0,z+8,0,.4,.28,26,stone);}
+  for(const wz of [7.6,34]){put('cube',x+16.5,-.7,z+wz,0,9,.7,.4,stone);put('cube',x+16.4,.0,z+wz+.1,0,9.2,.16,.2,stone);
+   put('cube',x+16.4,.95,z+wz+.14,0,9.2,.08,.1,iron);for(let n=0;n<=9;n++)put('cube',x+16.45+n,.16,z+wz+.15,0,.07,.8,.07,iron);}
+  for(const [gx,gz,h,seed] of b.gables){put('gable',gx,h,gz,0,5.5,1.6+1.6*seed,5,rgb(seed<.5?'#5a2f26':'#3a3d42'));top=Math.max(top,h+4);}
+ }
+ g={i,j,x:b.x+tile/2,z:b.z+tile/2,top,r:Math.hypot(tile*.71,top/2),dist:0,d:0};
+ for(const name in lists)g[name]=new Float32Array(lists[name]);
+ blockGeo.set(key,g);
+ if(blockGeo.size>1200){const bi=Math.round(bird.x/tile),bj=Math.round(bird.z/tile);for(const [k,q] of blockGeo)if(Math.abs(q.i-bi)>16||Math.abs(q.j-bj)>16)blockGeo.delete(k);}
+ return g;
+}
+function appendInst(m,arr){
+ if(!arr)return;const at=m.n*ISTRIDE,need=at+arr.length;
+ if(need>m.inst.length){const big=new Float32Array(Math.max(need,m.inst.length*2));big.set(m.inst.subarray(0,at));m.inst=big;}
+ m.inst.set(arr,at);m.n+=arr.length/ISTRIDE;
+}
+// Fills the static meshes with the blocks that pass keep(block), nearest first, and uploads them.
+// Trees further away than a few blocks use the simple far model, and lamp posts are only drawn nearby.
+function fillStatics(keep){
+ const ix=Math.round(bird.x/tile),iz=Math.round(bird.z/tile);
+ const reach=fastest?3.5:fast?4.5:6,treeNear=fastest?1.5:2.5,treeEnd=fastest?2.5:fast?3.5:4.5,lampNear=fastest?2.5:3.5;
+ visBlocks.length=0;
+ for(let i=Math.ceil(ix-.5-reach);i<=Math.floor(ix-.5+reach);i++)for(let j=Math.ceil(iz-.5-reach);j<=Math.floor(iz-.5+reach);j++){
+  const g=packBlock(i,j);if(!keep(g))continue;
+  g.d=Math.max(Math.abs(i-ix+.5),Math.abs(j-iz+.5));g.dist=(g.x-camera.x)**2+(g.z-camera.z)**2;visBlocks.push(g);
+ }
+ visBlocks.sort((a,b)=>a.dist-b.dist);
+ for(const m of statics)m.n=0;
+ for(const g of visBlocks){
+  appendInst(M.cube,g.cube);
+  if(g.d<=treeEnd)appendInst(g.d>treeNear?M.treeFar:M.tree,g.tree);
+  if(g.d<=lampNear)appendInst(M.lamp,g.lamp);
+  if(!onEventSquare(g.i,g.j)){appendInst(M.table,g.table);appendInst(M.stall,g.stall);}
+  appendInst(M.bench,g.bench);appendInst(M.statue,g.statue);appendInst(M.gable,g.gable);
  }
  for(const m of statics)m.upload();
+}
+const blockInView=g=>inView(g.x,g.top/2,g.z,g.r);
+function buildStatics(){fillStatics(blockInView);}
+// For the stored shadow map: everything static that the map covers, in view or not, drawn straight into it.
+function drawShadowStatics(ax,az){
+ const R=SHADOW_R+tile*.75;fillStatics(g=>Math.abs(g.x-ax)<R&&Math.abs(g.z-az)<R);
+ for(const m of statics)m.draw();
 }
 let gooMat=-1; // -1 wet and glossy, -2 polished gold
 const gooShade=['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'].map(rgb);
@@ -442,7 +507,7 @@ function buildMoving(){
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  const far2=(fastest?30:45)**2,range=fastest?80:130;
  for(const h of people){
-  if(Math.abs(h.x-camera.x)>range||Math.abs(h.z-camera.z)>range)continue;
+  if(Math.abs(h.x-camera.x)>range||Math.abs(h.z-camera.z)>range||!inView(h.x,h.y+1,h.z,5))continue; // a person's shadow is short, so out of view means no trace in the picture
   const farAway=(h.x-camera.x)**2+(h.z-camera.z)**2>far2;
   const down=scored.has(h.id),size=.93+.14*hash(h.phase,3,7),since=down?elapsed-fallen.get(h.id):0;
   // A hit knocks them flat. After a few seconds they get up again, turn to the bird and shake a fist.
@@ -459,6 +524,7 @@ function buildMoving(){
   if(h.bride&&!down)M.ball.add(h.x,h.y+.55,h.z,0,.42,.55,.42,splatCol,gooMat);
  }
  for(const c of cars){
+  if(!inView(c.x,2,c.z,wrecks.has(c.id)?14:c.bus?9:6))continue;
   const carFar=(c.x-camera.x)**2+(c.z-camera.z)**2>(fastest?40:60)**2;
   (c.bus?M.bus:c.cab?(carFar?M.carFar:M.cab):c.hatch?(carFar?M.hatchFar:M.hatch):carFar?M.carFar:M.car).add(c.x,0,c.z,c.yaw,1,1,1,rgb(c.color),-1);
   if(c.bus&&wrecks.has(c.id))M.ball.add(c.x,3.02,c.z,c.yaw,.9,.07,1.6,splatCol,gooMat);
@@ -483,7 +549,7 @@ function buildMoving(){
   else if(o.kind==='egg')M.ball.add(x,y,z,turn,.19*k,.25*k,.19*k,rgb('#f6efe2'),-1);
   else if(o.kind==='cabbage'){M.ball.add(x,y,z,turn,.32*k,.29*k,.32*k,rgb('#7fb04a'));M.ball.add(x+.08,y+.1,z,turn,.24*k,.2*k,.26*k,rgb('#a9d06a'));}
   else{M.ball.add(x,y,z,turn,.13*k,.1*k,.3*k,rgb('#6a3f24'));M.ball.add(x,y-.08*k,z,turn,.14*k,.04*k,.32*k,rgb('#1c1a19'));M.ball.add(x-Math.sin(turn)*.2*k,y+.1*k,z-Math.cos(turn)*.2*k,turn,.12*k,.13*k,.12*k,rgb('#6a3f24'));}
-  if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.ball.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol,gooMat);}
+  if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.dot.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol,gooMat);}
  }
  if(bird.snare>0)drawNet(bird.x,bird.y+.25,bird.z,1,true);
  // Star targets with their props: window cleaners on a lift, rowing boats on the canal, hot-air balloons.
@@ -518,7 +584,7 @@ function buildMoving(){
   for(const [dx,dz] of t.splats)M.ball.add(t.x+clamp(dx,-1.4,1.4),Math.hypot(dx,dz)<1.2?2.32:1.6,t.z+clamp(dz,-3,3),0,.34,.07,.3,splatCol,gooMat);
   if(!alive)smokeColumn(t.x,2.3,t.z,t.dead,t.id,2.2);
  }
- for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.ball.add(m.x,m.y,m.z,0,r,r,r,splatCol,gooMat);}
+ for(const m of mist){const a=1-m.age/m.life,r=.02+.035*a;M.dot.add(m.x,m.y,m.z,0,r,r,r,splatCol,gooMat);}
  // The spray: wet, glossy blobs stretched along their fall, in mixed shades with darker bits,
  // joined by thick strands that thin out and snap as they fall apart. While it flows, a strand hangs from the vent.
  let prior=null;
@@ -526,24 +592,30 @@ function buildMoving(){
  for(const d of drops){
   const p=at(d,d.age),vx=d.vx,vy=d.vy-gravity*d.age,vz=d.vz,sp=Math.hypot(vx,vy,vz)||1;
   const stretch=1+clamp(sp*.035,0,1.6)*(d.big?.6:1),wob=1+.22*Math.sin(d.age*26+d.seed),tilt=Math.atan2(-vy,Math.hypot(vx,vz)||1e-3);
-  M.ball.add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,gooShade[d.seed%gooShade.length],gooMat,0,0,tilt);
-  if(d.dark)M.ball.add(p[0]+.4*d.r,p[1]+.2*d.r,p[2]+.3*d.r,d.seed,d.r*.5,d.r*.45,d.r*.6,bits,-1);
+  (d.big?M.ball:M.blob).add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,gooShade[d.seed%gooShade.length],gooMat,0,0,tilt);
+  if(d.dark)M.dot.add(p[0]+.4*d.r,p[1]+.2*d.r,p[2]+.3*d.r,d.seed,d.r*.5,d.r*.45,d.r*.6,bits,-1);
   if(prior&&prior.age-d.age<.1&&d.age<1.1)strand(at(prior,prior.age),p,prior.r*.75*(1-prior.age*.8),d.r*.75*(1-d.age*.8),gooShade[d.seed%gooShade.length]);
   prior=d;
  }
  if(flowing&&drops.length){const d=drops.at(-1);strand(vent,at(d,d.age),.07,d.r*.7,gooShade[0]);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,gooShade[0],gooMat);}
- for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.ball.add(s.x,s.y,s.z,0,r,r*1.5,r,gooShade[Math.floor(s.life*20)%gooShade.length],gooMat);}
+ for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.dot.add(s.x,s.y,s.z,0,r,r*1.5,r,gooShade[Math.floor(s.life*20)%gooShade.length],gooMat);}
+ // Stains: close to the camera they have a raised wet heap, dark streaks and flung droplets; further off only the flat
+ // splat in a simpler outline. There can be hundreds of them, so the far ones have to be cheap.
+ const stainNear=(fastest?16:fast?22:28)**2;
  for(const s of stains){
-  if(Math.abs(s.x-camera.x)>130||Math.abs(s.z-camera.z)>130)continue;
+  const dx=s.x-camera.x,dz=s.z-camera.z;
+  if(Math.abs(dx)>130||Math.abs(dz)>130||!inView(s.x,s.y,s.z,3))continue;
   const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau,col=gooShade[Math.floor(s.seed*97)%gooShade.length];
+  const near=dx*dx+dz*dz+(s.y-camera.y)**2<stainNear;
   if(s.wall!==undefined){
-   M.splatWall.add(s.x,s.y,s.z,s.wall,r,r,1,col,gooMat);
+   (near?M.splatWall:M.splatWallFar).add(s.x,s.y,s.z,s.wall,r,r,1,col,gooMat);
    const len=Math.min(s.drip,age*.45,s.y-.1),off=r*.5*(s.seed-.5);
-   if(len>.05){const dx=s.x+Math.cos(s.wall)*off,dz=s.z-Math.sin(s.wall)*off,w=.09+.09*s.seed;
-    M.drip.add(dx,s.y-r*.3,dz,s.wall,w,len,1,col,gooMat);
-    M.dome.add(dx+Math.sin(s.wall)*.02,s.y-r*.3-len*.8-.05,dz+Math.cos(s.wall)*.02,s.wall,w*.55,w*.7,w*.45,col,gooMat);} // a fat drop at the end of the run
+   if(len>.05){const px=s.x+Math.cos(s.wall)*off,pz=s.z-Math.sin(s.wall)*off,w=.09+.09*s.seed;
+    M.drip.add(px,s.y-r*.3,pz,s.wall,w,len,1,col,gooMat);
+    if(near)M.dome.add(px+Math.sin(s.wall)*.02,s.y-r*.3-len*.8-.05,pz+Math.cos(s.wall)*.02,s.wall,w*.55,w*.7,w*.45,col,gooMat);} // a fat drop at the end of the run
   }else{
-   M.splat.add(s.x,s.y+.04,s.z,turn,r,1,r*(.8+.4*s.seed),col,gooMat);
+   (near?M.splat:M.splatFar).add(s.x,s.y+.04,s.z,turn,r,1,r*(.8+.4*s.seed),col,gooMat);
+   if(!near)continue;
    // A raised, glistening heap in the middle, a dark streak through it, and a few droplets flung out around it.
    const heap=Math.min(1,age*9)*r;
    M.dome.add(s.x+.08*r*Math.cos(turn),s.y+.03,s.z+.08*r*Math.sin(turn),turn,heap*.34,heap*(.07+.06*s.seed),heap*.27,col,gooMat);
@@ -835,15 +907,19 @@ function drawFeed(){
   const age=elapsed-f.t;if(age>1.9)continue;
   ctx.globalAlpha=clamp((1.9-age)/.4,0,1);
   let cx=x+12*Math.max(0,1-age*8);const y=y0+row++*22;
-  if(f.amount){text('+'+f.amount,cx,y,18,'#ffd24a','left',900);cx+=ctx.measureText('+'+f.amount).width+8;}
-  text(f.label,cx,y,13,'#fff','left',800);
-  if(f.tags){cx+=ctx.measureText(f.label).width+8;text(f.tags,cx,y,11,'#ffe9a3','left',800);}
+  if(f.amount)cx+=text('+'+f.amount,cx,y,18,'#ffd24a','left',900)+8;
+  const labelWide=text(f.label,cx,y,13,'#fff','left',800);
+  if(f.tags)text(f.tags,cx+labelWide+8,y,11,'#ffe9a3','left',800);
  }
  ctx.globalAlpha=1;
 }
+const shadowCasters=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,dyn,omen,goo];
+const solidScene=[...statics,...moving,dyn,goo];
 function draw3D(){
+ frustumSetup();
+ if(!fastest)staticShadow(drawShadowStatics); // only does anything when the stored shadows are out of date
  buildStatics();buildMoving();
- drawFrame([...statics,...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,dyn,omen,goo],[...statics,...moving,dyn,goo],decals);
+ drawFrame(shadowCasters,solidScene,decals);
 }
 // ---- Killcam: the best hit of the flight, replayed slowly behind the end screen from a camera beside the victim.
 let killPlay=0;

@@ -23,12 +23,13 @@ float shadow(vec3 wp,vec3 n){
  vec4 lp=uLight*vec4(wp+n*.12,1.);vec3 c=lp.xyz*.5+.5;
  if(c.x<0.||c.x>1.||c.y<0.||c.y>1.||c.z>1.)return 1.;
  if(uFast>.5)return texture(uShadow,vec3(c.xy,c.z-.0009)); // fast: one sample
- float s=0.;
- for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++)s+=texture(uShadow,vec3(c.xy+vec2(x,y)*uTexel,c.z-.0006));
- return s/9.;
+ // Four taps, each already filtered over 2 x 2 texels by the sampler: as soft as nine plain ones for less than half the work.
+ float o=.75*uTexel,z=c.z-.0006;
+ return .25*(texture(uShadow,vec3(c.xy+vec2(-o,-o),z))+texture(uShadow,vec3(c.xy+vec2(o,-o),z))+texture(uShadow,vec3(c.xy+vec2(-o,o),z))+texture(uShadow,vec3(c.xy+vec2(o,o),z)));
 }
-vec3 fogged(vec3 c,vec3 wp){float d=length((uEye-wp)*vec3(1.,.35,1.))*uFogD; // haze thickens with ground distance, not altitude
- return mix(c,uFogCol,1.-exp(-d*d));}
+vec3 fogged(vec3 c,vec3 wp){vec3 v=uEye-wp;float d=length(v*vec3(1.,.35,1.))*uFogD; // haze thickens with ground distance, not altitude
+ vec3 fc=uFogCol;if(uFast<.5)fc+=uSunCol*.1*pow(max(-dot(normalize(v),uSun),0.),6.); // and glows towards the sun, exactly as the sky does
+ return mix(c,fc,1.-exp(-d*d));}
 vec3 lit(vec3 alb,vec3 n,vec3 wp,float spec){
  float sh=shadow(wp,n);
  if(uFast<.5)sh*=mix(1.,.5,smoothstep(.52,.74,vnoise(wp.xz*.011+uTime*.012))); // drifting cloud shadows
@@ -105,7 +106,7 @@ vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec
 }
 void main(){
  vec3 g=normalize(vN),n=dot(g,uEye-vW)<0.?-g:g,alb=vC.rgb,em=vec3(0);float spec=0.;
- if(vC.a>.5&&vC.a<1.5)alb=facade(vC.rgb,vL,g,vS,vSeed,spec,em);
+ if(vC.a>.5&&vC.a<1.5){alb=facade(vC.rgb,vL,g,vS,vSeed,spec,em);alb*=.74+.26*smoothstep(0.,3.4,vL.y);} // darker towards the street: it sits the building on the ground
  else if(vC.a>1.5){em=alb*1.6;alb=vec3(0);}
  else if(vC.a<-1.5){spec=3.;alb*=.75;em=alb*.12;} // polished metal: a strong highlight on a darker base
  else if(vC.a<-.5){spec=.8;}
@@ -230,12 +231,13 @@ class Mesh{
   return this;
  }
  // Smooth ellipsoid.
- ball(cx,cy,cz,rx,ry,rz,col,t=0,part=0,piv=0,seg=8,rings=5){
+ ball(cx,cy,cz,rx,ry,rz,col,t=0,part=0,piv=0,seg=8,rings=5,grad=0){
   const pt=(i,j)=>{const a=i*tau/seg,b=j*Math.PI/rings,s=Math.sin(b);
    const n=[s*Math.cos(a),Math.cos(b),s*Math.sin(a)];return [[cx+n[0]*rx,cy+n[1]*ry,cz+n[2]*rz],n];};
   for(let j=0;j<rings;j++)for(let i=0;i<seg;i++){
    const q=[pt(i,j),pt(i+1,j),pt(i+1,j+1),pt(i,j+1)];
-   for(const k of [0,1,2,0,2,3])this.v(q[k][0],q[k][1],col,t,part,piv);
+   // grad bakes a little light into the colour: paler and warmer on top, darker underneath (tree crowns)
+   for(const k of [0,1,2,0,2,3]){const ny=q[k][1][1],c=grad?[col[0]*(1+grad*ny*1.05),col[1]*(1+grad*ny*1.1),col[2]*(1+grad*ny*.75)]:col;this.v(q[k][0],q[k][1],c,t,part,piv);}
   }
   return this;
  }
@@ -284,15 +286,14 @@ class Mesh{
   attribs([[4,4,0],[5,3,4],[6,4,7],[7,4,11]],ISTRIDE,1);
   gl.bindVertexArray(null);return this;
  }
- clear(){this.n=0;this.near=undefined;}
+ clear(){this.n=0;}
  // One instance: position, yaw, scale, colour, material (0 lit, 1 facade, 2 glowing, -1 glossy), four animation values.
  add(x,y,z,yaw=0,sx=1,sy=1,sz=1,col=WHITE,mat=0,a0=0,a1=0,a2=0,a3=0){
   if((this.n+1)*ISTRIDE>this.inst.length){const g=new Float32Array(this.inst.length*2);g.set(this.inst);this.inst=g;}
   const d=this.inst,o=this.n++*ISTRIDE;d[o]=x;d[o+1]=y;d[o+2]=z;d[o+3]=yaw;d[o+4]=sx;d[o+5]=sy;d[o+6]=sz;d[o+7]=col[0];d[o+8]=col[1];d[o+9]=col[2];d[o+10]=mat;d[o+11]=a0;d[o+12]=a1;d[o+13]=a2;d[o+14]=a3;
  }
- upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.ibo);gl.bufferData(gl.ARRAY_BUFFER,this.inst.subarray(0,this.n*ISTRIDE),gl.DYNAMIC_DRAW);}
+ upload(){if(!this.n&&!this.sent)return;this.sent=this.n;gl.bindBuffer(gl.ARRAY_BUFFER,this.ibo);gl.bufferData(gl.ARRAY_BUFFER,this.inst.subarray(0,this.n*ISTRIDE),gl.DYNAMIC_DRAW);} // nothing to send for a mesh that is not in use
  draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.drawArraysInstanced(gl.TRIANGLES,0,this.count,this.n);}
- drawShadow(){const k=this.near??this.n;if(!k)return;gl.bindVertexArray(this.vao);gl.drawArraysInstanced(gl.TRIANGLES,0,this.count,k);}
 }
 const WHITE=[1,1,1];
 function attribs(list,stride,divisor){
@@ -326,13 +327,23 @@ const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1), glow=triBatch(2), veil=
 // Fullscreen / ground quad.
 const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,1,1,-1,-1,1,1,-1,1]),gl.STATIC_DRAW);attribs([[0,2,0]],2,0);gl.bindVertexArray(null);
-// Shadow map.
-// Shadow map. Fast graphics use a quarter of the pixels.
-let SHADOW=fastest?512:fast?1024:2048;const shadowTex=gl.createTexture(), shadowFbo=gl.createFramebuffer();
-function shadowSize(n){SHADOW=n;gl.bindTexture(gl.TEXTURE_2D,shadowTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.DEPTH_COMPONENT24,SHADOW,SHADOW,0,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,null);}
-shadowSize(SHADOW);gl.bindTexture(gl.TEXTURE_2D,shadowTex);
-for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_COMPARE_MODE,gl.COMPARE_REF_TO_TEXTURE],[gl.TEXTURE_COMPARE_FUNC,gl.LEQUAL]])gl.texParameteri(gl.TEXTURE_2D,k,v);
-gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,shadowTex,0);gl.drawBuffers([gl.NONE]);gl.readBuffer(gl.NONE);gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+// Shadow maps. Buildings, trees and street furniture stand still, so their shadows are drawn into a map of their own
+// (staticTex) only when the bird has moved a little way or something has changed. Every frame that map is copied
+// and only the things that move are drawn on top of the copy (shadowTex, the one the shaders read).
+// Fast graphics use a quarter of the pixels; Snabbast has no shadows at all.
+let SHADOW=fastest?512:fast?1024:2048,shadowDirty=true,shadowAt=[1e9,1e9,null],blitOk=true,blitChecked=false;
+const shadowTex=gl.createTexture(), shadowFbo=gl.createFramebuffer(), staticTex=gl.createTexture(), staticFbo=gl.createFramebuffer();
+function shadowSize(n){
+ SHADOW=n;shadowDirty=true;
+ for(const t of [shadowTex,staticTex]){gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.DEPTH_COMPONENT24,SHADOW,SHADOW,0,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,null);}
+}
+shadowSize(SHADOW);
+for(const [t,f] of [[shadowTex,shadowFbo],[staticTex,staticFbo]]){
+ gl.bindTexture(gl.TEXTURE_2D,t);
+ for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_COMPARE_MODE,gl.COMPARE_REF_TO_TEXTURE],[gl.TEXTURE_COMPARE_FUNC,gl.LEQUAL]])gl.texParameteri(gl.TEXTURE_2D,k,v);
+ gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,t,0);gl.drawBuffers([gl.NONE]);gl.readBuffer(gl.NONE);
+}
+gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 // Block type table for the ground shader.
 const cityTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,cityTex);
 gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,CITY,CITY,0,gl.RED,gl.UNSIGNED_BYTE,cityType);
@@ -349,9 +360,9 @@ for(const s of skies){const l=Math.hypot(...s.dir);s.dir=s.dir.map(v=>v/l);}
 let sky=skies[0];
 const spot={on:0,pos:[0,0,0],dir:[0,-1,0]}; // the helicopter's searchlight, set each frame
 function setSky(n){sky=skies[n%skies.length];}
-const lightM=new Float32Array(16), viewM=new Float32Array(16);
+const lightM=new Float32Array(16), viewM=new Float32Array(16), SHADOW_R=134, SHADOW_STEP=16;
 function lightMatrix(cx,cy,cz){
- const R=125,D=260,L=sky.dir,rl=Math.hypot(L[2],L[0]),r=[L[2]/rl,0,-L[0]/rl];
+ const R=SHADOW_R,D=260,L=sky.dir,rl=Math.hypot(L[2],L[0]),r=[L[2]/rl,0,-L[0]/rl];
  const u=[L[1]*r[2]-L[2]*r[1],L[2]*r[0]-L[0]*r[2],L[0]*r[1]-L[1]*r[0]];
  const texel=2*R/SHADOW,snap=(v)=>Math.round((cx*v[0]+cy*v[1]+cz*v[2])/texel)*texel;
  const sr=snap(r),su=snap(u),sl=cx*L[0]+cy*L[1]+cz*L[2];
@@ -374,36 +385,57 @@ function lightUniforms(prog){
  if(u.uShadow)gl.uniform1i(u.uShadow,0);
  if(u.uTime)gl.uniform1f(u.uTime,performance.now()/1000);
 }
-// Draws one frame. casters and scene are lists of Mesh (or dyn) objects that have been uploaded.
-function drawFrame(casters,scene,decals){
- gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);
- lightMatrix(bird.x,12,bird.z);viewMatrix();
- gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);gl.viewport(0,0,SHADOW,SHADOW);gl.clear(gl.DEPTH_BUFFER_BIT);
+// The shadows of everything that stands still. drawStatics() must upload and draw the static meshes near the bird.
+// Redrawn only when the bird has moved SHADOW_STEP metres, the sun has changed or shadowDirty is set.
+function staticShadow(drawStatics){
+ const ax=Math.round(bird.x/SHADOW_STEP)*SHADOW_STEP,az=Math.round(bird.z/SHADOW_STEP)*SHADOW_STEP;
+ if(blitOk&&!shadowDirty&&ax===shadowAt[0]&&az===shadowAt[1]&&sky===shadowAt[2])return;
+ shadowAt=[ax,az,sky];shadowDirty=false;lightMatrix(ax,12,az);
+ gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);gl.depthMask(true);
+ gl.bindFramebuffer(gl.FRAMEBUFFER,blitOk?staticFbo:shadowFbo);gl.viewport(0,0,SHADOW,SHADOW);gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.useProgram(progDepth.p);gl.uniformMatrix4fv(progDepth.u.uVP,false,lightM);
- if(!fastest)for(const m of casters)m.drawShadow?m.drawShadow():m.draw(); // statics: only the blocks the shadow map covers
- gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,glCanvas.width,glCanvas.height);gl.clear(gl.DEPTH_BUFFER_BIT);
+ drawStatics(ax,az);
+}
+// Draws one frame. casters are the moving things that throw shadows, scene everything solid, decals the flat stains.
+function drawFrame(casters,scene,decals){
+ gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LESS);gl.depthMask(true);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);
+ viewMatrix();
+ if(!fastest){
+  if(blitOk){ // start from the stored shadows of everything that stands still
+   gl.bindFramebuffer(gl.READ_FRAMEBUFFER,staticFbo);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,shadowFbo);
+   gl.blitFramebuffer(0,0,SHADOW,SHADOW,0,0,SHADOW,SHADOW,gl.DEPTH_BUFFER_BIT,gl.NEAREST);
+   // If this device cannot copy a depth map, the statics are simply drawn every frame instead (see staticShadow).
+   if(!blitChecked){blitChecked=true;if(gl.getError()!==gl.NO_ERROR){blitOk=false;shadowDirty=true;}}
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);gl.viewport(0,0,SHADOW,SHADOW);
+  gl.useProgram(progDepth.p);gl.uniformMatrix4fv(progDepth.u.uVP,false,lightM);
+  for(const m of casters)m.draw();
+ }
+ gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,glCanvas.width,glCanvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,shadowTex);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,cityTex);
- // Sky
- gl.depthMask(false);gl.disable(gl.DEPTH_TEST);lightUniforms(progSky);
- const {s,c,cp,sp}=camera,u=progSky.u;
- const cr=camera.cr??1,sr=camera.sr??0;gl.uniform3f(u.uR,c*cr+sp*s*sr,cp*sr,-s*cr+sp*c*sr);gl.uniform3f(u.uU,sp*s*cr-c*sr,cp*cr,sp*c*cr+s*sr);gl.uniform3f(u.uF,cp*s,-sp,cp*c);gl.uniform3fv(u.uZenith,sky.zenith);
- gl.uniform2f(u.uK,width/(2*scale),height/(2*scale));gl.uniform1f(u.uTime,performance.now()/1000);
- gl.bindVertexArray(quadVao);gl.drawArrays(gl.TRIANGLES,0,6);gl.depthMask(true);gl.enable(gl.DEPTH_TEST);
- // Ground
- lightUniforms(progGround);gl.uniform3f(progGround.u.uCentre,camera.x,0,camera.z);gl.uniform1i(progGround.u.uCity,1);
- gl.drawArrays(gl.TRIANGLES,0,6);
- lightUniforms(progWater);gl.uniform3f(progWater.u.uCentre,camera.x,0,camera.z);gl.drawArrays(gl.TRIANGLES,0,6); // seen only through the canal
- // Meshes, then flat decals pulled slightly towards the camera.
+ // Solid things first, nearest first where it matters, so that the ground and the sky behind them are never
+ // shaded only to be painted over: their shaders are the most expensive ones, and this way they only run where they show.
  lightUniforms(progMesh);
  for(const m of scene){
   // Buildings hide their inside faces, so a camera that ends up inside one sees straight through it.
   if(m.cull){gl.enable(gl.CULL_FACE);gl.cullFace(gl.FRONT);m.draw();gl.disable(gl.CULL_FACE);}else m.draw();
  }
+ // Ground, and the water that is seen only through the hole of the canal.
+ gl.bindVertexArray(quadVao);
+ lightUniforms(progGround);gl.uniform3f(progGround.u.uCentre,camera.x,0,camera.z);gl.uniform1i(progGround.u.uCity,1);
+ gl.drawArrays(gl.TRIANGLES,0,6);
+ lightUniforms(progWater);gl.uniform3f(progWater.u.uCentre,camera.x,0,camera.z);gl.drawArrays(gl.TRIANGLES,0,6);
+ // Sky last, at the far end of the depth range: only where nothing else has been drawn.
+ gl.depthFunc(gl.LEQUAL);gl.depthMask(false);lightUniforms(progSky);
+ const {s,c,cp,sp}=camera,u=progSky.u;
+ const cr=camera.cr??1,sr=camera.sr??0;gl.uniform3f(u.uR,c*cr+sp*s*sr,cp*sr,-s*cr+sp*c*sr);gl.uniform3f(u.uU,sp*s*cr-c*sr,cp*cr,sp*c*cr+s*sr);gl.uniform3f(u.uF,cp*s,-sp,cp*c);gl.uniform3fv(u.uZenith,sky.zenith);
+ gl.uniform2f(u.uK,width/(2*scale),height/(2*scale));gl.uniform1f(u.uTime,performance.now()/1000);
+ gl.drawArrays(gl.TRIANGLES,0,6);gl.depthFunc(gl.LESS);
  // Flat decals: pulled towards the camera, and not written to the depth buffer so they can overlap in order.
- gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);gl.depthMask(false);
+ lightUniforms(progMesh);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-2);
  for(const m of decals)m.draw();
- gl.depthMask(true);gl.disable(gl.POLYGON_OFFSET_FILL);
- if(veil.n){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);veil.draw();gl.depthMask(true);gl.disable(gl.BLEND);}
- if(glow.n){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.depthMask(false);glow.draw();gl.depthMask(true);gl.disable(gl.BLEND);}
- gl.bindVertexArray(null);
+ gl.disable(gl.POLYGON_OFFSET_FILL);
+ if(veil.n){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);veil.draw();gl.disable(gl.BLEND);}
+ if(glow.n){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);glow.draw();gl.disable(gl.BLEND);}
+ gl.depthMask(true);gl.bindVertexArray(null);
 }

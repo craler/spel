@@ -1,46 +1,77 @@
 'use strict';
 // Everything that lives in the city: pedestrians, traffic, food, the hawk.
-function pavement(i,j,distance){
+// Where a walk of `distance` round block i,j's pavement ends up. pavePoint() leaves the answer in paveX and paveZ:
+// it is called for every pedestrian every frame, so it must not create anything.
+let paveX=0,paveZ=0;
+function pavePoint(i,j,distance){
  const L=sidewalkLength,t=wrap(distance,4*L),corner=Math.floor(t/L),u=t%L;
  const x=i*tile+sidewalkEdge,z=j*tile+sidewalkEdge;
- if(corner===0)return [x+u,z];
- if(corner===1)return [x+L,z+u];
- if(corner===2)return [x+L-u,z+L];
- return [x,z+L-u];
+ if(corner===0){paveX=x+u;paveZ=z;}
+ else if(corner===1){paveX=x+L;paveZ=z+u;}
+ else if(corner===2){paveX=x+L-u;paveZ=z+L;}
+ else{paveX=x;paveZ=z+L-u;}
 }
+function pavement(i,j,distance){pavePoint(i,j,distance);return [paveX,paveZ];}
+// How far round the pavement the point nearest to x,z lies: the nearest point on each of the four sides, the first one winning a tie.
 function closestPavement(i,j,x,z){
- const L=sidewalkLength,a=x-i*tile-sidewalkEdge,b=z-j*tile-sidewalkEdge;
- const cx=clamp(a,0,L),cz=clamp(b,0,L);
- const options=[[cx,0,cx],[L,cz,L+cz],[cx,L,3*L-cx],[0,cz,4*L-cz]];
- let best=options[0],min=Infinity;
- for(const opt of options){const dist=(opt[0]-a)**2+(opt[1]-b)**2;if(dist<min){min=dist;best=opt;}}
- return best[2];
+ const L=sidewalkLength,a=x-i*tile-sidewalkEdge,b=z-j*tile-sidewalkEdge,cx=clamp(a,0,L),cz=clamp(b,0,L);
+ const d0=(cx-a)**2+b*b,d1=(L-a)**2+(cz-b)**2,d2=(cx-a)**2+(L-b)**2,d3=a*a+(cz-b)**2,least=Math.min(d0,d1,d2,d3);
+ return least===d0?cx:least===d1?L+cz:least===d2?3*L-cx:4*L-cz;
 }
 function walkToward(r,dest,step){
  const L=sidewalkLength*4,diff=wrap(dest-r.route+L/2,L)-L/2;
  r.route+=clamp(diff,-step,step);return Math.abs(diff)<=step;
 }
-function pedestrian(i,j,k,dt){
- const id=i+','+j+','+k,phase=hash(i,j,k)*tau,perimeter=4*sidewalkLength;
- const home=k*perimeter/8+phase,walk=(k%2?1.15:-.95)*(jogger(i,j,k)?3.6:1);
- const when=fallen.get(id)??elapsed;
- let route=home+walk*when,y=0,[x,z]=pavement(i,j,route),climbing=false,running=false;
- const side=Math.floor(wrap(route,perimeter)/sidewalkLength);
- let yaw=[Math.PI/2,0,-Math.PI/2,Math.PI][side]+(walk<0?Math.PI:0);
+// The people of a block are made once and kept: who they are (colour, pace, where on the pavement they started) never
+// changes, so every frame only moves them. Making a couple of hundred new objects sixty times a second was pure waste.
+const sideYaw=[Math.PI/2,0,-Math.PI/2,Math.PI];
+function walkersOf(b){
+ if(b.walkers)return b.walkers;
+ const {i,j}=b,perimeter=4*sidewalkLength;b.walkers=[];
+ for(let k=0;k<8;k++){
+  const jog=jogger(i,j,k);
+  if(!jog&&hash(i,j,k+77)<.2)continue; // a fifth of the pedestrians stay at home, which saves drawing them
+  const phase=hash(i,j,k)*tau;
+  const h={id:i+','+j+','+k,i,j,phase,home:k*perimeter/8+phase,walk:(k%2?1.15:-.95)*(jog?3.6:1),jog,umbRoll:hash(i,j,k+20),
+   c:jog?'#d9f03a':colors[Math.floor(hash(i,j,k+8)*colors.length)],x:0,y:0,z:0,route:0,yaw:0,climbing:false,running:false,umb:false,chase:-1,run:null};
+  // Joggers are worth more but get no star: they are everywhere, and the stars are for the rarer targets.
+  if(jog){h.base=30;h.label='JOGGAREN';h.shout='MITT VARVREKORD!';h.star=false;}
+  b.walkers.push(h);
+ }
+ return b.walkers;
+}
+let chaseSerial=0; // goes up with every new flight, which sends everyone back to their own walk
+function moveWalker(h,dt){
+ const perimeter=4*sidewalkLength,when=fallen.get(h.id)??elapsed;
+ let route=h.home+h.walk*when;pavePoint(h.i,h.j,route);
+ let x=paveX,z=paveZ,yaw=sideYaw[Math.floor(wrap(route,perimeter)/sidewalkLength)]+(h.walk<0?Math.PI:0),running=false;
  if(wanted){
-  let r=runners.get(id);
-  if(!r){r={route,x,z};runners.set(id,r);}
-  if(!scored.has(id)){
-   // Everyone runs after the bird along the pavement; nobody climbs the walls.
+  // Once the hunt is on, everyone runs after the bird along the pavement.
+  let r=h.run;if(!r||h.chase!==chaseSerial){r=h.run={route,x,z,yaw:undefined,moving:-9};h.chase=chaseSerial;}
+  if(!scored.has(h.id)){
    const step=dt*(2.75+.55*wanted),ox=r.x,oz=r.z;
-   walkToward(r,closestPavement(i,j,bird.x,bird.z),step);
-   [r.x,r.z]=pavement(i,j,r.route);
+   walkToward(r,closestPavement(h.i,h.j,bird.x,bird.z),step);
+   pavePoint(h.i,h.j,r.route);r.x=paveX;r.z=paveZ;
    if(Math.hypot(r.x-ox,r.z-oz)>1e-4){r.yaw=Math.atan2(r.x-ox,r.z-oz);r.moving=elapsed;}
   }
-  x=r.x;z=r.z;route=r.route;yaw=r.yaw??yaw;running=elapsed-(r.moving??-9)<.2;
+  x=r.x;z=r.z;route=r.route;yaw=r.yaw??yaw;running=elapsed-r.moving<.2;
  }
- return {x,y,z,id,i,j,route,walk,climbing,yaw,running,c:colors[Math.floor(hash(i,j,k+8)*colors.length)],phase,
-  umb:wanted>=3&&hash(i,j,k+20)<.3&&!brokeUmb.has(id)};
+ h.x=x;h.z=z;h.route=route;h.yaw=yaw;h.running=h.jog?!scored.has(h.id):running;
+ h.umb=wanted>=3&&h.umbRoll<.3&&!brokeUmb.has(h.id);
+}
+// Those who stay put: café guests, picnickers, the wedding party. Also made once per block.
+function folkOf(b){
+ if(b.folkPeople)return b.folkPeople;
+ const {i,j}=b;
+ return b.folkPeople=b.folk.map((f,n)=>({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,yaw:0,yaw0:hash(i,j,n+300)*tau,
+  running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false}));
+}
+// The two rowers on a canal block.
+function rowersOf(b){
+ if(!b.rowers)b.rowers=[0,1].map(n=>({x:0,y:WATER+.3,z:0,id:'boat'+n+','+b.i+','+b.j,i:b.i,j:b.j,route:0,walk:0,climbing:false,yaw:0,running:false,
+  c:n?'#3f7fa8':'#e8e4da',phase:b.i+b.j,fixed:true,base:45,label:'BÅTTUREN',shout:'MAN ÖVER BORD!',star:true,umb:false}));
+ const at=boatsAt(b);for(const [n,h] of b.rowers.entries()){h.x=at[n].x;h.z=at[n].z;h.yaw=at[n].yaw;}
+ return b.rowers;
 }
 
 const brokeUmb=new Set(), eaten=new Map(), alarms=new Map();
@@ -64,30 +95,33 @@ function balloons(){
  return out;
 }
 function gather(dt=0){
- people=[];const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile);
+ people.length=0;const ix=Math.floor(bird.x/tile),iz=Math.floor(bird.z/tile);
  for(let i=ix-2;i<=ix+2;i++)for(let j=iz-2;j<=iz+2;j++){
-  for(let k=0;k<8;k++){
-   if(!jogger(i,j,k)&&hash(i,j,k+77)<.2)continue; // a fifth of the pedestrians stay at home, which saves drawing them
-   const h=pedestrian(i,j,k,dt);
-   // Joggers get no star: they are everywhere, and the stars are for the rarer targets.
-   if(jogger(i,j,k)){h.base=30;h.label='JOGGAREN';h.shout='MITT VARVREKORD!';h.star=false;h.c='#d9f03a';h.running=!scored.has(h.id);}
-   people.push(h);
-  }
-  const b=block(i,j),extra=(id,x,y,z,yaw,c,base,label,shout)=>people.push({x,y,z,id,i,j,route:0,walk:0,climbing:false,yaw,running:false,c,phase:i+j,fixed:true,base,label,shout,star:true,umb:false});
-  if(b.cleaner){const [cx,cz,top,s]=b.cleaner;extra('win'+i+','+j,cx,2+(top-6)*(.5+.5*Math.sin(elapsed*.4+s)),cz,0,'#e87a1e',60,'FÖNSTERPUTSAREN','MIN HINK!');} // rides a lift up and down the facade
-  if(b.type===3)for(const [n,q] of boatsAt(b).entries())extra('boat'+n+','+i+','+j,q.x,WATER+.3,q.z,q.yaw,n?'#3f7fa8':'#e8e4da',45,'BÅTTUREN','MAN ÖVER BORD!');
-  // People who stay put: café guests, picnickers, the wedding party.
-  if(!onEventSquare(i,j))for(const [n,f] of block(i,j).folk.entries())people.push({x:f.x,y:0,z:f.z,id:'f'+i+','+j+','+n,i,j,route:0,walk:0,climbing:false,
-   yaw:hash(i,j,n+300)*tau,running:false,c:f.c,phase:n,fixed:true,base:f.base,label:f.label,shout:f.shout,bride:f.bride,umb:false});
+  const b=block(i,j);
+  for(const h of walkersOf(b)){moveWalker(h,dt);people.push(h);}
+  if(b.type===3)for(const h of rowersOf(b))people.push(h);
+  if(!onEventSquare(i,j))for(const h of folkOf(b)){h.yaw=h.yaw0;people.push(h);}
  }
  eventPeople();
- if(runners.size>520){for(const [id,r] of runners)if(Math.hypot(r.x-bird.x,r.z-bird.z)>145)runners.delete(id);}
 }
 // How far each car has fallen behind its place in the stream because it had to stop.
 const lag=new Map();let lastClock=0;
+// A car's id, kind and colour never change, so they are worked out once and the same object is handed out every frame.
+const carPool=new Map();
+function carFor(across,lane,n){
+ const key=((lane+50000)*200000+n+100000)*2+(across?1:0);let c=carPool.get(key);if(c)return c;
+ const kind=hash(lane,n,11),direction=lane%2===0?1:-1;
+ c={id:'car:'+across+','+lane+','+n,across,lane,direction,jitter:6*hash(lane,n,5+across)-3,x:0,z:0,along:0,speed:0,stopped:false,
+  yaw:(across?Math.PI/2:0)+(direction<0?Math.PI:0),bus:kind<.09,cab:kind>=.09&&hash(lane,n,7+across)<.16,hatch:hash(lane,n,3)<.45,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]};
+ if(carPool.size>4000)carPool.clear(); // a very long flight: start over rather than grow for ever
+ carPool.set(key,c);return c;
+}
+function parkedOf(b){
+ return b.parkedCars||(b.parkedCars=b.parked.map((p,n)=>({id:'park:'+b.i+','+b.j+','+n,parked:true,x:p.x,z:p.z,yaw:p.yaw,speed:0,cab:false,hatch:n%2===0,color:p.c,spot:p})));
+}
 function traffic(){
  const moved=Math.max(0,trafficClock-lastClock)*5.2;lastClock=trafficClock;
- cars=[];
+ cars.length=0;
  // Each car owns a persistent lane and identity as the visible blocks scroll.
  for(const across of [false,true]){
   const sidePos=across?bird.z:bird.x,alongPos=across?bird.x:bird.z;
@@ -98,17 +132,18 @@ function traffic(){
    const offset=(across?0:21)+speed*trafficClock,spacing=tile;
    const first=Math.floor((alongPos-100-offset)/spacing);
    for(let n=first;n<=first+5;n++){
-    const id='car:'+across+','+lane+','+n;if(wrecks.has(id))continue;
-    const along=n*spacing+offset+6*hash(lane,n,5+across)-3-direction*(lag.get(id)||0),side=lane*tile+direction*1.45;
-    cars.push({id,across,lane,along,direction,x:across?along:side,z:across?side:along,yaw:(across?Math.PI/2:0)+(direction<0?Math.PI:0),
-     speed:Math.abs(speed)*trafficFactor,bus:hash(lane,n,11)<.09,cab:hash(lane,n,11)>=.09&&hash(lane,n,7+across)<.16,hatch:hash(lane,n,3)<.45,color:carPaint[Math.floor(hash(lane,n,+across)*carPaint.length)]});
+    const c=carFor(across,lane,n);if(wrecks.has(c.id))continue;
+    const along=n*spacing+offset+c.jitter-direction*(lag.get(c.id)||0),side=lane*tile+direction*1.45;
+    c.along=along;c.x=across?along:side;c.z=across?side:along;c.yaw=(across?Math.PI/2:0)+(direction<0?Math.PI:0);c.speed=Math.abs(speed)*trafficFactor;
+    cars.push(c);
    }
   }
  }
  // Parked cars: they do not move, but they can be hit (the alarm goes off) and flown into.
  const px=Math.floor(bird.x/tile),pz=Math.floor(bird.z/tile);
- for(let i=px-2;i<=px+2;i++)for(let j=pz-2;j<=pz+2;j++)for(const [n,p] of block(i,j).parked.entries()){
-  const id='park:'+i+','+j+','+n;if(!wrecks.has(id))cars.push({id,parked:true,x:p.x,z:p.z,yaw:p.yaw,speed:0,cab:false,hatch:n%2===0,color:p.c});
+ for(let i=px-2;i<=px+2;i++)for(let j=pz-2;j<=pz+2;j++)for(const c of parkedOf(block(i,j))){
+  if(wrecks.has(c.id))continue;
+  c.x=c.spot.x;c.z=c.spot.z;c.yaw=c.spot.yaw;cars.push(c); // back in its bay, in case it has been knocked about and towed
  }
  eventCars();
  // Drivers brake: a car stops behind a wreck or a stopped car, and gives way to cross traffic already in the junction.

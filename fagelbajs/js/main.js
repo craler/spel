@@ -5,7 +5,7 @@
 // lower resolution and fewer old stains. Edge smoothing follows on the next page load.
 function topDensity(){const d=devicePixelRatio||1;return fastest?Math.min(d,1)*.7:fast?Math.min(d,1)*.85:Math.min(d,1.5);}
 function setLevel(n){
- if(n===gfx)return;gfx=n;fast=n>=1;fastest=n>=2;shadowSize(fastest?512:fast?1024:2048);staticKey='';density=topDensity();fit();
+ if(n===gfx)return;gfx=n;fast=n>=1;fastest=n>=2;shadowSize(fastest?512:fast?1024:2048);density=topDensity();fit();
 }
 const qualityNames={auto:'Auto',high:'Snygg',fast:'Snabb',fastest:'Snabbast'};
 const keycap=(key,does,wide)=>'<div class="key'+(wide?' wide':'')+'"><kbd>'+key+'</kbd><span>'+does+'</span></div>';
@@ -109,7 +109,7 @@ function showTips(){
 let density=topDensity(),frameTime=1/60,lastTune=0,judged=0;
 let pausedDrawn=false,quickFor=0;
 function fit(){
- pausedDrawn=false;width=innerWidth;height=innerHeight;
+ pausedDrawn=false;textCache.clear();width=innerWidth;height=innerHeight;
  for(const c of [glCanvas,overlay]){c.width=Math.round(width*density);c.height=Math.round(height*density);}
  ctx.setTransform(density,0,0,density,0,0);
 }
