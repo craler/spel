@@ -5,7 +5,7 @@
 // roll: how much the picture leans with the bird; lag: how quickly the camera swings round behind it (higher = stiffer).
 const camTries=[['Nuvarande',{back:6.8,rise:3.8,shoulder:1.05,zoom:1,roll:0,lag:11}],['Nära och lågt',{back:4.8,rise:2.5,shoulder:.75,zoom:.9,roll:0,lag:11}],
  ['Överblick',{back:9.5,rise:5.8,shoulder:1.2,zoom:1.05,roll:0,lag:11}],['Mitt bakom, vidvinkel',{back:6.2,rise:3.3,shoulder:0,zoom:.8,roll:0,lag:11}],
- ['Följsam: lutar och släpar i svängar',{back:6.8,rise:3.6,shoulder:1.05,zoom:.95,roll:.32,lag:4.5}]];
+ ['Följsam: lutar och släpar i svängar',{back:6.8,rise:3.6,shoulder:1.05,zoom:.95,roll:.32,lag:2.6}]];
 let camTry=4; // the one in use (0 is the original camera)
 // Through the bird's eyes: true is the view from beside the cheek, with the eye and the side of the head in the picture;
 // false is the original, from in front of the face with no bird in sight. On the test site B switches between them.
