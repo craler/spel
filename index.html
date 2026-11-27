@@ -43,12 +43,12 @@
   </main>
   <script>
     // Lägg nya spel i egna mappar och lägg till dem här. "poster" är en bild till kortet, "art" en liten SVG om bild saknas.
-    // "isNew: true" sätter en NYTT-etikett på kortet. "soon: true" visar kortet som Kommer snart och går inte att klicka på. Med ?test=1 i adressen går det ändå att öppna.
+    // "isNew: true" sätter en NYTT-etikett på kortet, "updated: true" en UPPDATERAD-etikett. "soon: true" visar kortet som Kommer snart och går inte att klicka på. Med ?test=1 i adressen går det ändå att öppna.
     const testing = new URLSearchParams(location.search).has('test');
     const games = [
       { title: 'Duv-Diarré', url: './fagelbajs/',
         description: 'Flyg en duva över staden och pricka folk, bilar och guldstjärnor. Klara dig undan frukten, näten, höken och stridsvagnarna.',
-        poster: './fagelbajs/poster.jpg' },
+        poster: './fagelbajs/poster.jpg', updated: true },
       { title: 'Launchpad Legends', url: './launchpad/', soon: true, isNew: true,
         note: 'Kräver en Launchpad Mini MK3',
         description: 'Spelen som lever i ljuset på en Launchpad. Färgminne, rytmspel, rymdförsvar, ubåtsjakt, labyrinter, portalpussel, fyra i rad, sänka skepp och ett ljuspussel – plus trumset, trummaskin, fyrverkerier och livets spel att leka med.',
@@ -82,6 +82,12 @@
         body.append(note);
       }
       body.append(document.createElement('br'), play);
+      if (game.updated && !game.isNew) {
+        const badge = document.createElement('span');
+        badge.className = 'new';
+        badge.textContent = 'Uppdaterad';
+        card.append(badge);
+      }
       if (game.isNew) {
         const badge = document.createElement('span');
         badge.className = 'new';
