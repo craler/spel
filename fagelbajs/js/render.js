@@ -564,6 +564,8 @@ function drawShadowStatics(ax,az){
 let gooMat=-1; // -1 wet and glossy, -2 polished gold
 const gooShade=['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'].map(rgb);
 const hotShade=['#e8742a','#d9541e','#f0a03a','#c8401c','#e89a2a'].map(rgb); // what comes out after a chili
+// The colour of a drop or a stain: number k of the palette in use (the two palettes need not be equally long).
+const gooColour=(hot,k)=>{const list=hot?hotShade:gooShade;return list[((k%list.length)+list.length)%list.length];};
 // A thick, tapering strand of goo between two points, turned to face the camera and shaded as wet.
 function strand(p,q,w0,w1,col){
  const ax=q[0]-p[0],ay=q[1]-p[1],az=q[2]-p[2],ex=camera.x-p[0],ey=camera.y-p[1],ez=camera.z-p[2];
@@ -671,21 +673,21 @@ function buildMoving(){
  for(const d of drops){
   const p=at(d,d.age),vx=d.vx,vy=d.vy-gravity*d.age,vz=d.vz,sp=Math.hypot(vx,vy,vz)||1;
   const stretch=1+clamp(sp*.035,0,1.6)*(d.big?.6:1),wob=1+.22*Math.sin(d.age*26+d.seed),tilt=Math.atan2(-vy,Math.hypot(vx,vz)||1e-3);
-  const shade=(d.hot?hotShade:gooShade)[d.seed%gooShade.length];
+  const shade=gooColour(d.hot,d.seed);
   (d.big?M.ball:M.blob).add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,shade,gooMat,0,0,tilt);
   if(d.dark)M.dot.add(p[0]+.4*d.r,p[1]+.2*d.r,p[2]+.3*d.r,d.seed,d.r*.5,d.r*.45,d.r*.6,bits,-1);
   if(prior&&prior.age-d.age<.1&&d.age<1.1)strand(at(prior,prior.age),p,prior.r*.75*(1-prior.age*.8),d.r*.75*(1-d.age*.8),shade);
   prior=d;
  }
- if(flowing&&drops.length){const d=drops.at(-1),shade=(d.hot?hotShade:gooShade)[0];strand(vent,at(d,d.age),.07,d.r*.7,shade);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,shade,gooMat);}
- for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.dot.add(s.x,s.y,s.z,0,r,r*1.5,r,(s.hot?hotShade:gooShade)[Math.floor(s.life*20)%gooShade.length],gooMat);}
+ if(flowing&&drops.length){const d=drops.at(-1),shade=gooColour(d.hot,0);strand(vent,at(d,d.age),.07,d.r*.7,shade);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,shade,gooMat);}
+ for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.dot.add(s.x,s.y,s.z,0,r,r*1.5,r,gooColour(s.hot,Math.floor(s.life*20)),gooMat);}
  // Stains: close to the camera they have a raised wet heap, dark streaks and flung droplets; further off only the flat
  // splat in a simpler outline. There can be hundreds of them, so the far ones have to be cheap.
  const stainNear=(fastest?16:fast?22:28)**2;
  for(const s of stains){
   const dx=s.x-camera.x,dz=s.z-camera.z;
   if(Math.abs(dx)>130||Math.abs(dz)>130||!inView(s.x,s.y,s.z,3))continue;
-  const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau,col=(s.hot?hotShade:gooShade)[Math.floor(s.seed*97)%gooShade.length];
+  const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau,col=gooColour(s.hot,Math.floor(s.seed*97));
   const near=dx*dx+dz*dz+(s.y-camera.y)**2<stainNear;
   if(s.wall!==undefined){
    (near?M.splatWall:M.splatWallFar).add(s.x,s.y,s.z,s.wall,r,r,1,col,gooMat);
@@ -1046,19 +1048,12 @@ function renderReplay(dt){
   text('● REPRIS',x,40,15,'#ff5d4f',al,900);text('BÄSTA TRÄFFEN: '+clip.label+' +'+clip.amount,x,64,17,'#ffd24a',al,900);
  });
 }
-// While the Utseende page is open, the camera slowly circles the bird beside the menu, so what you put on shows at once.
-function previewLooks(){return looksLive&&state!=='play'&&state!=='crash'&&!$('view').hidden&&$('view').dataset.name==='looks';}
-function previewCamera(){
- const T=birdPoint([0,.1,-.05]),a=bird.angle+2.2+Math.sin(performance.now()/1000*.4)*1.1,d=2.5;
- const cx=T[0]+Math.sin(a)*d,cz=T[2]+Math.cos(a)*d,cy=T[1]+.55;scale=Math.min(width,height)*.9;
- const side=width>760?Math.atan(.27*width/scale):0,yaw=Math.atan2(T[0]-cx,T[2]-cz)-side,pitch=Math.atan2(cy-T[1],Math.hypot(T[0]-cx,T[2]-cz))-(width>760?0:-.25);
- camera={x:cx,y:cy,z:cz,s:Math.sin(yaw),c:Math.cos(yaw),cp:Math.cos(pitch),sp:Math.sin(pitch),cr:1,sr:0,near:.05};
-}
+// While the wardrobe is open the picture is the bird on its own, up in the sky (see drawWardrobe in looks.js).
+function previewLooks(){return looksLive&&state!=='play'&&state!=='crash'&&wardrobeOpen();}
 function render(dt=1/60){
  const p=payload(),tt=landingTime(p),aim=at(p,tt),playing=state==='play';
  if(!crash||!rig)setCamera(dt);
- if(previewLooks())previewCamera();
- draw3D();
+ if(previewLooks())drawWardrobe(dt);else draw3D();
  ctx.clearRect(0,0,width,height);
  if(!crash&&state!=='menu'&&!previewLooks()){
   drawThreats();

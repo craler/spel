@@ -312,6 +312,8 @@ function triBatch(mat=0){
    const d=this.data; // written in place: no temporary arrays, so less work for the garbage collector
    for(let k=0;k<3;k++){const a=p[k],n=nrm[k],c=col[k],o=this.n++*STRIDE;d[o]=a[0];d[o+1]=a[1];d[o+2]=a[2];d[o+3]=n[0];d[o+4]=n[1];d[o+5]=n[2];d[o+6]=c[0];d[o+7]=c[1];d[o+8]=c[2];d[o+9]=0;d[o+10]=0;d[o+11]=alpha?alpha[k]:0;}
   },
+  // Makes sure there is room for n more corners, for code that writes them into data itself.
+  reserve(n){if((this.n+n)*STRIDE>this.data.length){const big=new Float32Array(Math.max((this.n+n)*STRIDE,this.data.length*2));big.set(this.data.subarray(0,this.n*STRIDE));this.data=big;}},
   // One corner written straight into the batch. For the parts that are rebuilt every frame from thousands of points
   // (the bird's skin and feathers, smoke): nothing is created along the way, so the garbage collector has nothing to do.
   vert(x,y,z,nx,ny,nz,r,g,b,alpha=0){
@@ -367,7 +369,7 @@ const skies=[
  {name:'skymning',dir:[-.7,.5,-.5],sun:[2.6,1.45,.9],sky:[.22,.26,.5],ground:[.13,.1,.12],fog:[.7,.44,.42],zenith:[.09,.13,.38],fogD:.006,glow:1.7},
 ];
 for(const s of skies){const l=Math.hypot(...s.dir);s.dir=s.dir.map(v=>v/l);}
-let sky=skies[0];
+let sky=skies[0],fogBoost=1; // fogBoost thickens the haze, for the wardrobe, where the city is only a backdrop
 const spot={on:0,pos:[0,0,0],dir:[0,-1,0]}; // the helicopter's searchlight, set each frame
 function setSky(n){sky=skies[n%skies.length];}
 const lightM=new Float32Array(16), viewM=new Float32Array(16), SHADOW_R=141, SHADOW_STEP=32; // the map reaches 141 m from its centre, which is moved in steps of 32 m
@@ -388,7 +390,7 @@ function viewMatrix(){
 function lightUniforms(prog){
  const u=prog.u;gl.useProgram(prog.p);
  gl.uniform3fv(u.uSun,sky.dir);if(u.uGlow)gl.uniform1f(u.uGlow,sky.glow);gl.uniform3fv(u.uSunCol,sky.sun);gl.uniform3fv(u.uSkyCol,sky.sky);gl.uniform3fv(u.uGroundCol,sky.ground);
- gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fastest?1.9:fast?1.35:1.12));if(u.uNight)gl.uniform1f(u.uNight,sky.night?1:0);
+ gl.uniform3fv(u.uFogCol,sky.fog);gl.uniform3f(u.uEye,camera.x,camera.y,camera.z);gl.uniform1f(u.uFogD,sky.fogD*(fastest?1.9:fast?1.35:1.12)*fogBoost);if(u.uNight)gl.uniform1f(u.uNight,sky.night?1:0);
  if(u.uSpot){gl.uniform1f(u.uSpot,spot.on);gl.uniform3fv(u.uSpotPos,spot.pos);gl.uniform3fv(u.uSpotDir,spot.dir);}if(u.uFast)gl.uniform1f(u.uFast,gfx);if(u.uTexel)gl.uniform1f(u.uTexel,1/SHADOW);
  if(u.uVP)gl.uniformMatrix4fv(u.uVP,false,viewM);
  if(u.uLight)gl.uniformMatrix4fv(u.uLight,false,lightM);

@@ -46,9 +46,10 @@ function applyLook(){
 // make(emit) gives the tools the models are built with. Everything ends up as a grid of points handed to surface(), which
 // works out smooth normals and passes the triangles on, corner by corner, to emit(batch, point, normal, colour).
 // The batch decides the material: dyn is matt, cloth has a soft sheen, gloss shines and metal mirrors the sky.
-function make(emit){
+function make(emit,q=1){
+ const seg=n=>Math.max(3,Math.round(n*q)); // how many sides something round gets at this level of detail
  const S={
-  map:null, // set to move every point of what is being built (a hat worn at an angle)
+  q,seg,map:null, // set to move every point of what is being built (a hat worn at an angle)
   surface(P,closed,col,batch=dyn){
    if(S.map)P=P.map(row=>row.map(S.map));
    const J=P.length,I=P[0].length,at=(j,i)=>P[clamp(j,0,J-1)][closed?((i%I)+I)%I:clamp(i,0,I-1)],N=[];
@@ -65,12 +66,13 @@ function make(emit){
   },
   // Turned on a lathe round a vertical axis through c: prof is rows of [radius, height]. sx and sz squash it.
   lathe(prof,c,col,batch,n=20,sx=1,sz=1){
-   return S.surface(prof.map(([r,y])=>Array.from({length:n},(_,i)=>{const a=i/n*tau;return [c[0]+r*Math.cos(a)*sx,c[1]+y,c[2]+r*Math.sin(a)*sz];})),true,col,batch);
+   n=seg(n);return S.surface(prof.map(([r,y])=>Array.from({length:n},(_,i)=>{const a=i/n*tau;return [c[0]+r*Math.cos(a)*sx,c[1]+y,c[2]+r*Math.sin(a)*sz];})),true,col,batch);
   },
-  ball(c,r,col,batch,n=8,sy=1){return S.lathe(Array.from({length:6},(_,k)=>{const a=k/5*Math.PI;return [Math.max(1e-4,Math.sin(a))*r,Math.cos(a)*r*sy];}),c,col,batch,n);},
+  ball(c,r,col,batch,n=8,sy=1){const m=q<1?3:5;return S.lathe(Array.from({length:m+1},(_,k)=>{const a=k/m*Math.PI;return [Math.max(1e-4,Math.sin(a))*r,Math.cos(a)*r*sy];}),c,col,batch,n);},
   // A round tube along a path of points. r is its radius, or a function of how far along (0..1) it is.
   tube(path,r,col,batch,n=6){
-   const R=typeof r==='function'?r:()=>r,m=path.length,rows=[];
+   if(q<1&&path.length>6)path=path.filter((_,k)=>k%2===0||k===path.length-1); // a long path needs fewer joints from afar
+   n=seg(n);const R=typeof r==='function'?r:()=>r,m=path.length,rows=[];
    for(let k=0;k<m;k++){
     const a=path[Math.max(0,k-1)],b=path[Math.min(m-1,k+1)],t=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],tl=Math.hypot(...t)||1;t[0]/=tl;t[1]/=tl;t[2]/=tl;
     const up=Math.abs(t[1])>.9?[1,0,0]:[0,1,0];let u=[t[1]*up[2]-t[2]*up[1],t[2]*up[0]-t[0]*up[2],t[0]*up[1]-t[1]*up[0]];const ul=Math.hypot(...u)||1;u=u.map(q=>q/ul);
@@ -83,22 +85,40 @@ function make(emit){
  return S;
 }
 // For what changes shape every frame (cloth): built and drawn in one go, in world space.
-const live=make((batch,p,n,c)=>batch.vert(p[0],p[1],p[2],n[0],n[1],n[2],c[0],c[1],c[2]));
+const emitLive=(batch,p,n,c)=>batch.vert(p[0],p[1],p[2],n[0],n[1],n[2],c[0],c[1],c[2]),live=make(emitLive),liveFar=make(emitLive,.5);
+// In the wardrobe, the menu and the replay the bird is seen up close and everything is built in full detail. In flight it
+// is a few centimetres across on the screen, and a version with a quarter of the triangles looks the same.
+const lookDetail=()=>state==='play'?.5:1;
 // Hats, glasses and the crown never change shape. Their triangles are worked out once, in the bird's own space, and are
-// after that only carried along with the head each frame: into() is the bird's own way of placing a point of its body
-// in the world (see renderBird), and still means a part that does not turn with the head.
-const rigidCache=new Map(),carry=new Float64Array(6);
-function rigid(id,into,still,build){
- let R=rigidCache.get(id);
+// after that only carried along each frame. into() is the bird's own way of placing a point of its body in the world (see
+// renderBird); still means a part that does not turn with the head. The head carries what sits on it as one stiff piece,
+// so where its origin and three axes end up is asked for once, and every corner is then placed by plain arithmetic.
+// Only a soft thing (a cap, a headband) lets the corners that lie on the neck, behind z = .27, follow the skin there
+// as it twists: those few are placed one by one.
+const rigidCache=new Map(),carry=new Float64Array(12);
+function rigid(id,into,still,soft,build){
+ const q=lookDetail(),key=id+q;let R=rigidCache.get(key);
  if(!R){
   const rec=new Map();
-  build(make((batch,p,n,c)=>{let a=rec.get(batch);if(!a)rec.set(batch,a=[]);a.push(p[0],p[1],p[2],n[0],n[1],n[2],c[0],c[1],c[2]);}));
-  R=[...rec].map(([batch,a])=>({batch,d:new Float32Array(a)}));rigidCache.set(id,R);
+  build(make((batch,p,n,c)=>{let a=rec.get(batch);if(!a)rec.set(batch,a=[]);a.push(p[0],p[1],p[2],n[0],n[1],n[2],c[0],c[1],c[2]);},q));
+  R=[...rec].map(([batch,a])=>({batch,d:new Float32Array(a)}));rigidCache.set(key,R);
  }
- for(const {batch,d} of R)for(let k=0;k<d.length;k+=9){
-  into(d[k],d[k+1],d[k+2],carry,0,still);into(d[k]+d[k+3]*.02,d[k+1]+d[k+4]*.02,d[k+2]+d[k+5]*.02,carry,3,still); // the point, and a point just off the surface for its normal
-  const nx=carry[3]-carry[0],ny=carry[4]-carry[1],nz=carry[5]-carry[2],l=Math.hypot(nx,ny,nz)||1;
-  batch.vert(carry[0],carry[1],carry[2],nx/l,ny/l,nz/l,d[k+6],d[k+7],d[k+8]);
+ into(0,0,.3,carry,0,still);into(1,0,.3,carry,3,still);into(0,1,.3,carry,6,still);into(0,0,1.3,carry,9,still);
+ const ox=carry[0],oy=carry[1],oz=carry[2],ax=carry[3]-ox,ay=carry[4]-oy,az=carry[5]-oz,bx=carry[6]-ox,by=carry[7]-oy,bz=carry[8]-oz,cx=carry[9]-ox,cy=carry[10]-oy,cz=carry[11]-oz;
+ for(const {batch,d} of R){
+  batch.reserve(d.length/9);const out=batch.data;let o=batch.n*STRIDE;batch.n+=d.length/9;
+  for(let k=0;k<d.length;k+=9,o+=STRIDE){
+   const x=d[k],y=d[k+1],z=d[k+2],nx=d[k+3],ny=d[k+4],nz=d[k+5];
+   if(soft&&z<.27){
+    into(x,y,z,carry,0,still);into(x+nx*.02,y+ny*.02,z+nz*.02,carry,3,still); // the point, and one just off the surface for its normal
+    const ux=carry[3]-carry[0],uy=carry[4]-carry[1],uz=carry[5]-carry[2],l=Math.hypot(ux,uy,uz)||1;
+    out[o]=carry[0];out[o+1]=carry[1];out[o+2]=carry[2];out[o+3]=ux/l;out[o+4]=uy/l;out[o+5]=uz/l;
+   }else{
+    const w=z-.3;out[o]=ox+ax*x+bx*y+cx*w;out[o+1]=oy+ay*x+by*y+cy*w;out[o+2]=oz+az*x+bz*y+cz*w;
+    out[o+3]=ax*nx+bx*ny+cx*nz;out[o+4]=ay*nx+by*ny+cy*nz;out[o+5]=az*nx+bz*ny+cz*nz;
+   }
+   out[o+6]=d[k+6];out[o+7]=d[k+7];out[o+8]=d[k+8];out[o+9]=0;out[o+10]=0;out[o+11]=0;
+  }
  }
 }
 // ---- Fitting to the head. The head is a run of elliptical rings along the beak axis (bodyRings in render.js);
@@ -122,7 +142,7 @@ const tint=(c,k)=>[c[0]*k,c[1]*k,c[2]*k],blend=(a,b,t)=>[mix(a[0],b[0],t),mix(a[
 // Röd keps: a six-panel baseball cap moulded over the skull. Seams run from the button on top, each panel has an eyelet,
 // the edge is rolled, there is an embroidered badge on the front, and the stiff peak has rows of stitching and a dark underside.
 function buildCap(S){
- const red=rgb('#cf3a2e'),seam=rgb('#8a1e16'),under=rgb('#30333a'),white=rgb('#f1ece2'),J=18,I=40,z0=.222,z1=.43,zb=.318;
+ const red=rgb('#cf3a2e'),seam=rgb('#8a1e16'),under=rgb('#30333a'),white=rgb('#f1ece2'),J=S.seg(18),I=S.seg(40),z0=.222,z1=.43,zb=.318;
  const cut=z=>mix(.318,.352,(z-z0)/(z1-z0)),lo=z=>{const [,cy,,h]=ringAt(z);return Math.asin(clamp((cut(z)-cy)/(h+.01),-1,.97));};
  const puff=(z,a)=>.012+.026*Math.sin(a)**2*Math.sin(Math.PI*clamp((z-z0+.02)/(z1-z0+.03),0,1)),skin=(z,a,lift=0)=>headPt(z,a,puff(z,a)+lift);
  const P=[];for(let j=0;j<=J;j++){const z=z0+(z1-z0)*j/J,row=[];for(let i=0;i<=I;i++)row.push(skin(z,mix(lo(z),Math.PI-lo(z),i/I)));P.push(row);}
@@ -130,9 +150,9 @@ function buildCap(S){
  // where the cap's surface is, straight above a point seen from above; null outside the cap
  const over=(x,z,lift)=>{if(z<z0||z>z1)return null;const [,,w]=ringAt(z);let a=Math.acos(clamp(x/(w+.03),-1,1));a=Math.acos(clamp(x/(w+puff(z,a)),-1,1));return a<lo(z)||a>Math.PI-lo(z)?null:skin(z,a,lift);};
  for(let k=0;k<6;k++){ // six seams run from the button to the edge, as fine raised cords
-  const ps=k*Math.PI/3,cord=[];for(let r=.012;r<.2;r+=.008){const p=over(r*Math.sin(ps),zb+r*Math.cos(ps),.0012);if(!p)break;cord.push(p);}
-  if(cord.length>1)S.tube(cord,.0021,seam,cloth,4);
-  const e=over(.06*Math.sin(ps+Math.PI/6),zb+.06*Math.cos(ps+Math.PI/6),.0005);if(e)S.ball(e,.0034,under,gloss,6,.5); // an eyelet in the middle of each panel
+  const ps=k*Math.PI/3,cord=[];for(let r=.012;r<.2;r+=.008/S.q){const p=over(r*Math.sin(ps),zb+r*Math.cos(ps),.0012);if(!p)break;cord.push(p);}
+  if(cord.length>1)S.tube(cord,S.q<1?.003:.0021,seam,cloth,S.q<1?6:4);
+  const e=S.q<1?null:over(.06*Math.sin(ps+Math.PI/6),zb+.06*Math.cos(ps+Math.PI/6),.0005);if(e)S.ball(e,.0034,under,gloss,6,.5); // an eyelet in the middle of each panel
  }
  S.tube([...P.map(r=>r[0]).reverse(),...P[0],...P.map(r=>r[I])],.0042,seam,cloth,5); // the rolled edge: down one side, round the back, up the other
  S.ball(skin(zb,Math.PI/2,.006),.011,seam,cloth);
@@ -141,7 +161,7 @@ function buildCap(S){
  S.surface(badge,true,(j)=>j===4?seam:white,cloth);
  // the peak: a top and an underside with a rounded edge round them
  const y0=cut(z1)-.004,pk=(t,u,dy)=>{const w=.114*(1-.22*t*t);return [u*w,y0+dy-.03*t*t-.02*u*u,z1-.05+t*.175-.036*u*u*t];};
- const skinOf=(dy)=>Array.from({length:9},(_,j)=>Array.from({length:17},(_,i)=>pk(j/8,i/16*2-1,dy)));
+ const pj=S.seg(8),pi=S.seg(16),skinOf=(dy)=>Array.from({length:pj+1},(_,j)=>Array.from({length:pi+1},(_,i)=>pk(j/pj,i/pi*2-1,dy)));
  S.surface(skinOf(.004),false,(j)=>j%2?tint(red,.86):red,cloth);S.surface(skinOf(-.004),false,under,cloth);
  const edge=[];for(let j=0;j<=8;j++)edge.push(pk(j/8,-1,0));for(let i=1;i<=16;i++)edge.push(pk(1,i/16*2-1,0));for(let j=7;j>=0;j--)edge.push(pk(j/8,1,0));
  S.tube(edge,.005,tint(red,.8),cloth,5);
@@ -149,10 +169,10 @@ function buildCap(S){
 // Hög hatt: a felt top hat worn at a jaunty angle. A waisted crown with a bevelled top, a brim that curls up at the sides
 // with a bound edge, a silk band and a gold buckle.
 function buildTopHat(S){
- const felt=rgb('#1c1d22'),black=rgb('#0e0f12'),silk=rgb('#9c1f28'),gold=rgb('#e0b23a'),n=40,c=[0,.39,.322],cr=Math.cos(.14),sr=Math.sin(.14),cx=Math.cos(-.08),sx=Math.sin(-.08);
+ const felt=rgb('#1c1d22'),black=rgb('#0e0f12'),silk=rgb('#9c1f28'),gold=rgb('#e0b23a'),n=S.seg(40),c=[0,.39,.322],cr=Math.cos(.14),sr=Math.sin(.14),cx=Math.cos(-.08),sx=Math.sin(-.08);
  S.map=p=>{const x=p[0]-c[0],y=p[1]-c[1],z=p[2]-c[2],x1=x*cr-y*sr,y1=x*sr+y*cr;return [c[0]+x1,c[1]+y1*cx-z*sx,c[2]+y1*sx+z*cx];}; // tipped to one side and a little back
- S.lathe([[1e-4,.157],[.05,.1565],[.08,.154],[.0905,.148],[.0925,.139],[.0885,.1],[.0858,.062],[.0868,.03],[.0885,0]],c,(j)=>j<3?black:felt,cloth,n);
- S.lathe([[.0888,.037],[.0912,.034],[.0912,.007],[.0895,.004]],c,silk,gloss,n);
+ S.lathe([[1e-4,.157],[.05,.1565],[.08,.154],[.0905,.148],[.0925,.139],[.0885,.1],[.0858,.062],[.0868,.03],[.0885,0]],c,(j)=>j<3?black:felt,cloth,40);
+ S.lathe([[.0888,.037],[.0912,.034],[.0912,.007],[.0895,.004]],c,silk,gloss,40);
  const curl=(a,t)=>.03*Math.cos(a)**2*t*t,brim=(dy,col)=>S.surface(Array.from({length:8},(_,j)=>{const t=j/7,r=mix(.086,.172,t);
   return Array.from({length:n},(_,i)=>{const a=i/n*tau;return [c[0]+Math.cos(a)*r,c[1]+.003+dy+curl(a,t),c[2]+Math.sin(a)*r*1.04];});}),true,col,cloth);
  brim(.003,felt);brim(-.004,black);
@@ -165,9 +185,9 @@ function buildTopHat(S){
 // four beaded arches that meet under an orb with a cross, and a cap of red velvet inside.
 function buildCrown(S){
  const gold=rgb('#edb93a'),deep=rgb('#b8892a'),velvet=rgb('#8c1022'),fur=rgb('#f3efe6'),spot=rgb('#18171a'),pearl=rgb('#f7f2e8'),gems=['#d01f26','#2f6fbf','#2e9b5a'].map(rgb);
- const n=48,y0=.378,cz=.322,at=(phi,off,y)=>{const p=rimPt(y0,phi,off,cz);return [p[0],y,p[2]];},ring=(y,off,lump=0)=>Array.from({length:n},(_,i)=>at(i/n*tau,off*(1+lump*Math.sin(i*2.3)*Math.sin(i*.9)),y));
+ const n=S.seg(48),y0=.378,cz=.322,at=(phi,off,y)=>{const p=rimPt(y0,phi,off,cz);return [p[0],y,p[2]];},ring=(y,off,lump=0)=>Array.from({length:n},(_,i)=>at(i/n*tau,off*(1+lump*Math.sin(i*2.3)*Math.sin(i*.9)),y));
  S.surface([ring(y0-.009,.005),ring(y0-.005,.017,.12),ring(y0+.007,.022,.12),ring(y0+.019,.018,.12),ring(y0+.024,.012)],true,fur,cloth);
- for(let k=0;k<10;k++)S.ball(at((k+.5)/10*tau,.0225,y0+.006+(k%2?.004:-.003)),.0052,spot,cloth,6,1.7); // the black tails of the ermine
+ for(let k=0;k<10;k++)S.ball(at((k+.5)/10*tau,.0225,y0+.006+(k%2?.004:-.003)),S.q<1?.007:.0052,spot,cloth,6,1.7); // the black tails of the ermine
  S.surface([ring(y0+.022,.012),ring(y0+.026,.0165),ring(y0+.05,.0165),ring(y0+.054,.012)],true,(j)=>j===1||j===2?gold:deep,metal);
  const cap=[];for(let k=0;k<=6;k++){const t=k/6;cap.push(ring(y0+.05+.062*Math.sin(t*Math.PI/2),.01*(1-t*t)).map(p=>[mix(p[0],0,t*t*.97),p[1],mix(p[2],cz,t*t*.97)]));}
  S.surface(cap,true,velvet,cloth);
@@ -179,14 +199,14 @@ function buildCrown(S){
   const g=at(phi,.0185,y0+.038);S.ball(g,.0095,gems[k%3],gloss,8);S.ball(at(phi,.017,y0+.038),.0125,deep,metal,8,.9); // a jewel in its setting
   if(!tall){S.ball([tip[0],tip[1]+.009,tip[2]],.0085,pearl,gloss,8);continue;}
   const arch=[];for(let q=0;q<=8;q++){const t=q/8,cq=Math.cos(t*Math.PI/2);arch.push([tip[0]*cq,tip[1]+.052*Math.sin(t*Math.PI/2),cz+(tip[2]-cz)*cq]);}
-  S.tube(arch,.0052,gold,metal,6);for(let q=1;q<8;q+=2)S.ball([arch[q][0],arch[q][1]+.006,arch[q][2]],.0062,pearl,gloss,6);
+  S.tube(arch,.0052,gold,metal,6);for(let q=1;q<8;q+=S.q<1?4:2)S.ball([arch[q][0],arch[q][1]+.006,arch[q][2]],.0062,pearl,gloss,6);
  }
  const top=y0+.166;S.ball([0,top,cz],.0155,gold,metal,10);S.tube([[0,top+.012,cz],[0,top+.05,cz]],.0042,gold,metal,5);S.tube([[-.015,top+.035,cz],[.015,top+.035,cz]],.0042,gold,metal,5);
 }
 // Ninjapannband: a strip of red cloth tied round the head above the eyes, folded along the middle, with a tight knot and two
 // small loops at the back. Its two long tails are loose cloth (see ribbonEnd).
 function buildHeadband(S){
- const red=rgb('#d01f26'),dark=rgb('#96131a'),n=48,yc=phi=>.352+.006*Math.cos(phi),row=(dy,off)=>Array.from({length:n},(_,i)=>{const phi=i/n*tau;return rimPt(yc(phi)+dy,phi,off);});
+ const red=rgb('#d01f26'),dark=rgb('#96131a'),n=S.seg(48),yc=phi=>.352+.006*Math.cos(phi),row=(dy,off)=>Array.from({length:n},(_,i)=>{const phi=i/n*tau;return rimPt(yc(phi)+dy,phi,off);});
  S.surface([row(-.021,.004),row(-.018,.011),row(-.007,.0145),row(0,.012),row(.007,.0145),row(.018,.011),row(.021,.004)],true,(j)=>j===0||j===6?dark:j===3?tint(red,.8):red,cloth);
  const b=headbandKnot();S.ball(b,.021,tint(red,.92),cloth,10,.85);
  for(const s of [-1,1]){const loop=[];for(let q=0;q<=8;q++){const t=q/8*Math.PI;loop.push([b[0]+s*(.012+.03*Math.sin(t)),b[1]+.01+.026*Math.sin(t)*(1-.5*Math.cos(t)),b[2]-.008-.016*Math.sin(t)]);}S.tube(loop,.0075,(j)=>j%2?red:dark,cloth,6);}
@@ -199,19 +219,19 @@ function buildShades(S){
  for(const s of [-1,1]){
   // the outline of a lens: q goes round it, 0 at the outer end; flat-ish on top, hanging lower towards the outside
   const out=q=>{const cq=Math.cos(q),sq=Math.sin(q);return [s*(.9-.7*cq*(1-.08*sq)),.006+(sq>0?.031*sq:.045*sq*(1+.22*cq))];};
-  const lens=[];for(let r=0;r<=5;r++){const k=r/5,row=[];for(let i=0;i<24;i++){const [phi,dy]=out(i/24*tau);row.push(at(s*.9+(phi-s*.9)*k,.006+(dy-.006)*k,.0135+.006*(1-k*k)));}lens.push(row);}
+  const lr=S.seg(5),li=S.seg(24),lens=[];for(let r=0;r<=lr;r++){const k=r/lr,row=[];for(let i=0;i<li;i++){const [phi,dy]=out(i/li*tau);row.push(at(s*.9+(phi-s*.9)*k,.006+(dy-.006)*k,.0135+.006*(1-k*k)));}lens.push(row);}
   S.surface(lens,true,(j,i)=>blend(warm,dark,clamp((lens[j][i][1]-y+.045)/.06,0,1)),gloss);
-  S.tube(Array.from({length:25},(_,i)=>{const [phi,dy]=out(i/24*tau);return at(phi,dy,.0135);}),.0042,frame,metal,6);
-  for(const [p0,w] of [[.52,.05],[.64,.022]]){ // two strokes of light across the glass
+  S.tube(Array.from({length:li+1},(_,i)=>{const [phi,dy]=out(i/li*tau);return at(phi,dy,.0135);}),.0042,frame,metal,6);
+  if(S.q===1)for(const [p0,w] of [[.52,.05],[.64,.022]]){ // two strokes of light across the glass
    const g=[];for(let k=0;k<=4;k++){const t=k/4;g.push([at(s*(p0+.2*t),.03-.045*t,.0205),at(s*(p0+w+.2*t),.03-.045*t,.0205)]);}S.surface(g,false,glint,gloss);}
-  const arm=[];for(let k=0;k<=9;k++){const t=k/9;arm.push(at(s*mix(1.58,2.5,t),.03-.004*t-.03*Math.max(0,t-.75)**2*16,.011-.003*t));}S.tube(arm,.0033,frame,metal,5);
+  const arm=[];for(let k=0;k<=9;k++){const t=k/9;arm.push(at(s*mix(1.58,2.3,t),.03-.004*t-.03*Math.max(0,t-.75)**2*16,.011-.003*t));}S.tube(arm,.0033,frame,metal,5);
  }
  S.tube([at(-.2,.012,.016),at(0,.02,.02),at(.2,.012,.016)],.0036,frame,metal,5);S.tube([at(-.24,.034,.015),at(0,.04,.018),at(.24,.034,.015)],.003,frame,metal,5);
 }
 // Halsduk: a thick knitted scarf wrapped twice round the neck: ribbed, striped along its length in blue and cream, with a
 // knot at the front. Its two ends hang loose (see ribbonEnd).
 function buildScarf(S){
- const blue=rgb('#2f6fbf'),navy=rgb('#255596'),n=44,Q=16;
+ const blue=rgb('#2f6fbf'),navy=rgb('#255596'),n=S.seg(44),Q=S.q<1?8:16;
  for(const [k,z,lean,size] of [[0,.178,.034,1],[1,.232,-.026,.9]]){
   const P=[];for(let c=0;c<=Q;c++){const q=c/Q*tau-Math.PI/2,rib=1+.075*Math.cos(q*8),row=[]; // eight knitted ribs run along it
    for(let i=0;i<n;i++){const a=i/n*tau,soft=1+.1*Math.sin(a*3+k*2)+.06*Math.sin(a*5+1.3*k); // a soft thing is never quite even
@@ -224,41 +244,154 @@ function buildScarf(S){
 const scarfKnot=()=>headPt(.214,-Math.PI/2+.5,.04);
 function drawLook(into,toHead,toBody){
  const head=wearing('head');
- if(head==='keps')rigid('keps',into,false,buildCap);
- if(head==='hatt')rigid('hatt',into,false,buildTopHat);
- if(head==='krona')rigid('krona',into,false,buildCrown);
+ if(head==='keps')rigid('keps',into,false,true,buildCap);
+ if(head==='hatt')rigid('hatt',into,false,false,buildTopHat);
+ if(head==='krona')rigid('krona',into,false,false,buildCrown);
  if(head==='pannband'){
-  rigid('pannband',into,false,buildHeadband);
+  rigid('pannband',into,false,true,buildHeadband);
   const b=headbandKnot(),red=rgb('#d01f26'),dark=rgb('#96131a');
   for(const s of [-1,1])ribbonEnd('band'+s,toHead([b[0]+s*.012,b[1]-.006,b[2]-.012]),13,.027,.02,(i)=>i===1?tint(red,.85):red,dark);
  }
- if(wearing('eyes')==='brillor')rigid('brillor',into,false,buildShades);
+ if(wearing('eyes')==='brillor')rigid('brillor',into,false,false,buildShades);
  if(wearing('neck')==='halsduk'){
-  rigid('halsduk',into,true,buildScarf);
+  rigid('halsduk',into,true,false,buildScarf);
   const k=scarfKnot(),blue=rgb('#2f6fbf'),navy=rgb('#255596'),cream=rgb('#ece6d6');
   for(const [n,dx] of [[0,-.03],[1,.03]])ribbonEnd('scarf'+n,toBody([k[0]+dx,k[1]-.02,k[2]+.01*n]),13,.036,.04,(i,j)=>j===9||j===10?cream:i===1?blue:navy,cream,true); // two cream stripes near the end
  }
  drawCape(toBody);
 }
-// Small pictures for the menu.
-const lookIcon={
- keps:'<path d="M8 30c0-10 7-16 16-16s16 6 16 16z" fill="#d23b2f"/><path d="M30 29h16l-4 4H28z" fill="#a82a24"/>',
- halsduk:'<path d="M10 16h28v8H10z" fill="#2f6fbf"/><path d="M14 16h4v8h-4zM22 16h4v8h-4zM30 16h4v8h-4z" fill="#e8e4da"/><path d="M28 24h7l2 16h-7z" fill="#2f6fbf"/>',
- brillor:'<ellipse cx="15" cy="24" rx="9" ry="7" fill="#111318"/><ellipse cx="33" cy="24" rx="9" ry="7" fill="#111318"/><path d="M22 22h4v3h-4z" fill="#111318"/>',
- pannband:'<path d="M6 20h32v8H6z" fill="#d01f26"/><path d="M38 22l8-6 2 4-6 6zM38 26l9 3-1 4-9-3z" fill="#a8161c"/>',
- hatt:'<path d="M14 8h20v26H14z" fill="#1d1e22"/><path d="M14 26h20v4H14z" fill="#a8252b"/><path d="M6 34h36v4H6z" fill="#16171a"/>',
- krona:'<path d="M8 36V16l8 8 8-14 8 14 8-8v20z" fill="#e8b830"/><circle cx="24" cy="10" r="3" fill="#e8323a"/>',
- mantel:'<path d="M14 8h20l8 34c-6-3-11 2-18-2-7 4-12-1-18 2z" fill="#c8102e"/><path d="M14 8h20v4H14z" fill="#e8b830"/>',
- guld:'<path d="M14 38c-6 0-6-8 1-8-3-6 4-9 7-6 1-6 9-5 9 1 7-1 8 8 2 9z" fill="#e8b830"/><circle cx="21" cy="31" r="2" fill="#fff6c8"/>',
-};
-function lookView(){return ['Utseende','<div class="looks">'+lookList.map(l=>{
- const [a,b]=l.have(),open=unlocked(l),on=worn[l.slot]===l.id&&open;
- return '<div class="look'+(open?'':' locked')+(on?' on':'')+'"><svg viewBox="0 0 48 48">'+lookIcon[l.id]+'</svg><b>'+l.name+'</b>'+
-  (open?'<button data-look="'+l.id+'">'+(on?'Ta av':'Ta på')+'</button>':'<small>🔒 '+l.need+'</small>'+(b>1?'<i><em style="width:'+Math.min(100,100*a/b)+'%"></em></i><small>'+number(Math.min(a,b))+' / '+number(b)+'</small>':''))+'</div>';
-}).join('')+'</div><p class="cause">Sparas på den här enheten.</p>'+(testSite?'<button class="back" data-unlockall="1">'+(unlockAll?'Testläge: lås igen':'Testläge: lås upp allt')+'</button>':'')];}
-document.querySelector('.panel').addEventListener('click',e=>{const b=e.target.closest('button[data-look]');if(b){wear(b.dataset.look);openView('looks');}});
-document.querySelector('.panel').addEventListener('click',e=>{if(!e.target.closest('button[data-unlockall]'))return;unlockAll=!unlockAll;try{localStorage.setItem('fagelbajs.unlockAll',unlockAll?'yes':'no');}catch{}applyLook();openView('looks');});
-if(looksLive){const b=document.createElement('button');b.dataset.view='looks';b.textContent='Utseende';$('nav').append(b);}
+// ---- Garderoben: the wardrobe ------------------------------------------------------------------------------------------
+// A screen of its own: the bird on show up in the sky, to be turned by dragging, and beside it a tab for each part of the
+// body with a tile for every thing there is. A tile carries a real picture of the thing (see makeThumb), the colour of its
+// rarity, and a lock with what it takes until it has been earned. Picking a tile puts the thing on the bird at once:
+// for good if it is unlocked, otherwise only to look at.
+const W={slot:'head',pick:{},yaw:.95,tilt:.2,dist:1.1,span:.8,aim:[0,.33,.3],lastDrag:-9,thumbs:{},queue:[],fresh:new Set(),told:new Set(),box:null};
+try{W.told=new Set(JSON.parse(localStorage.getItem('fagelbajs.lookTold')||'[]'));W.fresh=new Set(JSON.parse(localStorage.getItem('fagelbajs.lookNew')||'[]'));}catch{}
+function saveNews(){try{localStorage.setItem('fagelbajs.lookTold',JSON.stringify([...W.told]));localStorage.setItem('fagelbajs.lookNew',JSON.stringify([...W.fresh]));}catch{}markNav();}
+// How the bird is looked at for each part of the body: from which side, how steeply, and how many metres fit across the picture.
+const stageView={
+ head:{yaw:.95,tilt:.07,dist:1.3,span:1,aim:[0,.37,.28]},eyes:{yaw:.62,tilt:.03,dist:1.2,span:.72,aim:[0,.31,.33]},neck:{yaw:1,tilt:.06,dist:1.5,span:1.05,aim:[0,.2,.2]},
+ back:{yaw:2.5,tilt:.4,dist:3,span:2.5,aim:[0,.05,-.5]},poop:{yaw:1.7,tilt:-.04,dist:3.2,span:2.3,aim:[0,-.45,-.5]}};
+// The same for the small pictures on the tiles, thing by thing.
+const thumbView={keps:{yaw:.9,tilt:.22,dist:1.1,span:.5,aim:[0,.36,.34]},pannband:{yaw:2.05,tilt:.25,dist:1.2,span:.62,aim:[0,.31,.2]},hatt:{yaw:.9,tilt:.12,dist:1.2,span:.56,aim:[0,.43,.32]},
+ krona:{yaw:.9,tilt:.16,dist:1.2,span:.5,aim:[0,.44,.32]},brillor:{yaw:.55,tilt:.08,dist:1,span:.42,aim:[0,.32,.36]},halsduk:{yaw:1,tilt:.12,dist:1.3,span:.7,aim:[0,.18,.22]},
+ mantel:{yaw:2.55,tilt:.5,dist:2.8,span:1.9,aim:[0,.05,-.55]},regnbage:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]},guld:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]}};
+const wardrobeOpen=()=>!$('wardrobe').hidden;
+const wornNow=slot=>{const l=lookList.find(l=>l.id===worn[slot]);return l&&unlocked(l)?l.id:null;};
+function markNav(){const b=document.querySelector('#nav [data-view=looks]');if(b)b.classList.toggle('news',W.fresh.size>0&&!unlockAll);}
+function openWardrobe(){
+ if(!looksLive)return;
+ W.pick={};for(const [slot] of lookSlots)W.pick[slot]=wornNow(slot);
+ W.queue=lookList.filter(l=>!W.thumbs[l.id]);W.box=null;W.lastDrag=-9;
+ $('wardrobe').hidden=false;document.body.classList.add('wardrobe');pausedDrawn=false;drawWardrobeUI();showPicks();
+}
+function closeWardrobe(){
+ $('wardrobe').hidden=true;document.body.classList.remove('wardrobe');tryOn=null;applyLook();pausedDrawn=false;
+ const b=document.querySelector('#nav [data-view=looks]');if(b)b.focus();
+}
+// What the bird on show is wearing: the picked thing in every slot, earned or not.
+function showPicks(){tryOn={};for(const [slot] of lookSlots)tryOn[slot]=W.pick[slot]||null;applyLook();}
+function pickLook(slot,id){
+ const l=lookList.find(l=>l.id===id);W.pick[slot]=id||null;
+ if(!id||unlocked(l)){worn[slot]=id||null;saveWorn();} // earned: it is worn from now on; locked: only tried on here
+ if(id&&W.fresh.delete(id))saveNews();
+ showPicks();drawWardrobeUI();
+}
+const lockSign='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2h.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm1.6 0h3.8V5a1.9 1.9 0 0 0-3.8 0z"/></svg>';
+function drawWardrobeUI(){
+ const of=slot=>lookList.filter(l=>l.slot===slot),got=lookList.filter(unlocked).length;
+ $('w-count').textContent=got+' / '+lookList.length+' upplåsta';
+ $('w-tabs').innerHTML=lookSlots.map(([slot,name])=>'<button data-slot="'+slot+'" class="'+(slot===W.slot?'on':'')+(of(slot).some(l=>W.fresh.has(l.id))&&!unlockAll?' news':'')+'" aria-pressed="'+(slot===W.slot)+'">'+name+
+  '<small>'+of(slot).filter(unlocked).length+'/'+of(slot).length+'</small></button>').join('');
+ const pick=W.pick[W.slot]||'';
+ $('w-grid').innerHTML='<button class="tile none'+(pick?'':' on')+'" data-item=""><i></i><b>Inget</b></button>'+of(W.slot).map(l=>{
+  const open=unlocked(l),[a,b]=l.have();
+  return '<button class="tile r'+l.rarity+(open?'':' locked')+(pick===l.id?' on':'')+'" data-item="'+l.id+'" title="'+esc(l.name)+'">'+
+   '<img alt="" '+(W.thumbs[l.id]?'src="'+W.thumbs[l.id]+'"':'')+'>'+(open?(wornNow(l.slot)===l.id?'<em class="worn">✓</em>':W.fresh.has(l.id)&&!unlockAll?'<em class="new">NY</em>':''):'<em class="lock">'+lockSign+'</em>')+
+   (open||b<=1?'':'<u><s style="width:'+Math.min(100,100*a/b)+'%"></s></u>')+'<b>'+esc(l.name)+'</b></button>';}).join('');
+ const l=lookList.find(l=>l.id===pick),info=$('w-info');
+ if(!l)info.innerHTML='<h3>Inget</h3><p>'+({head:'Barhuvad, som naturen tänkt.',eyes:'Blicken fri.',neck:'Halsen bar.',back:'Ryggen fri.',poop:'Det vanliga vita.'})[W.slot]+'</p>';
+ else{const open=unlocked(l),[a,b]=l.have();
+  info.innerHTML='<h3>'+esc(l.name)+'<span class="rar r'+l.rarity+'">'+rarityNames[l.rarity]+'</span></h3><p>'+esc(l.about)+'</p>'+
+   (open?'<p class="state ok">✓ Används'+(wornNow(l.slot)===l.id?'':' inte')+'</p>':'<p class="state">'+lockSign+' '+esc(l.need)+(b>1?' <span>'+number(Math.min(a,b))+' / '+number(b)+'</span>':'')+'</p>'+
+    (b>1?'<u><s style="width:'+Math.min(100,100*a/b)+'%"></s></u>':'')+'<p class="hint">Du provar den bara. Lås upp den för att flyga med den.</p>');}
+ $('w-note').innerHTML='Sparas på den här enheten.'+(testSite?' <button data-unlockall="1">'+(unlockAll?'Testläge: lås igen':'Testläge: lås upp allt')+'</button>':'');
+}
+$('wardrobe').addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b)return;
+ if(b.id==='w-back')closeWardrobe();
+ else if(b.dataset.slot){W.slot=b.dataset.slot;W.lastDrag=-9;drawWardrobeUI();}
+ else if(b.classList.contains('tile'))pickLook(W.slot,b.dataset.item);
+ else if(b.id==='w-clear'){for(const [slot] of lookSlots){W.pick[slot]=null;worn[slot]=null;}saveWorn();showPicks();drawWardrobeUI();}
+ else if(b.id==='w-random'){ // one earned thing, or nothing, in every slot
+  for(const [slot] of lookSlots){const mine=lookList.filter(l=>l.slot===slot&&unlocked(l)),l=mine[Math.floor(Math.random()*(mine.length+(slot==='head'?0:1)))];W.pick[slot]=worn[slot]=l?l.id:null;}
+  saveWorn();showPicks();drawWardrobeUI();}
+ else if(b.dataset.unlockall){unlockAll=!unlockAll;try{localStorage.setItem('fagelbajs.unlockAll',unlockAll?'yes':'no');}catch{}for(const [slot] of lookSlots)if(W.pick[slot]&&!unlocked(lookList.find(l=>l.id===W.pick[slot])))W.pick[slot]=wornNow(slot);showPicks();drawWardrobeUI();markNav();}
+});
+// Dragging on the bird turns it; left alone for a few seconds it goes back to swaying gently.
+{const st=$('w-stage');let from=null;
+ st.onpointerdown=e=>{st.setPointerCapture(e.pointerId);from=[e.clientX,e.clientY];st.classList.add('held','used');};
+ st.onpointermove=e=>{if(!from)return;W.yaw-=(e.clientX-from[0])*.011;W.tilt=clamp(W.tilt+(e.clientY-from[1])*.007,-.45,1.1);from=[e.clientX,e.clientY];W.lastDrag=performance.now()/1000;};
+ st.onpointerup=st.onpointercancel=()=>{from=null;st.classList.remove('held');};}
+addEventListener('resize',()=>{W.box=null;});
+if(looksLive){const b=document.createElement('button');b.dataset.view='looks';b.textContent='Garderob';$('nav').append(b);markNav();}
+// What has been earned since last time: said once on the end screen, and marked as new in the wardrobe until it has been looked at.
+function lookNews(){
+ if(unlockAll)return '';
+ const fresh=lookList.filter(l=>unlocked(l)&&!W.told.has(l.id));if(!fresh.length)return '';
+ for(const l of fresh){W.told.add(l.id);W.fresh.add(l.id);}saveNews();
+ return '<p class="unlock"><b>Nytt i garderoben</b> '+fresh.map(l=>esc(l.name)).join(' · ')+'</p>';
+}
+// ---- The bird on show. It is not the bird of the game (which may be lying dead in a street) but one of its own, gliding
+// high above the same spot. While it is drawn it stands in for the real one, so that everything that draws a bird just works.
+const stageBird={x:0,y:0,z:0,angle:0,bank:0,turn:0,spread:1,speed:14,vy:0,fold:0,steep:0,climb:0,flare:0,effort:.22,brake:0,snare:0,lookYaw:0,lookPitch:-.04,squirm:0,vb:0,vp:.03};
+function onStage(draw,pooping){
+ const real={bird,crash,drops,thrown,hawk,splash,mist,plume};
+ stageBird.x=bird.x;stageBird.z=bird.z;stageBird.y=76;
+ bird=stageBird;crash=null;thrown=[];hawk=null;splash=[];mist=[];plume=[];drops=pooping?demoDrops():[];fogBoost=3;
+ try{draw();}finally{({bird,crash,drops,thrown,hawk,splash,mist,plume}=real);fogBoost=1;}
+}
+// A steady trickle to show what the droppings look like: drops born one after another at the vent, falling behind.
+function demoDrops(){
+ const v=ventPoint(),t=performance.now()/1000,gap=.055,first=Math.floor(t/gap),out=[];
+ for(let k=15;k>=0;k--){const n=first-k,age=t-n*gap;
+  out.push({x:v[0],y:v[1],z:v[2],vx:.5*Math.sin(n*.73),vy:-3,vz:-3.2+.4*Math.sin(n*2.1),age,r:n%7===0?.15:.06+.05*hash(n,2,6),seed:n,big:n%7===0,dark:n%4===0,hot:false});}
+ return out;
+}
+// Aims the camera at a point of the bird (aim, in its own space) from the side yaw and the height tilt, so that the point
+// lands at the pixel px,py and `span` metres at its distance fill `size` pixels.
+function stageCamera(aim,yaw,tilt,dist,span,px,py,size){
+ const T=birdPoint(aim),a=bird.angle+yaw,flat=dist*Math.cos(tilt),cx=T[0]+Math.sin(a)*flat,cz=T[2]+Math.cos(a)*flat,cy=T[1]+dist*Math.sin(tilt);
+ scale=size/span*dist;
+ const turn=Math.atan2(T[0]-cx,T[2]-cz)-Math.atan((px-width/2)/scale),pitch=tilt+Math.atan((height*.43-py)/scale);
+ camera={x:cx,y:cy,z:cz,s:Math.sin(turn),c:Math.cos(turn),cp:Math.cos(pitch),sp:Math.sin(pitch),cr:1,sr:0,near:.05};
+}
+function drawWardrobe(dt){
+ const v=stageView[W.slot],t=performance.now()/1000,k=1-Math.exp(-dt*5);
+ if(t-W.lastDrag>3.5){W.yaw=mix(W.yaw,v.yaw+.4*Math.sin(t*.45),k*.35);W.tilt=mix(W.tilt,v.tilt,k*.35);}
+ W.dist=mix(W.dist,v.dist,k);W.span=mix(W.span,v.span,k);for(let i=0;i<3;i++)W.aim[i]=mix(W.aim[i],v.aim[i],k);
+ if(W.queue.length)makeThumb(W.queue.shift()); // one small picture a frame until every tile has its own
+ if(!W.box){const r=$('w-stage').getBoundingClientRect();W.box=[r.left+r.width/2,r.top+r.height*.5,Math.min(r.width,r.height*1.2)];}
+ onStage(()=>{
+  stageBird.lookYaw=.25*Math.sin(t*.8);stageBird.lookPitch=-.04+.05*Math.sin(t*.5);clothDt=Math.min(dt||1/60,.05);updateCape(clothDt);
+  stageCamera(W.aim,W.yaw,W.tilt,W.dist,W.span,W.box[0],W.box[1],W.box[2]);draw3D();
+ },W.slot==='poop');
+}
+// The picture on a tile: the bird wearing only that thing, drawn in the middle of the screen and copied from there.
+// (The frame that is shown is drawn afterwards, on top, so this one is never seen.)
+function makeThumb(l){
+ const size=Math.round(128*Math.min(devicePixelRatio||1,2)),side=Math.min(width,height)*.5,v=thumbView[l.id],was=tryOn,phase=wingPhase;
+ tryOn={head:null,eyes:null,neck:null,back:null,poop:null,[l.slot]:l.id};applyLook();wingPhase=1.15;
+ onStage(()=>{
+  stageBird.lookYaw=0;stageBird.lookPitch=-.04;clothDt=1/60;
+  if(l.id==='mantel'||l.id==='pannband'||l.id==='halsduk')for(let i=0;i<45;i++){updateCape(1/60);dyn.n=0;goo.n=0;for(const b of extraBatches)b.n=0;renderBird();} // let the cloth settle in the wind first
+  stageCamera(v.aim,v.yaw,v.tilt,v.dist,v.span,width/2,height*.43,side);draw3D();
+  const c=document.createElement('canvas'),px=side*density;c.width=c.height=size;
+  c.getContext('2d').drawImage(glCanvas,width/2*density-px/2,height*.43*density-px/2,px,px,0,0,size,size);W.thumbs[l.id]=c.toDataURL('image/jpeg',.88);
+ },l.slot==='poop');
+ tryOn=was;applyLook();wingPhase=phase;
+ const img=document.querySelector('#w-grid [data-item="'+l.id+'"] img');if(img)img.src=W.thumbs[l.id];
+}
 // Progress is counted at the end of every flight, and when an event is completed.
 function countFlight(){stats.total+=points;stats.maxStars=Math.max(stats.maxStars,wanted);saveStats();}
 
@@ -271,6 +404,14 @@ function toBirdLocal([X,Y,Z]){ // the inverse of birdPoint()
  const dx=X-b.x,dy=Y-b.y,dz=Z-b.z,bx=dx*cy-dz*sy,bz=dx*sy+dz*cy,by=dy*cp-bz*sp,z=dy*sp+bz*cp;
  return [bx*cb-by*sb,bx*sb+by*cb,z];
 }
+// The cloth asks thousands of times a frame whether a point is inside the bird. So the bird's place and its three axes
+// are noted once per step (noteBird), and the body's cross-sections are read from a table instead of being worked out.
+const B={ox:0,oy:0,oz:0,x:[1,0,0],y:[0,1,0],z:[0,0,1]},ringZ0=-.49,ringZ1=.444,ringN=96;
+const ringTable=(()=>{const t=new Float32Array((ringN+1)*3);for(let k=0;k<=ringN;k++){const r=ringAt(mix(ringZ0,ringZ1,k/ringN));t[k*3]=r[1];t[k*3+1]=r[2];t[k*3+2]=r[3];}return t;})();
+function noteBird(){
+ const o=birdPoint([0,0,0]),x=birdPoint([1,0,0]),y=birdPoint([0,1,0]),z=birdPoint([0,0,1]);
+ B.ox=o[0];B.oy=o[1];B.oz=o[2];B.x=[x[0]-o[0],x[1]-o[1],x[2]-o[2]];B.y=[y[0]-o[0],y[1]-o[1],y[2]-o[2]];B.z=[z[0]-o[0],z[1]-o[1],z[2]-o[2]];
+}
 function capePin(i){const t=i/(cape.cols-1),a=mix(.62,Math.PI-.62,t);return birdPoint(headPt(.08,a,.022));}
 function resetCape(){
  cape.pts=[];for(let j=0;j<cape.rows;j++)for(let i=0;i<cape.cols;i++){const p=capePin(i),q=toBirdLocal(p),w=birdPoint([q[0]*(1+j*capeFlare),q[1]+.03,q[2]-j*.075]);cape.pts.push({p:w,o:w.slice()});}
@@ -278,26 +419,27 @@ function resetCape(){
 }
 function updateCape(dt){
  if(wearing('back')!=='mantel'){cape.pts=null;return;}
- const pins=Array.from({length:cape.cols},(_,i)=>capePin(i));
+ noteBird();const pins=Array.from({length:cape.cols},(_,i)=>capePin(i));
  if(!cape.pts||Math.hypot(...[0,1,2].map(k=>cape.pts[0].p[k]-pins[0][k]))>3){resetCape();cape.pins=pins;}
  const C=cape.cols,R=cape.rows,P=cape.pts,seg=.075,h=1/240,speed=Math.hypot(forwardSpeed(),bird.vy),air=airAt(),from=cape.pins||pins;
  const side=[pins[C-1][0]-pins[0][0],pins[C-1][1]-pins[0][1],pins[C-1][2]-pins[0][2]],sl=Math.hypot(...side)||1;side[0]/=sl;side[1]/=sl;side[2]/=sl; // across the shoulders
  cape.acc=Math.min(cape.acc+dt,.06);const steps=Math.floor(cape.acc/h);cape.acc-=steps*h;
+ const now=performance.now()/1000*5,wind=Math.hypot(air[0],air[2]),diag=cape.rest.map(w=>Array.from({length:R},(_,j)=>Math.hypot(w*(1+j*capeFlare),seg)));
  for(let s=1;s<=steps;s++){const f=s/steps;
   for(let j=0;j<R;j++)for(let i=0;i<C;i++){
-   const q=P[j*C+i];if(j===0){q.o=q.p;q.p=[0,1,2].map(k=>mix(from[i][k],pins[i][k],f));q.pin=true;continue;} // the shoulders glide with the bird between frames
+   const q=P[j*C+i];if(j===0){q.o=q.p;q.p=[mix(from[i][0],pins[i][0],f),mix(from[i][1],pins[i][1],f),mix(from[i][2],pins[i][2],f)];q.pin=true;continue;} // the shoulders glide with the bird between frames
    const v=[(q.p[0]-q.o[0])/h,(q.p[1]-q.o[1])/h,(q.p[2]-q.o[2])/h];
    // gusts vary smoothly over the cloth, so it billows in waves instead of shivering point by point
-   const t=performance.now()/1000*5-j*.42,g=.4+.1*speed,w=[air[0]+g*Math.sin(t+i*.25),air[1]+g*2.2*Math.sin(t*1.15+i*.2),air[2]+g*Math.cos(t*.8)];
+   const t=now-j*.42,g=.4+.1*Math.max(speed,wind),w=[air[0]+g*Math.sin(t+i*.25),air[1]+g*2.2*Math.sin(t*1.15+i*.2),air[2]+g*Math.cos(t*.8)];
    // the air that fills a cape also holds it open: each side is pushed outwards, more the further down the cape it is
    const open=(i/(C-1)-.5)*(3+.5*speed)*Math.min(1,j/5),k=5,a=[(w[0]-v[0])*k+side[0]*open,(w[1]-v[1])*k-9.8+side[1]*open,(w[2]-v[2])*k+side[2]*open];
    q.o=q.p;q.p=[q.p[0]+v[0]*h*.996+a[0]*h*h,q.p[1]+v[1]*h*.996+a[1]*h*h,q.p[2]+v[2]*h*.996+a[2]*h*h];
   }
-  const link=(A,B,L)=>{const d=[B.p[0]-A.p[0],B.p[1]-A.p[1],B.p[2]-A.p[2]],l=Math.hypot(...d)||1e-6,c=(l-L)/l,wa=A.pin?0:B.pin?1:.5;
-   for(let k=0;k<3;k++){A.p[k]+=d[k]*c*wa;B.p[k]-=d[k]*c*(1-wa);}};
+  const link=(A,B,L)=>{const a=A.p,b=B.p,dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2],l=Math.sqrt(dx*dx+dy*dy+dz*dz)||1e-6,c=(l-L)/l,wa=A.pin?0:B.pin?1:.5,wb=1-wa;
+   a[0]+=dx*c*wa;a[1]+=dy*c*wa;a[2]+=dz*c*wa;b[0]-=dx*c*wb;b[1]-=dy*c*wb;b[2]-=dz*c*wb;};
   for(let it=0;it<5;it++){
    for(let j=0;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i],w=cape.rest[Math.min(i,C-2)]*(1+j*capeFlare);
-    if(i<C-1)link(q,P[j*C+i+1],w);if(j<R-1)link(q,P[(j+1)*C+i],seg);if(j<R-1&&i<C-1)link(q,P[(j+1)*C+i+1],Math.hypot(w,seg));if(j<R-2)link(q,P[(j+2)*C+i],seg*2);}
+    if(i<C-1)link(q,P[j*C+i+1],w);if(j<R-1)link(q,P[(j+1)*C+i],seg);if(j<R-1&&i<C-1)link(q,P[(j+1)*C+i+1],diag[i][j]);if(j<R-2)link(q,P[(j+2)*C+i],seg*2);}
    for(let j=1;j<R;j++)for(let i=0;i<C;i++){const q=P[j*C+i];pushOutOfBird(q,.04);if(q.p[1]<.03)q.p[1]=.03;}
   }
  }
@@ -319,24 +461,24 @@ function drawCape(toBody){
  if(wearing('back')!=='mantel'||!cape.pts)return;
  const C=cape.cols,R=cape.rows,red=rgb('#b8102a'),deep=rgb('#7a0a1b'),gold=rgb('#e6b33a'),lining=rgb('#d9a52e');
  const raw=[];for(let j=0;j<R;j++)raw.push(cape.pts.slice(j*C,j*C+C).map(q=>q.p));
- const G=refine(raw),J=G.length,I=G[0].length,nor=(j,i)=>{ // which way the cloth faces at a point; the side away from this is the outside
+ const far=lookDetail()<1,S=far?liveFar:live,bw=far?0:1,G=far?raw:refine(raw),J=G.length,I=G[0].length,nor=(j,i)=>{ // which way the cloth faces at a point; the side away from this is the outside
   const a=G[j][Math.min(I-1,i+1)],b=G[j][Math.max(0,i-1)],c=G[Math.min(J-1,j+1)][i],d=G[Math.max(0,j-1)][i],u=[a[0]-b[0],a[1]-b[1],a[2]-b[2]],v=[c[0]-d[0],c[1]-d[1],c[2]-d[2]];
   const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],l=Math.hypot(...n)||1;return [n[0]/l,n[1]/l,n[2]/l];};
  const N=G.map((row,j)=>row.map((_,i)=>nor(j,i))),lift=(k)=>G.map((row,j)=>row.map((p,i)=>[p[0]+N[j][i][0]*k,p[1]+N[j][i][1]*k,p[2]+N[j][i][2]*k]));
- live.surface(lift(-.004),false,(j,i)=>i<=1||i>=I-2||j>=J-3?gold:j<2?deep:tint(red,.88+.12*Math.sin(i*.9)),cloth);
- live.surface(lift(.004),false,lining,cloth);
+ S.surface(lift(-.004),false,(j,i)=>i<=bw||i>=I-1-bw||j>=J-2-bw?gold:j<1+bw?deep:tint(red,.88+.12*Math.sin(i*(far?1.8:.9))),cloth);
+ S.surface(lift(.004),false,lining,cloth);
  // the emblem: three heaped coils and a tip, laid on the cloth wherever it happens to be
  const at=(u,v)=>{const x=clamp(u,0,1)*(I-1),y=clamp(v,0,1)*(J-1),i=Math.min(I-2,Math.floor(x)),j=Math.min(J-2,Math.floor(y)),fx=x-i,fy=y-j,p=[0,0,0];
   for(let k=0;k<3;k++)p[k]=mix(mix(G[j][i][k],G[j][i+1][k],fx),mix(G[j+1][i][k],G[j+1][i+1][k],fx),fy)-N[j][i][k]*.0075;return p;};
- for(const [v0,ru,rv] of [[.53,.27,.036],[.474,.195,.032],[.424,.125,.028],[.384,.055,.022]]){
+ for(const [v0,ru,rv] of [[.57,.25,.062],[.485,.185,.054],[.41,.125,.046],[.35,.06,.036]]){ // (how far down the cape, half its width, half its height)
   const n=N[Math.round(v0*(J-1))][I>>1],out=[-n[0],-n[1],-n[2]],c=at(.5,v0);let prev=at(.5+ru,v0);
-  for(let q=1;q<=12;q++){const a=q/12*tau,p=at(.5+ru*Math.cos(a),v0+rv*Math.sin(a));metal.vert(c[0],c[1],c[2],out[0],out[1],out[2],gold[0],gold[1],gold[2]);
+  for(let q=1,m=far?8:12;q<=m;q++){const a=q/m*tau,p=at(.5+ru*Math.cos(a),v0+rv*Math.sin(a));metal.vert(c[0],c[1],c[2],out[0],out[1],out[2],gold[0],gold[1],gold[2]);
    metal.vert(prev[0],prev[1],prev[2],out[0],out[1],out[2],gold[0],gold[1],gold[2]);metal.vert(p[0],p[1],p[2],out[0],out[1],out[2],gold[0],gold[1],gold[2]);prev=p;}
  }
  // collar, clasps and chain
- const collar=[raw[0],raw[0].map(p=>{const l=toBirdLocal(p);return birdPoint([l[0]*1.06,l[1]+.032,l[2]+.02]);})];live.surface(collar,false,gold,metal);
- for(const a of [.62,Math.PI-.62])live.ball(toBody(headPt(.095,a,.03)),.024,gold,metal,8,.6);
- live.tube(Array.from({length:15},(_,k)=>toBody(headPt(.115,.62-k/14*(Math.PI+1.24),.012+.012*Math.sin(k/14*Math.PI)))),.0055,(j)=>j%2?gold:tint(gold,.7),metal,5);
+ const collar=[raw[0],raw[0].map(p=>{const l=toBirdLocal(p);return birdPoint([l[0]*1.06,l[1]+.032,l[2]+.02]);})];S.surface(collar,false,gold,metal);
+ for(const a of [.62,Math.PI-.62])S.ball(toBody(headPt(.095,a,.03)),.024,gold,metal,8,.6);
+ S.tube(Array.from({length:15},(_,k)=>toBody(headPt(.115,.62-k/14*(Math.PI+1.24),.012+.012*Math.sin(k/14*Math.PI)))),.0055,(j)=>j%2?gold:tint(gold,.7),metal,5);
 }
 
 // ---- Loose cloth ends (scarf ends, headband tails): a chain of points hanging from a pin, simulated like the cape:
@@ -346,20 +488,25 @@ function airAt(){ // the air's velocity: still while flying (the bird moves thro
  return state==='play'||state==='crash'?[0,0,0]:[-Math.sin(bird.angle)*9,0,-Math.cos(bird.angle)*9];
 }
 function pushOutOfBird(q,margin){
- const l=toBirdLocal(q.p);let out=null;
- if(l[2]>=-.49&&l[2]<=.444){const [,cy,w,h]=ringAt(l[2]),e=(l[0]/(w+margin))**2+((l[1]-cy)/(h+margin))**2;if(e<1){const k=1/Math.sqrt(Math.max(e,1e-4));out=[l[0]*k,cy+(l[1]-cy)*k,l[2]];}}
- else if(l[2]<-.49&&l[2]>-.8&&Math.abs(l[0])<.22&&l[1]<.06+margin&&l[1]>-.04)out=[l[0],.06+margin,l[2]]; // the tail fan
- if(out){const n=birdPoint(out),d=[n[0]-q.p[0],n[1]-q.p[1],n[2]-q.p[2]];for(let k=0;k<3;k++){q.p[k]+=d[k];q.o[k]+=d[k]*.85;}} // move it out without kicking it
+ const p=q.p,dx=p[0]-B.ox,dy=p[1]-B.oy,dz=p[2]-B.oz,lz=dx*B.z[0]+dy*B.z[1]+dz*B.z[2];
+ if(lz<-.8||lz>ringZ1)return;
+ const lx=dx*B.x[0]+dy*B.x[1]+dz*B.x[2],ly=dx*B.y[0]+dy*B.y[1]+dz*B.y[2];let nx=lx,ny=ly;
+ if(lz>=ringZ0){
+  const k=Math.round((lz-ringZ0)/(ringZ1-ringZ0)*ringN)*3,cy=ringTable[k],e=(lx/(ringTable[k+1]+margin))**2+((ly-cy)/(ringTable[k+2]+margin))**2;
+  if(e>=1)return;const s=1/Math.sqrt(Math.max(e,1e-4));nx=lx*s;ny=cy+(ly-cy)*s;
+ }else{if(Math.abs(lx)>=.22||ly>=.06+margin||ly<=-.04)return;ny=.06+margin;} // the tail fan
+ const ex=nx-lx,ey=ny-ly,mx=B.x[0]*ex+B.y[0]*ey,my=B.x[1]*ex+B.y[1]*ey,mz=B.x[2]*ex+B.y[2]*ey; // out to the surface, without kicking it
+ p[0]+=mx;p[1]+=my;p[2]+=mz;q.o[0]+=mx*.85;q.o[1]+=my*.85;q.o[2]+=mz*.85;
 }
 function stepChain(ch,pin,seg,dt,speed){
- const n=ch.p.length,h=1/240,air=airAt();ch.acc=Math.min(ch.acc+dt,.06);const from=ch.pin||pin;let steps=Math.floor(ch.acc/h);ch.acc-=steps*h;
+ const n=ch.p.length,h=1/240,air=airAt(),now=performance.now()/1000*5;ch.acc=Math.min(ch.acc+dt,.06);const from=ch.pin||pin;let steps=Math.floor(ch.acc/h);ch.acc-=steps*h;
  for(let s=1;s<=steps;s++){const f=s/steps,P=[mix(from[0],pin[0],f),mix(from[1],pin[1],f),mix(from[2],pin[2],f)];
   for(let i=1;i<n;i++){const q=ch.p[i],v=[(q.p[0]-q.o[0])/h,(q.p[1]-q.o[1])/h,(q.p[2]-q.o[2])/h];
-   const t=performance.now()/1000*5+i*.45+ch.seed,g=.5+.12*speed,w=[air[0]+g*Math.sin(t),air[1]+g*.7*Math.sin(t*1.3),air[2]+g*Math.cos(t*.9)],k=6;
+   const t=now+i*.45+ch.seed,g=.5+.12*Math.max(speed,Math.hypot(air[0],air[2])),w=[air[0]+g*Math.sin(t),air[1]+g*.7*Math.sin(t*1.3),air[2]+g*Math.cos(t*.9)],k=6;
    const a=[(w[0]-v[0])*k,(w[1]-v[1])*k-9.8,(w[2]-v[2])*k];q.o=q.p;q.p=[q.p[0]+v[0]*h*.997+a[0]*h*h,q.p[1]+v[1]*h*.997+a[1]*h*h,q.p[2]+v[2]*h*.997+a[2]*h*h];}
   ch.p[0].o=ch.p[0].p;ch.p[0].p=P;
-  for(let it=0;it<5;it++){for(let i=0;i<n-1;i++){const A=ch.p[i],B=ch.p[i+1],d=[B.p[0]-A.p[0],B.p[1]-A.p[1],B.p[2]-A.p[2]],l=Math.hypot(...d)||1e-6,c=(l-seg)/l,wa=i===0?0:.5;
-    for(let k=0;k<3;k++){A.p[k]+=d[k]*c*wa;B.p[k]-=d[k]*c*(1-wa);}}
+  for(let it=0;it<5;it++){for(let i=0;i<n-1;i++){const a=ch.p[i].p,b=ch.p[i+1].p,dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2],l=Math.sqrt(dx*dx+dy*dy+dz*dz)||1e-6,c=(l-seg)/l,wa=i===0?0:.5,wb=1-wa;
+    a[0]+=dx*c*wa;a[1]+=dy*c*wa;a[2]+=dz*c*wa;b[0]-=dx*c*wb;b[1]-=dy*c*wb;b[2]-=dz*c*wb;}
    for(let i=1;i<n;i++){pushOutOfBird(ch.p[i],.022);if(ch.p[i].p[1]<.03)ch.p[i].p[1]=.03;}}
  }
  ch.pin=pin;
@@ -369,14 +516,14 @@ function stepChain(ch,pin,seg,dt,speed){
 function ribbonEnd(id,pin,n,seg,width,col,edge,flat){
  let ch=chains[id];
  if(!ch||Math.hypot(ch.p[0].p[0]-pin[0],ch.p[0].p[1]-pin[1],ch.p[0].p[2]-pin[2])>1){ch=chains[id]={p:Array.from({length:n},(_,i)=>{const p=[pin[0],pin[1]-i*seg,pin[2]];return {p,o:p.slice()};}),acc:0,seed:Math.random()*9};}
- stepChain(ch,pin,seg,clothDt,Math.hypot(forwardSpeed(),bird.vy));
+ noteBird();stepChain(ch,pin,seg,clothDt,Math.hypot(forwardSpeed(),bird.vy));
  const o=birdPoint([0,0,0]),up=birdPoint([0,1,0]).map((v,i)=>v-o[i]),right=birdPoint([1,0,0]).map((v,i)=>v-o[i]),G=[];
  for(let i=0;i<n;i++){const a=ch.p[Math.max(0,i-1)].p,b=ch.p[Math.min(n-1,i+1)].p,d=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],dl=Math.hypot(...d)||1;
   let w=flat?right:[d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]];const l=Math.hypot(...w)||1,s=width*(flat?1:1-.25*i/n)/l,p=ch.p[i].p;
   const f=[(d[1]*w[2]-d[2]*w[1])/dl/l*.006,(d[2]*w[0]-d[0]*w[2])/dl/l*.006,(d[0]*w[1]-d[1]*w[0])/dl/l*.006]; // the fold stands a little proud
   G.push([-1,-.34,.34,1].map(k=>[p[0]+w[0]*s*k+f[0]*(1-k*k),p[1]+w[1]*s*k+f[1]*(1-k*k),p[2]+w[2]*s*k+f[2]*(1-k*k)]));}
- live.surface(G,false,(j,i)=>j>=n-2?edge:col(Math.min(i,2),j),cloth);
+ const S=lookDetail()<1?liveFar:live;S.surface(G,false,(j,i)=>j>=n-2?edge:col(Math.min(i,2),j),cloth);
  if(flat){const last=G.at(-1),prev=G.at(-2),d=[last[1][0]-prev[1][0],last[1][1]-prev[1][1],last[1][2]-prev[1][2]],dl=Math.hypot(...d)||1; // a fringe of tassels
-  for(let f=0;f<=6;f++){const t=f/6,k=t*3,i=Math.min(2,Math.floor(k)),u=k-i,p=[0,1,2].map(q=>mix(last[i][q],last[i+1][q],u));
-   live.tube([p,[p[0]+d[0]/dl*.03,p[1]+d[1]/dl*.03-.012,p[2]+d[2]/dl*.03]],.0045,edge,cloth,4);}}
+  for(let f=0,m=S.q<1?3:6;f<=m;f++){const t=f/m,k=t*3,i=Math.min(2,Math.floor(k)),u=k-i,p=[0,1,2].map(q=>mix(last[i][q],last[i+1][q],u));
+   S.tube([p,[p[0]+d[0]/dl*.03,p[1]+d[1]/dl*.03-.012,p[2]+d[2]/dl*.03]],S.q<1?.007:.0045,edge,cloth,4);}}
 }

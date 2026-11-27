@@ -43,7 +43,7 @@ function finish(heading,cause,action){
   '<dl class="stats">'+row('Stjärnor','★'.repeat(wanted)||'–')+row('Träffar',hits)+row('Bilar',carsHit)+row('Bästa kombo','×'+bestCombo)+row('Stjärnmål',run.stars)+row('I luften',mins+':'+secs)+'</dl>'+
   '<p class="rank">Titel: <b>'+rankOf(points)+'</b>'+(record?'':' · rekord '+number(best))+'</p>'+
   (listed?'<form id="save"><label for="name">Du kom in på '+(shared&&!testSite?'den gemensamma topplistan':'topplistan')+'! Skriv ditt namn:</label><div><input id="name" maxlength="12" autocomplete="off" spellcheck="false" value="'+esc(lastName)+'"><button>Spara</button></div></form>':'')+
-  '<div id="board">'+(board().length?scoreList(-1,5):'')+'</div>'+featList(),action);
+  (looksLive?lookNews():'')+'<div id="board">'+(board().length?scoreList(-1,5):'')+'</div>'+featList(),action);
  const form=$('save');
  if(form){
   $('name').focus();$('name').select();

@@ -25,7 +25,6 @@ function flipPitch(){
 function homeMenu(){panel('Duv-Diarré',controlsPicture()+(best?'<p class="best">Rekord '+number(best)+' · '+rankOf(best)+'</p>':''),'Nytt spel →');}
 const setting=(label,value,id)=>'<div class="setting"><span>'+label+'</span><button data-set="'+id+'">'+value+'</button></div>';
 const views={
- looks:()=>lookView(),
  volumes:()=>['Ljudnivåer','<div class="vols">'+volKinds.map(([k,name])=>'<label><span>'+name+'</span><input type="range" min="0" max="2" step="0.05" value="'+vol[k]+'" data-vol="'+k+'"><b>'+Math.round(vol[k]*100)+'%</b></label>').join('')+
   '</div><p class="cause">Dra i reglaget så hörs ett exempel. Skicka raden nedan till Claude när det låter bra:</p><code id="volcode">'+volLine()+'</code><button class="back" data-volreset="1">Återställ till standard</button>'],
  scores:()=>{if(Date.now()-sharedAt>10000)fetchScores().then(()=>{if($('view').dataset.name==='scores'&&!$('view').hidden)openView('scores');});
@@ -35,6 +34,7 @@ const views={
  help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li><li><b>Röd chili</b> över vissa tak: flyg in i den och få obegränsat bajs i tio sekunder.</li></ul>'+controlsPicture()],
 };
 function openView(name){
+ if(name==='looks'){openWardrobe();return;} // the wardrobe is a screen of its own
  const [title,body]=views[name](),v=$('view');
  $('brief').hidden=true;v.hidden=false;v.dataset.name=name;
  v.innerHTML='<h2>'+title+'</h2>'+body+'<button class="back" data-view="back">← Tillbaka</button>';
@@ -60,6 +60,7 @@ onblur=()=>{keys.clear();if(state==='play')togglePause();};
 const gameKeys=['ShiftLeft','ShiftRight','Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyS','KeyW','KeyC','KeyX','Escape','KeyQ'];
 onkeydown=e=>{
  if(state!=='play'){
+  if(previewLooks()){if(e.code==='Escape')closeWardrobe();return;}
   if(e.code==='Escape'&&state==='pause')togglePause();
   else if(e.code==='KeyX'&&!e.repeat&&!(e.target instanceof HTMLInputElement))flipPitch();
   // Enter or Space flies again from the wasted screen, the menu and the pause, unless a name is being typed.
@@ -166,7 +167,7 @@ function frame(now){
  else if(state==='crash')advanceCrash(dt);
  else if(state==='menu'||previewLooks())wingPhase+=dt*3;
  clothDt=state==='play'||state==='crash'?dt:real;
- if(looksLive&&(state!=='pause'||previewLooks()))updateCape(clothDt);
+ if(looksLive&&state!=='pause'&&!previewLooks())updateCape(clothDt); // (in the wardrobe the bird on show has its own cloth, see drawWardrobe)
  if(state==='end'&&killClip&&!previewLooks())renderReplay(real);else render(dt);showTips();requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
