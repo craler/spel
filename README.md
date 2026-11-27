@@ -65,7 +65,7 @@ Koden är vanliga skript (inga moduler, inget byggsteg) som delar ett globalt sc
 | `js/events.js` | Händelser på torgen: konsert, parad och bilsalong |
 | `js/game.js` | Regler och simulering: flygning, bajs, poäng, hot, krasch |
 | `js/gl.js` | WebGL 2-rendering: ljus, skuggor, fasader, mark, himmel |
-| `js/looks.js` | Garderoben: upplåsbara prylar att bära, deras 3D-modeller och tyg, sparade i webbläsaren (inte live än, syns på testsidan och med `?looks=1`) |
+| `js/looks.js` | Garderoben: upplåsbara prylar att bära, deras 3D-modeller och tyg, sparade i webbläsaren |
 | `js/render.js` | Kamera, duvan, 3D-scenen och 2D-lagret (sikte, varningar, HUD) |
 | `js/main.js` | Tangentbord, pekskärm, tips och spel-loopen |
 
