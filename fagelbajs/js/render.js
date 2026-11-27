@@ -177,8 +177,8 @@ function renderBird(){
  const wind=clamp(Math.hypot(forwardSpeed(),b.vy)/30,.3,1.7)*(1+2*fl),flutter=(i,rate)=>wind*Math.sin(elapsed*rate+i*2.1);
  // The same two steps (head turn, then body to world) for a bare point, written into out[k..k+2].
  const cosYaw=Math.cos(hy),sinYaw=Math.sin(hy),cosNod=Math.cos(hp),sinNod=Math.sin(hp);
- function into(x,y,z,out,k){
-  const w=clamp((z-.2)/.07,0,1);
+ function into(x,y,z,out,k,still){ // still: a point of the body that does not follow the head (the scarf)
+  const w=still?0:clamp((z-.2)/.07,0,1);
   if(w){
    const full=w===1,ca=full?cosYaw:Math.cos(hy*w),sa=full?sinYaw:Math.sin(hy*w),ce=full?cosNod:Math.cos(hp*w),se=full?sinNod:Math.sin(hp*w);
    const py=y-.2,pz=z-.2,x1=x*ca+pz*sa,z1=-x*sa+pz*ca;x=x1;y=py*ce+z1*se+.2;z=z1*ce-py*se+.2;
@@ -201,7 +201,7 @@ function renderBird(){
    face([[cx,y+r,z-r+t],[cx,y+r-t,z-r],[cx,y-r,z+r-t],[cx,y-r+t,z+r]],'#1c1622');face([[cx,y+r,z+r-t],[cx,y+r-t,z+r],[cx,y-r,z-r+t],[cx,y-r+t,z-r]],'#1c1622');
   }else{eye(.024,'#ffbf56',0);eye(.012,'#362c49',.0015);}
  }
- drawLook(face,(pts,color)=>poly(pts.map(world),color),p=>world(head(p)),world);if(looksLive)drawCape(); // worn things keep their own colours
+ if(looksLive)drawLook(into,p=>world(head(p)),world);
  // Separate overlapping tail feathers with a dark terminal band and pale tips.
  const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl+.16*br+.1*squirm; // fanned wide as an air brake, and in a cramp
  const tailPlain=squirm?(pts,color)=>poly(pts.map(p=>world(rumpBend(p))),color):plain; // the tail follows the rump
@@ -574,7 +574,7 @@ function strand(p,q,w0,w1,col){
 }
 const splatCol=[...rgb('#f4f1e6')], smoke=rgb('#6c6a70'), bits=rgb('#4f4a26'), amber=rgb('#ffb020'), balloonPaint=['#d8362c','#f0b828','#2f7fc0','#3fa060','#e8742a'], rope=rgb('#c9a56a'), olive=rgb('#56633c'), charred=rgb('#2e302c');
 function buildMoving(){
- spot.on=0;goo.mat=gooMat;for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;
+ spot.on=0;goo.mat=gooMat;for(const m of moving)m.clear();for(const m of decals)m.clear();dyn.n=0;omen.n=0;goo.n=0;glow.n=0;veil.n=0;for(const t of extraBatches)t.n=0;
  {const l=Math.hypot(sky.dir[0],sky.dir[2])||1;shadeX=-sky.dir[0]/l;shadeZ=-sky.dir[2]/l;shadeYaw=Math.atan2(shadeX,shadeZ);}
  const winding=new Set(thrown.filter(o=>o.windup>0).map(o=>o.owner));
  const far2=(fastest?30:45)**2,range=fastest?80:130;
@@ -715,7 +715,7 @@ function buildMoving(){
  if(heli)drawHeli();
  for(const f of plume)drawFeather(f); // loose feathers from a crash
  if(camView!==2||crash)renderBird();
- for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();glow.upload();veil.upload();
+ for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();glow.upload();veil.upload();for(const t of extraBatches)t.upload();
 }
 // One loose feather: a quill with two curved vanes, the outer one narrower, darker towards the tip.
 const featherShades=[['#eef1f6','#c7cfdd'],['#9aa7c2','#5d6a8c'],['#7f8cab','#454f6e'],['#d9dfe9','#8f9bb6']].map(p=>p.map(rgb));
@@ -1019,8 +1019,8 @@ function drawFeed(){
  }
  ctx.globalAlpha=1;
 }
-const shadowCasters=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,M.chili,dyn,omen,goo];
-const solidScene=[...statics,...moving,dyn,goo];
+const shadowCasters=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,M.chili,dyn,omen,goo,...extraBatches];
+const solidScene=[...statics,...moving,dyn,goo,...extraBatches];
 function draw3D(){
  frustumSetup();
  if(!fastest)staticShadow(drawShadowStatics); // only does anything when the stored shadows are out of date

@@ -106,9 +106,13 @@ vec3 facade(vec3 base,vec3 lp,vec3 n,vec3 size,float seed,out float spec,out vec
 void main(){
  vec3 g=normalize(vN),n=dot(g,uEye-vW)<0.?-g:g,alb=vC.rgb,em=vec3(0);float spec=0.;
  if(vC.a>.5&&vC.a<1.5){alb=facade(vC.rgb,vL,g,vS,vSeed,spec,em);alb*=.74+.26*smoothstep(0.,3.4,vL.y);} // darker towards the street: it sits the building on the ground
+ else if(vC.a>2.5){alb*=1.+.85*pow(1.-max(dot(n,normalize(uEye-vW)),0.),2.5);} // cloth: felt, knit and velvet catch the light along their edges
  else if(vC.a>1.5){em=alb*1.6;alb=vec3(0);}
- else if(vC.a<-1.5){spec=3.;alb*=.75;em=alb*.12;} // polished metal: a strong highlight on a darker base
- else if(vC.a<-.5){spec=.8;}
+ else if(vC.a<-1.5){ // polished metal: it mirrors the sky above and the ground below, with a hard highlight
+  vec3 v=normalize(uEye-vW),r=reflect(-v,n);float edge=pow(1.-max(dot(n,v),0.),4.);
+  vec3 env=mix(uGroundCol*1.3,uSkyCol*1.7,smoothstep(-.35,.55,r.y));
+  em=alb*env*1.1+env*.3*edge;spec=3.;alb*=.5;}
+ else if(vC.a<-.5){spec=.8;em=uSkyCol*.3*pow(1.-max(dot(n,normalize(uEye-vW)),0.),3.);} // glossy: paint, glass and wet things pick up a little sky at a glancing angle
  o=vec4(tone(fogged(lit(alb,n,vW,spec)+em,vW)),vA);
 }`;
 const DEPTH_FS=`#version 300 es
@@ -321,13 +325,14 @@ function triBatch(mat=0){
    const d=this.data;for(const p of [a,b,c]){const o=this.n++*STRIDE;d[o]=p[0];d[o+1]=p[1];d[o+2]=p[2];d[o+3]=nx;d[o+4]=ny;d[o+5]=nz;d[o+6]=col[0];d[o+7]=col[1];d[o+8]=col[2];d[o+9]=0;d[o+10]=0;d[o+11]=0;}
   },
   fan(pts,col){for(let i=2;i<pts.length;i++)this.tri(pts[0],pts[i-1],pts[i],col);},
-  upload(){gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.data.subarray(0,this.n*STRIDE),gl.DYNAMIC_DRAW);},
+  upload(){if(!this.n&&!this.sent)return;this.sent=this.n;gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,this.data.subarray(0,this.n*STRIDE),gl.DYNAMIC_DRAW);}, // nothing to send for a batch that is not in use
   draw(){if(!this.n)return;gl.bindVertexArray(this.vao);gl.vertexAttrib4f(4,0,0,0,0);gl.vertexAttrib3f(5,1,1,1);gl.vertexAttrib4f(6,1,1,1,this.mat??mat);gl.vertexAttrib4f(7,0,0,0,0);gl.drawArrays(gl.TRIANGLES,0,this.n);}
  };
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.vbo);attribs([[0,3,0],[1,3,3],[2,4,6],[3,2,10]],STRIDE,0);gl.bindVertexArray(null);
  return b;
 }
 // dyn is drawn normally; omen only casts a shadow (the hawk's oversized silhouette).
+const cloth=triBatch(3), gloss=triBatch(-1), metal=triBatch(-2), extraBatches=[cloth,gloss,metal]; // what the bird wears: fabric, shiny things and gold
 const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1), glow=triBatch(2), veil=triBatch(); // veil: see-through, like spinning rotor discs // glow: light added on top, like the searchlight
 // Fullscreen / ground quad.
 const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());

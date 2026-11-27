@@ -202,7 +202,7 @@ const chiliOn=()=>elapsed<chiliUntil;
 // The chili of a block, unless it has just been eaten: it grows back after 45 seconds.
 function chiliAt(b){return b.chili&&elapsed-(chiliEaten.get(b.key)??-99)>=45?b.chili:null;}
 function eatChili(b){
- chiliEaten.set(b.key,elapsed);chiliUntil=elapsed+chiliTime;run.chilis++;tank=1;emptyTank=false;refillWait=0;
+ chiliEaten.set(b.key,elapsed);chiliUntil=elapsed+chiliTime;run.chilis++;stats.chilis=(stats.chilis||0)+1;saveStats();tank=1;emptyTank=false;refillWait=0;
  banner('CHILI!','Magen brinner – obegränsat bajs i '+chiliTime+' sekunder','hot',2.8);feedLine('CHILI');
  chiliBite();shake=Math.max(shake,.5);checkFeats();
 }
