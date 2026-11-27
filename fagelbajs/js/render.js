@@ -6,7 +6,10 @@
 const camTries=[['Nuvarande',{back:6.8,rise:3.8,shoulder:1.05,zoom:1,roll:0,lag:11}],['Nära och lågt',{back:4.8,rise:2.5,shoulder:.75,zoom:.9,roll:0,lag:11}],
  ['Överblick',{back:9.5,rise:5.8,shoulder:1.2,zoom:1.05,roll:0,lag:11}],['Mitt bakom, vidvinkel',{back:6.2,rise:3.3,shoulder:0,zoom:.8,roll:0,lag:11}],
  ['Följsam: lutar och släpar i svängar',{back:6.8,rise:3.6,shoulder:1.05,zoom:.95,roll:.32,lag:4.5}]];
-let camTry=0;
+let camTry=4; // the one in use (0 is the original camera)
+// Through the bird's eyes: true is the view from beside the cheek, with the eye and the side of the head in the picture;
+// false is the original, from in front of the face with no bird in sight. On the test site B switches between them.
+let povCheek=true;
 function setCamera(dt){
  // Through the bird's eyes: the view follows the flight path and leans into the turns.
  // In a crash the camera steps back out so the tumble can be seen.
@@ -20,6 +23,7 @@ function setCamera(dt){
   const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1),tremble=(.01+.05*rush*rush)*rush;
   camera.x+=c*tremble*Math.sin(elapsed*33);camera.z-=s*tremble*Math.sin(elapsed*33);camera.y+=tremble*.8*Math.sin(elapsed*47);
   scale=Math.min(width*.6,height*.72)*(1-.14*bird.fold-.12*rush);
+  if(povCheek){const q=birdPoint([-.27,.24,.3]),y=a+.3;camera.x+=q[0]-(bird.x+s*.38);camera.y+=q[1]-(bird.y+.34);camera.z+=q[2]-(bird.z+c*.38);camera.s=Math.sin(y);camera.c=Math.cos(y);camera.near=.05;scale=Math.min(width,height)*.38*(1-.14*bird.fold-.12*rush);}
   if(shake>.01){const q=shake*.12;camera.x+=q*Math.sin(elapsed*71);camera.y+=q*.6*Math.sin(elapsed*97+1);shake*=Math.exp(-dt*7);}
   return;
  }
@@ -726,7 +730,7 @@ function buildMoving(){
  if(hawk){drawHawk(dyn,2.3);hawkShadow();}
  if(heli)drawHeli();
  for(const f of plume)drawFeather(f); // loose feathers from a crash
- if(camView!==2||crash)renderBird();
+ if(camView!==2||crash||povCheek)renderBird();
  for(const m of moving)m.upload();for(const m of decals)m.upload();dyn.upload();omen.upload();goo.upload();glow.upload();veil.upload();for(const t of extraBatches)t.upload();
 }
 // One loose feather: a quill with two curved vanes, the outer one narrower, darker towards the tip.
