@@ -197,12 +197,14 @@ function feedLine(label,amount=0,tags=''){feed.unshift({label:label.replace(/!+$
 function bubble(x,y,z,text){if(elapsed-lastBubble<.2)return;lastBubble=elapsed;bubbles.push({x,y,z,text,t:elapsed});if(bubbles.length>8)bubbles.shift();}
 // ---- Chili: a rare red chili floats over some roofs. Eating it sets the stomach on fire: for ten seconds the bird
 // sprays without pause and without running dry, hotter and wider than usual, its rump bent down and shaking.
-const chiliTime=10, chiliEaten=new Map();let chiliUntil=-1,splashHot=false,growlAt=0;
+const chiliTime=10, chiliEaten=new Map();let chiliUntil=-1,chiliBack=20,splashHot=false,growlAt=0;
 const chiliOn=()=>elapsed<chiliUntil;
-// The chili of a block, unless it has just been eaten: it grows back after 45 seconds.
-function chiliAt(b){return b.chili&&elapsed-(chiliEaten.get(b.key)??-99)>=45?b.chili:null;}
+// The chili of a block, if it is there now. There are none for the first 20 seconds of a flight, and none anywhere for half
+// a minute after one has worn off (chiliBack is when they return). The one that was eaten takes two minutes to grow back.
+function chiliGrown(b){return b.chili?clamp(Math.min(elapsed-chiliBack,elapsed-(chiliEaten.get(b.key)??-999)-120),0,1):0;} // 0..1 over its first second
+function chiliAt(b){return chiliGrown(b)>0?b.chili:null;}
 function eatChili(b){
- chiliEaten.set(b.key,elapsed);chiliUntil=elapsed+chiliTime;run.chilis++;stats.chilis=(stats.chilis||0)+1;saveStats();tank=1;emptyTank=false;refillWait=0;
+ chiliEaten.set(b.key,elapsed);chiliUntil=elapsed+chiliTime;chiliBack=chiliUntil+30;run.chilis++;stats.chilis=(stats.chilis||0)+1;saveStats();tank=1;emptyTank=false;refillWait=0;
  banner('CHILI!','Magen brinner – obegränsat bajs i '+chiliTime+' sekunder','hot',2.8);feedLine('CHILI');
  chiliBite();shake=Math.max(shake,.5);checkFeats();
 }
@@ -255,7 +257,7 @@ function award(base,label,p,targetY=0,pos){
  addPoints(amount);
 }
 function reset(){
- resetChase();points=0;combo=comboTime=bestCombo=carsHit=shield=slipTick=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0,chilis:0};chiliEaten.clear();chiliUntil=-1;growlAt=0;lag.clear();plume=[];tanks=[];tankWait=0;
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=shield=slipTick=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0,chilis:0};chiliEaten.clear();chiliUntil=-1;chiliBack=20;growlAt=0;lag.clear();plume=[];tanks=[];tankWait=0;
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  resetEvents();replay=[];killClip=null;killPending=null;killBest=0;killPlay=0;

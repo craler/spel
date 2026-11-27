@@ -632,7 +632,8 @@ function buildMoving(){
  for(const g of visBlocks){
   const c=chiliAt(g);if(!c)continue;
   const t=elapsed+g.i*3+g.j,y=c[1]+.45*Math.sin(t*2.1);
-  M.chili.add(c[0],y-.2,c[2],t*1.3,1.25,1.25,1.25,WHITE,-1,0,0,.5);
+  const k=1.25*chiliGrown(g)**.5; // it swells into place when it comes back
+  M.chili.add(c[0],y-.2,c[2],t*1.3,k,k,k,WHITE,-1,0,0,.5);
   for(let k=0;k<3;k++){const a=t*2.6+k*tau/3;M.dot.add(c[0]+Math.cos(a)*1.9,y+.7*Math.sin(a*1.7+k),c[2]+Math.sin(a)*1.9,0,.09,.09,.09,amber,2);}
  }
  // Star targets with their props: rowing boats on the canal, hot-air balloons.

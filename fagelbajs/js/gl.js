@@ -334,7 +334,7 @@ function triBatch(mat=0){
  return b;
 }
 // dyn is drawn normally; omen only casts a shadow (the hawk's oversized silhouette).
-const cloth=triBatch(3), gloss=triBatch(-1), metal=triBatch(-2), extraBatches=[cloth,gloss,metal]; // what the bird wears: fabric, shiny things and gold
+const cloth=triBatch(3), gloss=triBatch(-1), metal=triBatch(-2), aglow=triBatch(2), extraBatches=[cloth,gloss,metal,aglow]; // what the bird wears: fabric, shiny things, gold, and what shines by itself (a halo, a flame)
 const dyn=triBatch(), omen=triBatch(), goo=triBatch(-1), glow=triBatch(2), veil=triBatch(); // veil: see-through, like spinning rotor discs // glow: light added on top, like the searchlight
 // Fullscreen / ground quad.
 const quadVao=gl.createVertexArray();gl.bindVertexArray(quadVao);gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());

@@ -233,6 +233,7 @@ function slips(){
 // One hit from fruit or the hawk costs a feather; only the last one brings the bird down.
 function hurt(text,surface){
  if(shield>0||state!=='play')return;
+ if(run.cleanPts===undefined)run.cleanPts=points; // how far the flight got with every feather left (see countFlight)
  if(--feathers>0){
   shield=1.5;bird.vy-=7;bird.speed=Math.max(10,bird.speed*.7);combo=0;comboTime=0;shake=1;
   banner(text,feathers===1?'Sista fjädern':feathers+' fjädrar kvar','hurt',1.9);tone(260,90,.25,'sawtooth',.06);
@@ -282,7 +283,7 @@ function updateHawk(dt){
   // In the last half second it is committed: a bird that is turning hard when it arrives slips past.
   const cos=steer(tx/l,ty/l,tz/l,T<(fierce?.4:.55)?0:(fierce?.3:.22)+.14*clamp((b.y-45)/30,0,1));
   h.x+=h.vx*dt;h.y+=h.vy*dt;h.z+=h.vz*dt;h.tuck=mix(h.tuck,1,ease(6));h.dread=1;h.size=mix(h.size,2.6,ease(3));h.miss=Math.min(h.miss,d);
-  if(d<1.9&&shield<=0){hurt('HÖKEN SLOG TILL',{n:[h.vx/speed,h.vy/speed,h.vz/speed],depth:0,cause:'Höken tog dig.'});leave();}
+  if(d<1.9&&shield<=0){hawkStrike();hurt('HÖKEN SLOG TILL',{n:[h.vx/speed,h.vy/speed,h.vz/speed],depth:0,cause:'Höken tog dig.'});leave();}
   else if((cos<0&&d>3)||h.y<14||h.t<=0||solid(h.x,h.y,h.z)){
    if(h.miss<9&&state==='play'){run.dodges++;addPoints(30);feedLine('HÖKEN MISSADE',30);popups.push({x:b.x,y:b.y+1.2,z:b.z,text:'+30',t:elapsed,gold:true});whoosh();}
    leave();

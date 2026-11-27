@@ -4,19 +4,36 @@
 const looksLive=testSite||/[?&]looks=1/.test(location.search); // not finished: only on the test site for now
 // On the test site (raw.githack.com) there is a button that unlocks everything, for trying the looks out.
 let unlockAll=false;try{unlockAll=testSite&&localStorage.getItem('fagelbajs.unlockAll')==='yes';}catch{}
-// Lifetime progress, saved on this device: points over all flights, the most stars reached, events completed.
+// Lifetime progress, saved on this device: points over all flights, the most stars reached, events completed, and (added
+// as they are first counted) people hit, cars crashed, chilis eaten and the best score reached with every feather left.
 let stats={total:0,maxStars:0,events:0};
 try{Object.assign(stats,JSON.parse(localStorage.getItem('fagelbajs.stats')||'{}'));}catch{}
 function saveStats(){try{localStorage.setItem('fagelbajs.stats',JSON.stringify(stats));}catch{}}
 // rarity: 1 vanlig, 2 ovanlig, 3 sällsynt, 4 episk, 5 legendarisk. have() gives how far along the requirement is: [now, needed].
 const lookList=[
  {id:'keps',name:'Röd keps',slot:'head',rarity:1,about:'Sex paneler, broderat märke och styv skärm.',need:'Flyg en gång',have:()=>[Math.min(flights,1),1]},
+ {id:'mossa',name:'Stickad mössa',slot:'head',rarity:1,about:'Ribbstickad med uppvikt kant, rand och en fluffig tofs.',need:'Träffa 50 fotgängare totalt',have:()=>[stats.hits||0,50]},
+ {id:'party',name:'Partyhatt',slot:'head',rarity:2,about:'Blank strut i glada färger med tofs och gummiband.',need:'Klara en händelse på torget',have:()=>[Math.min(stats.events,1),1]},
+ {id:'kock',name:'Kockmössa',slot:'head',rarity:2,about:'Hög, vit och veckad. För den som lagar med mycket chili.',need:'Ät tre chili',have:()=>[Math.min(stats.chilis||0,3),3]},
  {id:'pannband',name:'Ninjapannband',slot:'head',rarity:3,about:'Rött tyg med knut och två långa band som fladdrar.',need:'Bedriften Kombokung (kombo ×8)',have:()=>[+done.has('combo'),1]},
+ {id:'cowboy',name:'Cowboyhatt',slot:'head',rarity:3,about:'Brun filt, veckad kulle, silverspänne och brett brätte.',need:'Krocka 50 bilar totalt',have:()=>[stats.cars||0,50]},
  {id:'hatt',name:'Hög hatt',slot:'head',rarity:4,about:'Svart filt, sidenband och guldspänne. Bärs på sniskan.',need:'Bedriften Objuden gäst',have:()=>[+done.has('wedding'),1]},
+ {id:'viking',name:'Vikingahjälm',slot:'head',rarity:4,about:'Stål, mässing, nitar, nässkydd och två rejäla horn.',need:'Bedriften Pansarknäckare (slå ut en stridsvagn)',have:()=>[+done.has('tank'),1]},
  {id:'krona',name:'Krona',slot:'head',rarity:5,about:'Hermelin, guld, ädelstenar och pärlor. För stadens härskare.',need:'Nå fem stjärnor',have:()=>[Math.min(stats.maxStars,5),5]},
+ {id:'gloria',name:'Gloria',slot:'head',rarity:5,about:'En ring av ljus. Bara för den som flyger felfritt.',need:'300 poäng i en flygning innan du tappar en fjäder',have:()=>[Math.min(stats.clean||0,300),300]},
+ {id:'bio',name:'3D-glasögon',slot:'eyes',rarity:2,about:'Pappbågar från bion. Ett rött glas och ett blått.',need:'Flyg fem gånger',have:()=>[Math.min(flights,5),5]},
+ {id:'lapp',name:'Ögonlapp',slot:'eyes',rarity:3,about:'Svart läder på sned rem. Höken var nära den gången.',need:'Bedriften Hökdansen (få höken att missa)',have:()=>[+done.has('hawk'),1]},
  {id:'brillor',name:'Pilotglasögon',slot:'eyes',rarity:3,about:'Guldbågar och mörka glas som döljer blicken.',need:'Nå tre stjärnor',have:()=>[Math.min(stats.maxStars,3),3]},
+ {id:'monokel',name:'Monokel',slot:'eyes',rarity:4,about:'Guldbåge i ena ögat och en tunn kedja som dinglar.',need:'Nå fyra stjärnor',have:()=>[Math.min(stats.maxStars,4),4]},
  {id:'halsduk',name:'Halsduk',slot:'neck',rarity:2,about:'Tjock, stickad och randig, med två ändar som fladdrar.',need:'1 000 poäng totalt',have:()=>[stats.total,1000]},
+ {id:'fluga',name:'Fluga',slot:'neck',rarity:2,about:'Röd och pösig. Fin nog för en kulturkväll.',need:'Bedriften Kulturfiende (pricka statyn)',have:()=>[+done.has('statue'),1]},
+ {id:'slips',name:'Slips',slot:'neck',rarity:3,about:'Vit krage och randig slips som fladdrar i fartvinden.',need:'Klara fem händelser på torget',have:()=>[Math.min(stats.events,5),5]},
+ {id:'kedja',name:'Guldkedja',slot:'neck',rarity:4,about:'Tung guldlänk med medaljong och röd sten.',need:'5 000 poäng totalt',have:()=>[stats.total,5000]},
+ {id:'ryggsack',name:'Ryggsäck',slot:'back',rarity:2,about:'Röd skolväska med fickor, blixtlås och bärhandtag.',need:'Bedriften Plåtskadan (fem bilar på en flygning)',have:()=>[+done.has('cars'),1]},
  {id:'mantel',name:'Röd mantel',slot:'back',rarity:4,about:'Sammet med guldkant, guldfoder och ett stolt emblem.',need:'Flyg tio gånger',have:()=>[Math.min(flights,10),10]},
+ {id:'jetpack',name:'Jetpack',slot:'back',rarity:5,about:'Två ståltankar och lågor som växer med farten. Bara för syns skull.',need:'25 000 poäng totalt',have:()=>[stats.total,25000]},
+ {id:'gift',name:'Giftgrönt',slot:'poop',rarity:2,about:'Självlysande grönt. Ser farligare ut än det är.',need:'Bedriften Halkbana (få en bil att halka)',have:()=>[+done.has('slip'),1]},
+ {id:'blabar',name:'Blåbärsbajs',slot:'poop',rarity:2,about:'Lila efter en dag i blåbärsskogen.',need:'Träffa 200 fotgängare totalt',have:()=>[stats.hits||0,200]},
  {id:'regnbage',name:'Regnbågsbajs',slot:'poop',rarity:3,about:'Allt som kommer ut skiftar i regnbågens färger.',need:'Ät fem chili',have:()=>[Math.min(stats.chilis||0,5),5]},
  {id:'guld',name:'Guldbajs',slot:'poop',rarity:5,about:'Blankt, tungt och dyrbart. Även fläckarna blir guld.',need:'10 000 poäng totalt',have:()=>[stats.total,10000]},
 ];
@@ -37,10 +54,12 @@ function wear(id){
 }
 function saveWorn(){try{localStorage.setItem('fagelbajs.look',JSON.stringify(worn));}catch{}applyLook();}
 // Colours that follow the look: golden droppings, or all the colours of the rainbow.
-const gooKinds={none:['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'],guld:['#f6cf4a','#e8b830','#ffd85e','#d9a520','#f2c84a'],regnbage:['#f0453a','#f59a2a','#f2d92e','#44b85a','#3d8fe0','#9a5bd0']};
+const gooKinds={none:['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'],guld:['#f6cf4a','#e8b830','#ffd85e','#d9a520','#f2c84a'],regnbage:['#f0453a','#f59a2a','#f2d92e','#44b85a','#3d8fe0','#9a5bd0'],
+ gift:['#8fe04a','#6fcf3a','#aaf060','#58b82e','#c4f77c'],blabar:['#6a5fd8','#5148ba','#8577ea','#3f3a9c','#9a90f2']},
+ gooSplat={guld:'#f2c84a',gift:'#d9f7a6',blabar:'#c6c1f8'}; // the pale flecks that are flung from a splat
 function applyLook(){
  const kind=wearing('poop')||'none',gold=kind==='guld';gooShade.splice(0,gooShade.length,...(gooKinds[kind]||gooKinds.none).map(rgb));
- gooMat=gold?-2:-1;splatCol.splice(0,3,...rgb(gold?'#f2c84a':'#f4f1e6'));
+ gooMat=gold?-2:-1;splatCol.splice(0,3,...rgb(gooSplat[kind]||'#f4f1e6'));
 }
 // ---- Building shapes -----------------------------------------------------------------------------------------------
 // make(emit) gives the tools the models are built with. Everything ends up as a grid of points handed to surface(), which
@@ -242,6 +261,171 @@ function buildScarf(S){
  S.ball(scarfKnot(),.04,blue,cloth,10,.8);
 }
 const scarfKnot=()=>headPt(.214,-Math.PI/2+.5,.04);
+// ---- More things to wear ---------------------------------------------------------------------------------------------
+// Rule of thumb for which way a surface faces: rings laid out with brow() or circ() (x = sin, z = cos) go from the
+// bottom up; rings round the neck with headPt() go from the tail towards the beak; tubes always face outwards.
+// A map that tips whatever is being built round the point c: rz to the side (round the beak axis), rx forwards or back.
+const tip=(c,rz,rx)=>{const cr=Math.cos(rz),sr=Math.sin(rz),cx=Math.cos(rx),sx=Math.sin(rx);
+ return p=>{const x=p[0]-c[0],y=p[1]-c[1],z=p[2]-c[2],x1=x*cr-y*sr,y1=x*sr+y*cr;return [c[0]+x1,c[1]+y1*cx-z*sx,c[2]+y1*sx+z*cx];};};
+// The outline of the head where a horizontal slice at height y0 cuts it: (phi, off, y) is the point off outside it in the
+// direction phi (0 = towards the beak), moved to the height y. Hats are built on it, so they follow the head's shape.
+const brow=(y0,cz=.322)=>(phi,off,y=y0)=>{const p=rimPt(y0,phi,off,cz);return [p[0],y,p[2]];};
+// A circle of n points round c at the height y (sz stretches it along the beak axis; lift(a) raises each point).
+const circ=(c,n,r,y,sz=1,lift)=>Array.from({length:n},(_,i)=>{const a=i/n*tau;return [c[0]+r*Math.sin(a),c[1]+y+(lift?lift(a,r*Math.sin(a)):0),c[2]+r*Math.cos(a)*sz];});
+// A rounded box: half-sizes a, b, d; e towards 0 is boxier, 1 is a ball.
+function roundBox(S,c,[a,b,d],e,col,batch,J=10,I=20){
+ const sp=v=>Math.sign(v)*Math.abs(v)**e,P=[];J=S.seg(J);I=S.seg(I);
+ for(let j=0;j<=J;j++){const th=(.5-j/J)*Math.PI*.999,row=[];for(let i=0;i<I;i++){const ph=i/I*tau;row.push([c[0]+a*sp(Math.cos(th))*sp(Math.cos(ph)),c[1]+b*sp(Math.sin(th)),c[2]+d*sp(Math.cos(th))*sp(Math.sin(ph))]);}P.push(row);}
+ return S.surface(P,true,col,batch);
+}
+// Stickad mössa: a knitted hat pulled down over the head, with a ribbed, turned-up cuff, a stripe and a fluffy pom-pom.
+function buildBeanie(S){
+ const green=rgb('#2c8c6a'),dark=rgb('#1f6a50'),cream=rgb('#efe8d8'),n=S.seg(48),y0=.348,cz=.322,at=brow(y0,cz),top=y0+.034;
+ const ring=(y,off,s=1,back=0,rib=0)=>Array.from({length:n},(_,i)=>{const p=at(i/n*tau,off*(1+rib*(i%2?1:-1)),y);return [p[0]*s,y,cz+(p[2]-cz)*s-back];});
+ S.surface([ring(y0-.014,.004),ring(y0-.011,.02,1,0,.14),ring(y0+.01,.024,1,0,.14),ring(y0+.03,.021,1,0,.14),ring(top,.012)],true,dark,cloth);
+ const dome=[];for(let k=0;k<=9;k++){const t=k/9,th=t*Math.PI/2;dome.push(ring(top+.078*Math.sin(th),.013,Math.max(.004,Math.cos(th)**.8),.03*t*t,.06*(1-t)));}
+ S.surface(dome,true,(j)=>j===2||j===3?cream:green,cloth);
+ const pom=[0,top+.094,cz-.03];S.ball(pom,.031,cream,cloth,10);
+ if(S.q===1)for(let k=0;k<9;k++){const a=k*2.4,e=.3+1.1*((k*7)%5)/5;S.ball([pom[0]+.022*Math.cos(a)*Math.cos(e),pom[1]+.022*Math.sin(e),pom[2]+.022*Math.sin(a)*Math.cos(e)],.015,tint(cream,.92+.08*(k%2)),cloth,6);}
+}
+// Partyhatt: a shiny paper cone in bright bands, with a fluffy rim, a pom-pom on the tip and an elastic under the chin.
+function buildPartyHat(S){
+ const cols=['#ffd23f','#e83e8c','#3fa9f5','#7bd44a'].map(rgb),white=rgb('#f6f2ea'),n=S.seg(28),c=[0,.38,.318],H=.2,R=.074,bands=8;
+ S.map=tip(c,-.15,-.12);
+ for(let k=0;k<bands;k++)S.surface([circ(c,n,R*(1-k/bands),H*k/bands),circ(c,n,Math.max(1e-4,R*(1-(k+1)/bands)),H*(k+1)/bands)],true,cols[k%4],gloss);
+ S.tube(Array.from({length:n+1},(_,i)=>{const a=i/n*tau;return [c[0]+(R+.003)*Math.sin(a),c[1]+.002,c[2]+(R+.003)*Math.cos(a)];}),.0095,white,cloth,6);
+ S.ball([c[0],c[1]+H+.012,c[2]],.021,white,cloth,8);
+ S.map=null;
+ S.tube(Array.from({length:25},(_,k)=>headPt(.305,1-k/24*5.14,.003)),.0028,white,cloth,4);
+}
+// Kockmössa: a chef's toque. A tall stiff band and a pleated top that billows out over it.
+function buildChefHat(S){
+ const white=rgb('#f6f3ec'),shade=rgb('#d3cdbf'),n=S.seg(48),y0=.37,cz=.322,at=brow(y0,cz);
+ S.map=tip([0,y0,cz],-.1,-.08);
+ const ring=(y,off,grow=1,pleat=0)=>Array.from({length:n},(_,i)=>{const p=at(i/n*tau,off,y),k=grow*(1+pleat*Math.cos(i/n*tau*12));return [p[0]*k,y,cz+(p[2]-cz)*k];});
+ S.surface([ring(y0-.01,.003),ring(y0-.006,.015),ring(y0+.052,.015),ring(y0+.056,.009)],true,white,cloth);
+ S.surface([[.054,1,0],[.066,1.2,.05],[.092,1.42,.07],[.125,1.5,.06],[.152,1.4,.05],[.172,1.1,.035],[.183,.6,.02],[.187,.01,0]].map(([dy,g,pl])=>ring(y0+dy,.009,g,pl)),true,(j,i)=>blend(shade,white,.55+.45*Math.cos(i/n*tau*12)),cloth);
+ S.map=null;
+}
+// Vikingahjälm: a steel dome with a brass rim, rivets, a ridge over the top, a nose guard and two curved horns.
+function buildViking(S){
+ const steel=rgb('#aab3be'),brass=rgb('#c99a3a'),ivory=rgb('#f0e7d0'),bone=rgb('#b9a77c'),n=S.seg(40),y0=.346,cz=.322,at=brow(y0,cz),base=y0+.014;
+ const ring=(y,off,s=1)=>Array.from({length:n},(_,i)=>{const p=at(i/n*tau,off,y);return [p[0]*s,y,cz+(p[2]-cz)*s];});
+ const dome=[];for(let k=0;k<=8;k++){const th=k/8*Math.PI/2;dome.push(ring(base+.074*Math.sin(th),.012,Math.max(.004,Math.cos(th)**.9)));}
+ S.surface(dome,true,steel,metal);
+ S.surface([ring(y0-.014,.006),ring(y0-.01,.02),ring(base,.02),ring(base+.004,.013)],true,brass,metal);
+ for(let k=0;k<12;k++)S.ball(at((k+.5)/12*tau,.021,y0+.002),.0072,steel,metal,6);
+ const ridge=[];for(let k=0;k<=14;k++){const e=k/14*Math.PI,th=Math.min(e,Math.PI-e),p=at(e<Math.PI/2?0:Math.PI,.016),s=Math.max(.004,Math.cos(th)**.9);ridge.push([0,base+.076*Math.sin(th),cz+(p[2]-cz)*s]);}
+ S.tube(ridge,.0085,brass,metal,6);
+ const f=at(0,.02);S.tube([[0,y0-.006,f[2]],[0,y0-.026,f[2]+.004],[0,y0-.042,f[2]+.002]],t=>.011-.005*t,brass,metal,6);
+ for(const s of [-1,1]){const horn=[];for(let k=0;k<=10;k++){const t=k/10;horn.push([s*(.1+.105*Math.sin(t*1.45)),y0+.04+.025*t+.115*t*t,cz-.004-.03*t*t]);}
+  S.tube(horn,t=>.028*(1-t)**.7+.0025,(j)=>j<(S.q<1?1:2)?brass:blend(ivory,bone,.3*(j%2)),gloss,10);}
+}
+// Cowboyhatt: brown felt with a creased crown, a dark band with a silver concho, and a wide brim rolled up at the sides.
+function buildCowboy(S){
+ const felt=rgb('#a06f3c'),dark=rgb('#7a5229'),band=rgb('#33200f'),silver=rgb('#d5dae0'),n=S.seg(40),c=[0,.386,.322],sz=1.14;
+ S.map=tip(c,-.1,-.1);
+ S.surface([[.09,0,0],[.088,.03,0],[.084,.066,0],[.079,.094,.15],[.068,.108,.6],[.048,.114,.9],[.024,.115,1],[1e-4,.115,1]].map(([r,y,d])=>circ(c,n,r,y,sz,(a,x)=>-d*.03*Math.exp(-((x/.03)**2)))),true,felt,cloth);
+ S.surface([[.0885,.003],[.0925,.006],[.0915,.027],[.087,.03]].map(([r,y])=>circ(c,n,r,y,sz)),true,band,cloth);
+ S.ball([c[0],c[1]+.0165,c[2]+.0925*sz+.002],.012,silver,metal,8,.85);
+ const curl=(a,t)=>.08*Math.sin(a)**2*t*t-.02*Math.cos(a)**2*t,rows=dy=>Array.from({length:8},(_,j)=>{const t=j/7;return circ(c,n,mix(.086,.19,t),.003+dy,sz,a=>curl(a,t));});
+ S.surface(rows(.003).reverse(),true,felt,cloth);S.surface(rows(-.004),true,dark,cloth);
+ S.tube(Array.from({length:n+1},(_,i)=>{const a=i/n*tau;return [c[0]+.191*Math.sin(a),c[1]+.003+curl(a,1),c[2]+.191*Math.cos(a)*sz];}),.006,dark,cloth,5);
+ S.map=null;
+}
+// Gloria: a ring of light floating over the head. The ring shines by itself, and a wider, faint one is added as light round it.
+function buildHalo(S){
+ const gold=rgb('#ffd75a'),n=S.seg(40),c=[0,.53,.31],R=.092;S.map=tip(c,-.1,-.2);
+ const loop=Array.from({length:n+1},(_,i)=>{const a=i/n*tau;return [c[0]+R*Math.sin(a),c[1],c[2]+R*Math.cos(a)];});
+ S.tube(loop,.0115,gold,aglow,8);S.tube(loop,.026,[.003,.002,.0004],glow,6);S.map=null;
+}
+// The right eye, for what is worn over only one: the head's outline at its height, and the direction it lies in.
+const eyeAt=(phi,dy,o)=>{const p=rimPt(.308+dy,phi,o,.33);return [p[0],.308+dy,p[2]];},eyePhi=1.425;
+// Ögonlapp: a black leather patch over the right eye, on a strap that runs slanting round the head.
+function buildPatch(S){
+ const black=rgb('#16171b'),edge=rgb('#30333b'),m=S.seg(20),R=S.seg(4),P=[];
+ for(let r=R;r>=0;r--){const k=r/R,row=[];for(let i=0;i<m;i++){const q=i/m*tau;row.push(eyeAt(eyePhi+.34*k*Math.cos(q),.043*k*Math.sin(q)*(Math.sin(q)<0?1.2:1),.007+.005*(1-k*k)));}P.push(row);}
+ S.surface(P,true,(j)=>j===0?edge:black,gloss);
+ const n=S.seg(40),strap=d=>Array.from({length:n},(_,i)=>{const phi=i/n*tau,y=.345-.037*Math.cos(phi-eyePhi)+d,p=rimPt(y,phi,d?.003:.0075,.33);return [p[0],y,p[2]];});
+ S.surface([strap(-.0065),strap(0),strap(.0065)],true,edge,cloth);
+}
+// 3D-glasögon: the paper kind from the cinema. A white card frame that wraps round the head, one red lens and one cyan.
+function buildMovieGlasses(S){
+ const paper=rgb('#f4f1ea'),red=rgb('#e3262e'),cyan=rgb('#17bfd3'),at=brow(.326,.33),m=S.seg(28);
+ const band=(p0,p1,d0,d1,o,col,batch)=>S.surface([d0,d1].map(d=>Array.from({length:m+1},(_,i)=>at(mix(p0,p1,i/m),o,.326+d))),false,col,batch);
+ band(-1.62,1.62,-.03,.036,.011,paper,cloth);band(.2,1.5,-.021,.027,.0135,cyan,gloss);band(-1.5,-.2,-.021,.027,.0135,red,gloss);
+ band(1.62,2.45,.008,.036,.008,paper,cloth);band(-2.45,-1.62,.008,.036,.008,paper,cloth);
+}
+// Monokel: a gold-rimmed eyeglass held in the right eye, with a fine cord that hangs loose from it (see ribbonEnd).
+function buildMonocle(S){
+ const gold=rgb('#e6b83e'),glint=rgb('#d6e6f2'),m=S.seg(24),ring=(q,o)=>eyeAt(eyePhi+.3*Math.cos(q),.039*Math.sin(q),o);
+ S.tube(Array.from({length:m+1},(_,i)=>ring(i/m*tau,.012)),.0058,gold,metal,6);
+ if(S.q===1)for(const [p0,w] of [[-.14,.05],[-.02,.02]]){const g=[];for(let k=3;k>=0;k--){const t=k/3;g.push([eyeAt(eyePhi+p0+.12*t,.022-.04*t,.0125),eyeAt(eyePhi+p0+w+.12*t,.022-.04*t,.0125)]);}S.surface(g,false,glint,gloss);}
+ S.ball(monoclePin(),.0085,gold,metal,6);
+}
+const monoclePin=()=>eyeAt(eyePhi,-.046,.013);
+// The top of the breast, just under the chin, where a bow tie or the knot of a tie sits: the point, the direction up
+// along the breast and the direction straight out from it.
+const throat=()=>{const p=headPt(.23,-Math.PI/2,0),n=[0,-.35,.94];return {c:[p[0],p[1]+n[1]*.018,p[2]+n[2]*.018],u:[0,.94,.35],n};};
+const neckRing=(S,off,dz=0,m=S.seg(36))=>Array.from({length:m},(_,i)=>{const a=i/m*tau;return headPt(.205-.022*Math.sin(a)+dz,a,off);});
+// Fluga: a red bow tie on a band round the neck. Two puffed wings pinched together by a knot.
+function buildBowTie(S){
+ const red=rgb('#c8202c'),dark=rgb('#8c141e'),{c,u,n}=throat(),Q=S.seg(12),L=S.seg(8);
+ for(const s of [-1,1]){const P=[];
+  for(let a=0;a<=L+1;a++){const t=Math.min(1,a/L),cap=a>L?.05:1,cx=s*(.012+.07*t),hh=(.009+.033*t**.8)*cap,th=(.006+.011*Math.sin(Math.PI*t)+.004*t)*cap,row=[];
+   for(let i=0;i<Q;i++){const q=i/Q*tau,a1=hh*Math.cos(q),a2=th*Math.sin(q)*s+.006-cx*cx*1.4;row.push([c[0]+cx,c[1]+u[1]*a1+n[1]*a2,c[2]+u[2]*a1+n[2]*a2]);}P.push(row);}
+  S.surface(P,true,(j)=>j<2||j>L?dark:red,cloth);}
+ S.ball([c[0],c[1]+n[1]*.008,c[2]+n[2]*.008],.018,dark,cloth,8,.9);
+ const r=neckRing(S,.004);S.tube([...r,r[0]],.006,dark,cloth,5);
+}
+// Slips: a white collar and the knot of a tie. The tie itself is loose cloth (see ribbonEnd).
+function buildTie(S){
+ const navy=rgb('#22386b'),white=rgb('#f3f0ea'),{c,n}=throat();
+ S.surface([neckRing(S,.003,-.017),neckRing(S,.012,-.013),neckRing(S,.012,.013),neckRing(S,.003,.017)],true,white,cloth);
+ roundBox(S,[c[0],c[1]+n[1]*.006,c[2]+n[2]*.006],[.021,.021,.015],.7,navy,cloth,6,10);
+}
+// Guldkedja: a heavy gold chain that sags under the neck, with a round medallion set with a red stone.
+function buildChain(S){
+ const gold=rgb('#f2c544'),deep=rgb('#b98a28'),ruby=rgb('#c8202c'),{u,n}=throat(),m=S.q<1?30:60,path=[];
+ for(let i=0;i<=m;i++){const a=i/m*tau+Math.PI/2,sag=Math.max(0,-Math.sin(a));path.push(headPt(.2-.024*Math.sin(a),a,.009+.03*sag**3));}
+ S.tube(path,t=>.009*(1+.28*Math.cos(t*m*Math.PI)),(j)=>j%2?gold:deep,metal,6);
+ let z=.14;while(z<.23&&ringAt(z)[1]-ringAt(z)[3]<.03)z+=.004; // where the breast is at the height the medallion hangs
+ const M=[0,.03,z+.022],low=path[m/2];
+ S.tube([low,[M[0],M[1]+u[1]*.04,M[2]+u[2]*.04]],.004,gold,metal,4);
+ S.map=p=>[M[0]+p[0],M[1]-p[2]*u[1]+p[1]*n[1],M[2]-p[2]*u[2]+p[1]*n[2]];
+ S.lathe([[1e-4,.009],[.031,.009],[.041,.005],[.044,0],[.041,-.005],[1e-4,-.006]],[0,0,0],(j)=>j===2||j===3?deep:gold,metal,20);
+ S.ball([0,.011,0],.015,ruby,gloss,8,.7);S.map=null;
+}
+// What is carried on the back lies along its slope, between the wings, held by two straps over the shoulders.
+const onBack=tip([0,.25,.02],0,-.27);
+function packStraps(S,col){for(const s of [-1,1]){const st=[];for(let k=0;k<=8;k++){const t=k/8;st.push(headPt(.125-.05*t,Math.PI/2-s*mix(.42,1.95,t),.011));}S.tube(st,.0105,col,cloth,5);}}
+// Ryggsäck: a small red school bag with a front pocket, side pockets, zips and a carrying handle.
+function buildBackpack(S){
+ const red=rgb('#d8452f'),dark=rgb('#a52f1f'),grey=rgb('#3b3f47'),yellow=rgb('#f2c544'),y=.25,z=.02;
+ S.map=onBack;
+ roundBox(S,[0,y+.058,z-.005],[.09,.056,.105],.5,red,cloth,10,20);
+ roundBox(S,[0,y+.108,z-.04],[.064,.022,.05],.55,dark,cloth,6,14);
+ for(const s of [-1,1])roundBox(S,[s*.094,y+.05,z-.03],[.02,.035,.045],.6,dark,cloth,6,10);
+ S.tube([[-.07,y+.113,z+.035],[0,y+.119,z+.04],[.07,y+.113,z+.035]],.0045,grey,cloth,4);
+ S.tube([[-.045,y+.129,z-.02],[.045,y+.129,z-.02]],.004,yellow,metal,4);
+ const h=[];for(let k=0;k<=6;k++){const t=k/6*Math.PI;h.push([.03*Math.cos(t),y+.075+.018*Math.sin(t),z+.1+.028*Math.sin(t)]);}S.tube(h,.007,grey,cloth,5);
+ S.map=null;packStraps(S,grey);
+}
+// Jetpack: two steel tanks with a red stripe, joined by a block and a brass pipe, each ending in a dark nozzle that glows
+// inside. The flames are drawn afresh every frame (see drawLook).
+const jetNozzle=s=>[s*.06,.314,-.155];
+function buildJetpack(S){
+ const silver=rgb('#c9d0d8'),red=rgb('#d8452f'),dark=rgb('#3a3f47'),brass=rgb('#c99a3a'),hot=rgb('#ffb347'),y=.314,z=.02;
+ S.map=onBack;
+ for(const s of [-1,1]){const x=s*.06,P=[];for(let k=0;k<=14;k++)P.push([x,y,z-.12+.23*k/14]);
+  S.tube(P,t=>.052*Math.sqrt(Math.max(.02,1-Math.max(0,Math.abs(2*t-1)-.72)**2/.0784)),(j)=>(S.q<1?j===5:j===9||j===10)?red:silver,metal,14);
+  S.tube([[x,y,z-.11],[x,y,z-.14],[x,y,z-.175]],t=>.02+.018*t,dark,metal,10);
+  S.ball([x,y,z-.166],.027,hot,aglow,8,.6);}
+ roundBox(S,[0,y-.014,z],[.035,.03,.075],.5,dark,metal,6,10);
+ S.tube([[-.06,y+.036,z+.04],[0,y+.05,z+.04],[.06,y+.036,z+.04]],.011,brass,metal,6);
+ S.ball([0,y+.02,z-.02],.014,brass,metal,8);
+ S.map=null;packStraps(S,dark);
+}
 function drawLook(into,toHead,toBody){
  const head=wearing('head');
  if(head==='keps')rigid('keps',into,false,true,buildCap);
@@ -252,8 +436,34 @@ function drawLook(into,toHead,toBody){
   const b=headbandKnot(),red=rgb('#d01f26'),dark=rgb('#96131a');
   for(const s of [-1,1])ribbonEnd('band'+s,toHead([b[0]+s*.012,b[1]-.006,b[2]-.012]),13,.027,.02,(i)=>i===1?tint(red,.85):red,dark);
  }
- if(wearing('eyes')==='brillor')rigid('brillor',into,false,false,buildShades);
- if(wearing('neck')==='halsduk'){
+ if(head==='mossa')rigid('mossa',into,false,true,buildBeanie);
+ if(head==='party')rigid('party',into,false,false,buildPartyHat);
+ if(head==='kock')rigid('kock',into,false,false,buildChefHat);
+ if(head==='viking')rigid('viking',into,false,false,buildViking);
+ if(head==='cowboy')rigid('cowboy',into,false,false,buildCowboy);
+ if(head==='gloria')rigid('gloria',into,false,false,buildHalo);
+ const eyes=wearing('eyes'),neck=wearing('neck'),back=wearing('back');
+ if(eyes==='brillor')rigid('brillor',into,false,false,buildShades);
+ if(eyes==='lapp')rigid('lapp',into,false,true,buildPatch);
+ if(eyes==='bio')rigid('bio',into,false,false,buildMovieGlasses);
+ if(eyes==='monokel'){rigid('monokel',into,false,false,buildMonocle);const gold=rgb('#e6b83e');ribbonEnd('monokel',toHead(monoclePin()),10,.024,.0035,()=>gold,gold);}
+ if(neck==='fluga')rigid('fluga',into,true,false,buildBowTie);
+ if(neck==='kedja')rigid('kedja',into,true,false,buildChain);
+ if(neck==='slips'){
+  rigid('slips',into,true,false,buildTie);
+  const {c,u,n}=throat(),navy=rgb('#22386b'),red=rgb('#c8202c');
+  ribbonEnd('slips',toBody([c[0],c[1]-u[1]*.014+n[1]*.012,c[2]-u[2]*.014+n[2]*.012]),11,.03,t=>t>.84?.002+.034*(1-t)/.16:.013+.025*t,(i,j)=>j%3===1?red:navy,navy,1);
+ }
+ if(back==='ryggsack')rigid('ryggsack',into,true,false,buildBackpack);
+ if(back==='jetpack'){
+  rigid('jetpack',into,true,false,buildJetpack);
+  // the flames: longer the faster the bird flies, flickering, white-hot at the nozzle; a wider faint one is the light round them
+  const t=performance.now()/1000,power=clamp(Math.hypot(forwardSpeed(),bird.vy)/30,.35,1.2),S=lookDetail()<1?liveFar:live,white=rgb('#fff6d8'),yellow=rgb('#ffd24a'),orange=rgb('#ff7a1f');
+  for(const s of [-1,1]){const len=(.16+.16*power)*(1+.18*Math.sin(t*41+s)+.1*Math.sin(t*67+2*s)),f=jetNozzle(s),path=[];
+   for(let k=0;k<=5;k++)path.push(toBody(onBack([f[0],f[1],f[2]-len*k/5])));
+   S.tube(path,q=>.027*(1-q)**.8+.002,(j)=>j<2?white:j<4?yellow:orange,aglow,8);S.tube(path,q=>.06*(1-q*.8),[.02,.008,.001],glow,6);}
+ }
+ if(neck==='halsduk'){
   rigid('halsduk',into,true,false,buildScarf);
   const k=scarfKnot(),blue=rgb('#2f6fbf'),navy=rgb('#255596'),cream=rgb('#ece6d6');
   for(const [n,dx] of [[0,-.03],[1,.03]])ribbonEnd('scarf'+n,toBody([k[0]+dx,k[1]-.02,k[2]+.01*n]),13,.036,.04,(i,j)=>j===9||j===10?cream:i===1?blue:navy,cream,true); // two cream stripes near the end
@@ -275,7 +485,16 @@ const stageView={
 // The same for the small pictures on the tiles, thing by thing.
 const thumbView={keps:{yaw:.9,tilt:.22,dist:1.1,span:.5,aim:[0,.36,.34]},pannband:{yaw:2.05,tilt:.25,dist:1.2,span:.62,aim:[0,.31,.2]},hatt:{yaw:.9,tilt:.12,dist:1.2,span:.56,aim:[0,.43,.32]},
  krona:{yaw:.9,tilt:.16,dist:1.2,span:.5,aim:[0,.44,.32]},brillor:{yaw:.55,tilt:.08,dist:1,span:.42,aim:[0,.32,.36]},halsduk:{yaw:1,tilt:.12,dist:1.3,span:.7,aim:[0,.18,.22]},
- mantel:{yaw:2.55,tilt:.5,dist:2.8,span:1.9,aim:[0,.05,-.55]},regnbage:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]},guld:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]}};
+ mantel:{yaw:2.55,tilt:.5,dist:2.8,span:1.9,aim:[0,.05,-.55]},regnbage:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]},guld:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]},
+ gift:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]},blabar:{yaw:1.7,tilt:0,dist:3,span:1.5,aim:[0,-.5,-.5]},
+ mossa:{yaw:.9,tilt:.2,dist:1.1,span:.52,aim:[0,.39,.32]},party:{yaw:.9,tilt:.1,dist:1.2,span:.62,aim:[0,.45,.32]},kock:{yaw:.9,tilt:.1,dist:1.2,span:.66,aim:[0,.45,.32]},
+ viking:{yaw:.7,tilt:.12,dist:1.2,span:.72,aim:[0,.42,.32]},cowboy:{yaw:.9,tilt:.16,dist:1.2,span:.7,aim:[0,.41,.32]},gloria:{yaw:.9,tilt:.2,dist:1.2,span:.62,aim:[0,.43,.32]},
+ bio:{yaw:.55,tilt:.08,dist:1,span:.42,aim:[0,.32,.36]},lapp:{yaw:1.05,tilt:.08,dist:1,span:.44,aim:[.04,.32,.34]},monokel:{yaw:1.05,tilt:.04,dist:1,span:.44,aim:[.04,.3,.34]},
+ fluga:{yaw:.6,tilt:-.2,dist:1.2,span:.56,aim:[0,.13,.25]},slips:{yaw:.75,tilt:-.12,dist:1.3,span:.74,aim:[0,.06,.18]},kedja:{yaw:.65,tilt:-.18,dist:1.2,span:.6,aim:[0,.1,.23]},
+ ryggsack:{yaw:2.35,tilt:.5,dist:1.6,span:.9,aim:[0,.27,0]},jetpack:{yaw:2.45,tilt:.42,dist:1.7,span:1.05,aim:[0,.27,-.06]}};
+// Some things are too small for the view of their part of the body, or sit where it does not look: these get their own.
+const itemView={fluga:{yaw:.7,tilt:-.14,dist:1.4,span:.9,aim:[0,.16,.24]},slips:{yaw:.85,tilt:-.08,dist:1.5,span:1.1,aim:[0,.08,.16]},kedja:{yaw:.7,tilt:-.14,dist:1.4,span:.9,aim:[0,.14,.22]},
+ ryggsack:{yaw:2.3,tilt:.42,dist:2,span:1.5,aim:[0,.22,-.05]},jetpack:{yaw:2.4,tilt:.38,dist:2.1,span:1.7,aim:[0,.2,-.15]}};
 const wardrobeOpen=()=>!$('wardrobe').hidden;
 const wornNow=slot=>{const l=lookList.find(l=>l.id===worn[slot]);return l&&unlocked(l)?l.id:null;};
 function markNav(){const b=document.querySelector('#nav [data-view=looks]');if(b)b.classList.toggle('news',W.fresh.size>0&&!unlockAll);}
@@ -367,7 +586,7 @@ function stageCamera(aim,yaw,tilt,dist,span,px,py,size){
  camera={x:cx,y:cy,z:cz,s:Math.sin(turn),c:Math.cos(turn),cp:Math.cos(pitch),sp:Math.sin(pitch),cr:1,sr:0,near:.05};
 }
 function drawWardrobe(dt){
- const v=stageView[W.slot],t=performance.now()/1000,k=1-Math.exp(-dt*5);
+ const v=itemView[W.pick[W.slot]]||stageView[W.slot],t=performance.now()/1000,k=1-Math.exp(-dt*5);
  if(t-W.lastDrag>3.5){W.yaw=mix(W.yaw,v.yaw+.4*Math.sin(t*.45),k*.35);W.tilt=mix(W.tilt,v.tilt,k*.35);}
  W.dist=mix(W.dist,v.dist,k);W.span=mix(W.span,v.span,k);for(let i=0;i<3;i++)W.aim[i]=mix(W.aim[i],v.aim[i],k);
  if(W.queue.length)makeThumb(W.queue.shift()); // one small picture a frame until every tile has its own
@@ -384,7 +603,7 @@ function makeThumb(l){
  tryOn={head:null,eyes:null,neck:null,back:null,poop:null,[l.slot]:l.id};applyLook();wingPhase=1.15;
  onStage(()=>{
   stageBird.lookYaw=0;stageBird.lookPitch=-.04;clothDt=1/60;
-  if(l.id==='mantel'||l.id==='pannband'||l.id==='halsduk')for(let i=0;i<45;i++){updateCape(1/60);dyn.n=0;goo.n=0;for(const b of extraBatches)b.n=0;renderBird();} // let the cloth settle in the wind first
+  if(['mantel','pannband','halsduk','slips','monokel'].includes(l.id))for(let i=0;i<45;i++){updateCape(1/60);dyn.n=0;goo.n=0;glow.n=0;for(const b of extraBatches)b.n=0;renderBird();} // let the cloth settle in the wind first
   stageCamera(v.aim,v.yaw,v.tilt,v.dist,v.span,width/2,height*.43,side);draw3D();
   const c=document.createElement('canvas'),px=side*density;c.width=c.height=size;
   c.getContext('2d').drawImage(glCanvas,width/2*density-px/2,height*.43*density-px/2,px,px,0,0,size,size);W.thumbs[l.id]=c.toDataURL('image/jpeg',.88);
@@ -393,7 +612,11 @@ function makeThumb(l){
  const img=document.querySelector('#w-grid [data-item="'+l.id+'"] img');if(img)img.src=W.thumbs[l.id];
 }
 // Progress is counted at the end of every flight, and when an event is completed.
-function countFlight(){stats.total+=points;stats.maxStars=Math.max(stats.maxStars,wanted);saveStats();}
+function countFlight(){
+ stats.total+=points;stats.maxStars=Math.max(stats.maxStars,wanted);stats.hits=(stats.hits||0)+hits;stats.cars=(stats.cars||0)+carsHit;
+ stats.clean=Math.max(stats.clean||0,run.cleanPts??points); // the score when the first feather was lost, or all of it
+ saveStats();
+}
 
 // ---- Röd mantel: a cape that is real cloth. A grid of points joined by springs (Verlet), pinned across the
 // shoulders, pulled by gravity and by the air streaming past the bird, with a little flutter that grows with speed.
@@ -513,17 +736,18 @@ function stepChain(ch,pin,seg,dt,speed){
 }
 // A loose end of cloth hanging from pin: n points long, drawn three points wide with a slight fold along the middle.
 // col(i) colours the three strips across it; edge is the colour of the last bit and, on a flat end, of its fringe.
+// width may be a function of how far along it is (0..1); flat = true lies flat and ends in a fringe, 1 lies flat without one.
 function ribbonEnd(id,pin,n,seg,width,col,edge,flat){
  let ch=chains[id];
  if(!ch||Math.hypot(ch.p[0].p[0]-pin[0],ch.p[0].p[1]-pin[1],ch.p[0].p[2]-pin[2])>1){ch=chains[id]={p:Array.from({length:n},(_,i)=>{const p=[pin[0],pin[1]-i*seg,pin[2]];return {p,o:p.slice()};}),acc:0,seed:Math.random()*9};}
  noteBird();stepChain(ch,pin,seg,clothDt,Math.hypot(forwardSpeed(),bird.vy));
  const o=birdPoint([0,0,0]),up=birdPoint([0,1,0]).map((v,i)=>v-o[i]),right=birdPoint([1,0,0]).map((v,i)=>v-o[i]),G=[];
  for(let i=0;i<n;i++){const a=ch.p[Math.max(0,i-1)].p,b=ch.p[Math.min(n-1,i+1)].p,d=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],dl=Math.hypot(...d)||1;
-  let w=flat?right:[d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]];const l=Math.hypot(...w)||1,s=width*(flat?1:1-.25*i/n)/l,p=ch.p[i].p;
+  let w=flat?right:[d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]];const l=Math.hypot(...w)||1,s=(typeof width==='function'?width(i/(n-1)):width*(flat?1:1-.25*i/n))/l,p=ch.p[i].p;
   const f=[(d[1]*w[2]-d[2]*w[1])/dl/l*.006,(d[2]*w[0]-d[0]*w[2])/dl/l*.006,(d[0]*w[1]-d[1]*w[0])/dl/l*.006]; // the fold stands a little proud
   G.push([-1,-.34,.34,1].map(k=>[p[0]+w[0]*s*k+f[0]*(1-k*k),p[1]+w[1]*s*k+f[1]*(1-k*k),p[2]+w[2]*s*k+f[2]*(1-k*k)]));}
  const S=lookDetail()<1?liveFar:live;S.surface(G,false,(j,i)=>j>=n-2?edge:col(Math.min(i,2),j),cloth);
- if(flat){const last=G.at(-1),prev=G.at(-2),d=[last[1][0]-prev[1][0],last[1][1]-prev[1][1],last[1][2]-prev[1][2]],dl=Math.hypot(...d)||1; // a fringe of tassels
+ if(flat===true){const last=G.at(-1),prev=G.at(-2),d=[last[1][0]-prev[1][0],last[1][1]-prev[1][1],last[1][2]-prev[1][2]],dl=Math.hypot(...d)||1; // a fringe of tassels
   for(let f=0,m=S.q<1?3:6;f<=m;f++){const t=f/m,k=t*3,i=Math.min(2,Math.floor(k)),u=k-i,p=[0,1,2].map(q=>mix(last[i][q],last[i+1][q],u));
    S.tube([p,[p[0]+d[0]/dl*.03,p[1]+d[1]/dl*.03-.012,p[2]+d[2]/dl*.03]],S.q<1?.007:.0045,edge,cloth,4);}}
 }

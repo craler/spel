@@ -87,13 +87,16 @@ Bra att veta:
 - Stridsvagnar (bromsar, svänger på stället, rekyl) finns i `updateTanks()` (`world.js`), näten i `updateThreats()` (`game.js`) och `drawNet()`/`drawSnare()` (`render.js`).
 - Bedrifter sparas i webbläsaren (`feats` i `game.js`), liksom rekord och antal flygningar.
 - Affischen `poster.jpg` visas på startsidan.
-- Chili (`b.chili` i `city.js`, `eatChili()` i `game.js`, `chiliMesh()` i `render.js`): svävar över ungefär vart tolfte hustak. Den som flyger in i den får tio sekunders obegränsat
-  bajs som sprutar av sig självt (bredare, orange, tanken töms inte), och gumpen böjs ner och skakar (`rumpBend()`). En uppäten chili växer tillbaka efter 45 sekunder.
+- Chili (`b.chili` i `city.js`, `eatChili()` i `game.js`, `chiliMesh()` i `render.js`): svävar över ungefär vart trettionde kvarter. Den som flyger in i den får tio sekunders obegränsat
+  bajs som sprutar av sig självt (bredare, orange, tanken töms inte), och gumpen böjs ner och skakar (`rumpBend()`). Inga chilis finns de första 20 sekunderna
+  av en flygning eller den närmaste halvminuten efter att en har gått ur kroppen (`chiliBack`), och den uppätna växer tillbaka efter två minuter (`chiliGrown()`).
 - Garderoben (`looks.js`, `#wardrobe` i `index.html`): en egen skärm med duvan på en scen som går att vrida, flikar per plats (huvud, ögon, hals, rygg, bajs), brickor med
   miniatyrer som renderas från 3D-modellen (`makeThumb()`), sällsynthet och framsteg mot upplåsning. Låsta prylar går att prova men inte bära. Nya upplåsningar visas efter flygningen (`lookNews()`).
+- Upplåsningarna räknas i `stats` (sparas i webbläsaren): poäng totalt, flest stjärnor, klarade händelser, uppätna chili, träffade fotgängare, krockade bilar och bästa
+  poäng innan första fjädern tappades (`countFlight()`, `hurt()`). En ny pryl är en rad i `lookList`, en `build…`-funktion, en rad i `drawLook()` och en vy i `thumbView`.
 - Prylarnas modeller byggs en gång (`rigid()`), i en enklare version under flygning och i full detalj i menyer och garderob (`lookDetail()`). Varje bildruta flyttas de bara med huvudet.
   Mantel, halsduksändar och pannbandets band är riktigt tyg (Verlet, `updateCape()`/`stepChain()`) som hålls utanför kroppen med `pushOutOfBird()`.
-- Material väljs med färgens alfa (`gl.js`): 0 matt, 1 fasad, 2 självlysande, 3 tyg (ljusare i kanten), −1 blankt, −2 metall (speglar himmel och mark). Batcherna `cloth`, `gloss` och `metal` används av prylarna.
+- Material väljs med färgens alfa (`gl.js`): 0 matt, 1 fasad, 2 självlysande, 3 tyg (ljusare i kanten), −1 blankt, −2 metall (speglar himmel och mark). Batcherna `cloth`, `gloss`, `metal` och `aglow` (lyser själv: gloria, lågor) används av prylarna.
 - Grafik (Inställningar): Auto, Snygg, Snabb eller Snabbast (`quality`/`gfx` i `core.js`, `setLevel()` i `main.js`).
   Snabb: mindre skuggkarta med ett sampel, 9 × 9 kvarter, enklare duvkropp och shaders, lägre upplösning. Snabbast: inga riktiga skuggor (mjuka skuggfläckar i stället, `blob()` i `render.js`),
   7 × 7 kvarter och tätare dis, människor bara inom 80 m, ännu lägre upplösning och ingen rök.
