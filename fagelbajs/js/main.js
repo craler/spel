@@ -69,7 +69,7 @@ onkeydown=e=>{
  }
  if(!gameKeys.includes(e.code))return;
  e.preventDefault();keys.add(e.code);if(e.repeat)return;
- if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='KeyX')flipPitch();if(e.code==='Escape')togglePause();
+ if(e.code==='Space')drop();if(e.code==='KeyC')view();if(e.code==='KeyV'&&testSite&&!e.repeat){camTry=(camTry+1)%camTries.length;feedLine('KAMERA '+(camTry+1)+': '+camTries[camTry][0]);}if(e.code==='KeyX')flipPitch();if(e.code==='Escape')togglePause();
 };
 onkeyup=e=>keys.delete(e.code);
 // ---- Touch: a thumb stick on the left, dive and spray buttons on the right.

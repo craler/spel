@@ -1,5 +1,12 @@
 'use strict';
 // Camera, bird mesh, scene assembly for the WebGL renderer and the 2D overlay (sight, warnings, HUD).
+// Chase cameras to compare. Only the first is in the game; on the test site V steps through the others during a flight.
+// back and rise: how far behind and above the bird; shoulder: how far to the side; zoom below 1 is a wider view;
+// roll: how much the picture leans with the bird; lag: how quickly the camera swings round behind it (higher = stiffer).
+const camTries=[['Nuvarande',{back:6.8,rise:3.8,shoulder:1.05,zoom:1,roll:0,lag:11}],['Nära och lågt',{back:4.8,rise:2.5,shoulder:.75,zoom:.9,roll:0,lag:11}],
+ ['Överblick',{back:9.5,rise:5.8,shoulder:1.2,zoom:1.05,roll:0,lag:11}],['Mitt bakom, vidvinkel',{back:6.2,rise:3.3,shoulder:0,zoom:.8,roll:0,lag:11}],
+ ['Följsam: lutar och släpar i svängar',{back:6.8,rise:3.6,shoulder:1.05,zoom:.95,roll:.32,lag:4.5}]];
+let camTry=0;
 function setCamera(dt){
  // Through the bird's eyes: the view follows the flight path and leans into the turns.
  // In a crash the camera steps back out so the tumble can be seen.
@@ -19,31 +26,33 @@ function setCamera(dt){
  if(rig&&rig.pov)rig=null;
  const p=payload(),aim=at(p,Math.max(0,flightTime(p,0)));
  const blend=1-Math.exp(-dt*7);
- const a=rig?mix(rig.yaw,bird.angle,1-Math.exp(-dt*11)):bird.angle;
+ const T=camTries[camTry][1];
+ const a=rig?rig.yaw+(wrap(bird.angle-rig.yaw+Math.PI,tau)-Math.PI)*(1-Math.exp(-dt*T.lag)):bird.angle;
  const s=Math.sin(a),c=Math.cos(a);
  const forward=(aim[0]-bird.x)*s+(aim[2]-bird.z)*c;
  const fall=bird.y-aim[1];
  // Fit the pigeon and the projected impact together, also from high altitude.
- const back=above?0:6.8;
+ const back=above?0:T.back;
  // Near the streets the camera drops in behind the bird and looks further ahead, so the skyline comes into view.
  const low=above?0:clamp((24-bird.y)/14,0,1)*(1-bird.fold);
- const rise=above?Math.max(14,1.3*forward-fall*.5):mix(3.8,2.6,low);
+ const rise=above?Math.max(14,1.3*forward-fall*.5):mix(T.rise,T.rise*.68,low);
  const toBird=Math.atan2(rise,back);
  const toAim=Math.atan2(rise+fall,Math.max(.35,back+forward));
  const chase=mix(toBird,toAim,.52);
  const desiredPitch=above?Math.PI/2:mix(chase,Math.min(chase,Math.max(.26,toAim-.38)),low);
- const shoulder=above?0:1.05;
+ const shoulder=above?0:T.shoulder;
  const focusAhead=above?forward*rise/(2*rise+fall):0;
- if(!rig)rig={yaw:a,pitch:desiredPitch,rise,ahead:focusAhead};
+ if(!rig)rig={yaw:a,pitch:desiredPitch,rise,ahead:focusAhead,roll:0};
+ rig.roll=mix(rig.roll||0,above?0:-(bird.vb??bird.bank)*T.roll,blend);
  rig.yaw=a;rig.pitch=mix(rig.pitch,desiredPitch,blend);
  if(!above)rig.pitch=Math.min(rig.pitch,Math.atan2(rig.rise,back)+.24); // never tilt so far down that the bird leaves the top of the picture
  rig.rise=mix(rig.rise,rise,blend);rig.ahead=mix(rig.ahead,focusAhead,blend);
- camera={x:bird.x+s*(rig.ahead-back)+c*shoulder,y:bird.y+rig.rise,z:bird.z+c*(rig.ahead-back)-s*shoulder,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch),cr:1,sr:0};
+ camera={x:bird.x+s*(rig.ahead-back)+c*shoulder,y:bird.y+rig.rise,z:bird.z+c*(rig.ahead-back)-s*shoulder,s,c,cp:Math.cos(rig.pitch),sp:Math.sin(rig.pitch),cr:Math.cos(rig.roll),sr:Math.sin(rig.roll)};
  const rush=bird.fold*clamp((Math.hypot(forwardSpeed(),bird.vy)-9)/40,.2,1);
  // The faster the dive, the harder the picture trembles and the wider the view.
  const tremble=(.02+.1*rush*rush)*rush;
  camera.x+=c*tremble*Math.sin(elapsed*33)+tremble*.5*Math.sin(elapsed*61);camera.z-=s*tremble*Math.sin(elapsed*33);camera.y+=tremble*.8*Math.sin(elapsed*47);
- scale=Math.min(width*.88,height*(above?.85:.97))*(1-.085*bird.fold-.1*rush);
+ scale=Math.min(width*.88,height*(above?.85:.97))*(1-.085*bird.fold-.1*rush)*(above?1:T.zoom);
  if(shake>.01){const k=shake*.3;camera.x+=k*Math.sin(elapsed*71);camera.y+=k*.6*Math.sin(elapsed*97+1);camera.z+=k*Math.cos(elapsed*83);shake*=Math.exp(-dt*7);}
 }
 function cameraPoint([x,y,z]){
