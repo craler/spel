@@ -29,6 +29,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offse
 #tank{width:min(260px,34vw);height:20px;border-radius:99px;background:#0009;box-shadow:0 0 0 1px #fff3;overflow:hidden}
 #tank i{display:block;width:100%;height:100%;border-radius:99px;background:#f4f1e6}
 #reserve.low{animation:pulse .6s infinite alternate}#reserve.low #tank i{background:var(--gold)}
+#reserve.hot{color:#ff9a3a}#reserve.hot #tank i{background:linear-gradient(90deg,#ff5d2a,#ffb020)}
 @keyframes pulse{to{opacity:.45}}
 .tools{position:fixed;right:18px;bottom:18px;display:flex;gap:2px;padding:4px;border-radius:12px;background:var(--glass);backdrop-filter:blur(6px)}
 .tools button{padding:6px 10px;border:0;border-radius:8px;background:transparent;font-size:13px}.tools button:hover{background:#fff2}
@@ -40,7 +41,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offse
 #feedback.on strong{animation:slam .28s cubic-bezier(.2,1.6,.4,1) both}
 @keyframes slam{from{transform:scale(1.6);opacity:0}to{transform:scale(1);opacity:1}}
 #feedback span{display:inline-block;margin-top:10px;padding:5px 16px;border-radius:999px;background:var(--glass);font-size:14px;font-weight:700}
-#feedback.alert strong{color:var(--gold)}#feedback.hurt strong{color:var(--red)}
+#feedback.alert strong{color:var(--gold)}#feedback.hurt strong{color:var(--red)}#feedback.hot strong{color:#ff7a1a}
 #tip{position:fixed;left:50%;bottom:22px;max-width:min(92vw,520px);padding:9px 18px;border-radius:999px;background:var(--glass);font-size:14.5px;text-align:center;transform:translateX(-50%);opacity:0;transition:opacity .4s;pointer-events:none}
 #tip.on{opacity:1}
 #dread{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 45%,transparent 36%,#1a0408a6 78%,#000d 125%)}

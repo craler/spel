@@ -14,7 +14,7 @@ const blockCache=new Map();
 function block(i,j){
  const key=i+','+j;let b=blockCache.get(key);if(b)return b;
  const x=i*tile,z=j*tile,type=blockType(i,j),R=n=>hash(i,j,n);
- b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],folk:[],parked:[],statue:null};
+ b={key,i,j,x,z,type,blds:[],trees:[],lamps:[],tables:[],stalls:[],benches:[],folk:[],parked:[],statue:null,chili:null};
  // Heights follow whole 3.1 m storeys so the window rows line up with the roof.
  const storeys=(n,lo,hi)=>3.1*(lo+Math.floor(R(n)*(hi-lo+1)))+.8;
  const add=(a,c,w,d,h,n)=>b.blds.push([x+a,z+c,w,d,h,Math.floor(R(n)*wallPaint.length),R(n+1)]);
@@ -27,6 +27,9 @@ function block(i,j){
   else if(v===4){add(9,9,24,24,storeys(3,1,2),30);add(15,15,12,12,storeys(6,7,12),32);} // a tower on a podium
   else if(v===5){add(9,9,15,24,storeys(3,3,6),30);add(26,13,7,16,storeys(6,6,11),32);}
   else{add(9,9,10,10,storeys(3,1,6),30);add(23,9,10,10,storeys(6,2,9),32);add(9,23,10,10,storeys(7,2,10),34);add(23,23,10,10,storeys(8,1,5),36);}
+  // A rare treat: over a few roofs a chili floats (see eatChili in game.js). It hangs above whatever roof is under it.
+  if(R(210)<.085){const q=b.blds[Math.floor(R(211)*b.blds.length)],cx=q[0]+q[2]/2,cz=q[1]+q[3]/2;
+   const roof=Math.max(...b.blds.filter(o=>cx>=o[0]&&cx<=o[0]+o[2]&&cz>=o[1]&&cz<=o[1]+o[3]).map(o=>o[4]));b.chili=[cx,roof+4.6,cz];}
   if(R(13)<.55)for(let n=0;n<4;n++){ // street trees along two sides
    b.trees.push([x+11+n*6.8,z+5.9,.62+R(14+n)*.2,R(18+n)],[x+5.9,z+11+n*6.8,.62+R(22+n)*.2,R(26+n)]);}
  }else if(type===1){

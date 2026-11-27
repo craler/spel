@@ -143,6 +143,9 @@ function hitTick(strong,pitch=1){
  burst({type:'bandpass',from:320,to:1300*pitch,q:3.5,gain:.2*k,dur:.07,delay:.05}); // the squelch after the slap
  tone(175*pitch,52,.13,'sine',.26*k);
 }
+// Chili: a crisp bite and a rising yelp when it is eaten, and the gut growling for as long as it burns.
+function chiliBite(){burst({type:'bandpass',from:2600,to:900,q:2,gain:.4,dur:.09});burst({type:'highpass',from:3000,to:6000,gain:.16,attack:.05,dur:.7,delay:.08});tone(300,900,.35,'sawtooth',.05,.05);tone(450,1350,.3,'triangle',.05,.12);}
+function gutGrowl(){const f=48+30*Math.random();tone(f,f*.6,.28+.2*Math.random(),'sawtooth',.07);burst({type:'bandpass',from:160,to:70,q:5,gain:.16,dur:.3});}
 function crunch(){burst({from:2400,to:160,gain:.55,dur:.34});burst({type:'bandpass',from:1800,to:700,q:6,gain:.34,dur:.2,delay:.02});tone(310,63,.26,'sawtooth',.045);}
 function whoosh(){burst({type:'bandpass',from:420,to:2400,q:1.1,gain:.65,attack:.09,dur:.4});}
 // The hawk: a falling cry with a fast vibrato, a heartbeat, and a low drone that swells as it locks on.

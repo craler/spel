@@ -170,6 +170,7 @@ const feats=[
  ['hawk','Hökdansen','Få höken att missa',()=>run.dodges>=1],
  ['max','Maxkaos','Nå fem stjärnor',()=>wanted>=5],
  ['tank','Pansarknäckare','Slå ut en stridsvagn',()=>run.tanks>=1],
+ ['chili','Eldmage','Ät en chili',()=>run.chilis>=1],
 ];
 let done=new Set();try{done=new Set(JSON.parse(localStorage.getItem('fagelbajs.feats')||'[]'));}catch{}
 function checkFeats(){
@@ -194,11 +195,30 @@ function banner(title,sub='',kind='',time=2.2){
 }
 function feedLine(label,amount=0,tags=''){feed.unshift({label:label.replace(/!+$/,''),amount,tags,t:elapsed});if(feed.length>5)feed.length=5;}
 function bubble(x,y,z,text){if(elapsed-lastBubble<.2)return;lastBubble=elapsed;bubbles.push({x,y,z,text,t:elapsed});if(bubbles.length>8)bubbles.shift();}
+// ---- Chili: a rare red chili floats over some roofs. Eating it sets the stomach on fire: for ten seconds the bird
+// sprays without pause and without running dry, hotter and wider than usual, its rump bent down and shaking.
+const chiliTime=10, chiliEaten=new Map();let chiliUntil=-1,splashHot=false,growlAt=0;
+const chiliOn=()=>elapsed<chiliUntil;
+// The chili of a block, unless it has just been eaten: it grows back after 45 seconds.
+function chiliAt(b){return b.chili&&elapsed-(chiliEaten.get(b.key)??-99)>=45?b.chili:null;}
+function eatChili(b){
+ chiliEaten.set(b.key,elapsed);chiliUntil=elapsed+chiliTime;run.chilis++;tank=1;emptyTank=false;refillWait=0;
+ banner('CHILI!','Magen brinner – obegränsat bajs i '+chiliTime+' sekunder','hot',2.8);feedLine('CHILI');
+ chiliBite();shake=Math.max(shake,.5);checkFeats();
+}
+// The rump as the chili bends and shakes it: a point of the bird's own shape (see birdPoint) behind the wings is swung
+// down round a hinge at the hips, more the further back it lies, and trembles. squirm is 0 normally and 1 in full cramp.
+function rumpBend(p){
+ const q=bird.squirm||0,w=clamp((-.06-p[2])/.34,0,1);if(!q||!w)return p;
+ const t=elapsed,a=q*w*w*(.4+.09*Math.sin(t*33)+.05*Math.sin(t*51)),dy=p[1]-.06,dz=p[2]+.06,ca=Math.cos(a),sa=Math.sin(a);
+ return [p[0]+q*w*.016*Math.sin(t*47),.06+dy*ca+dz*sa+q*w*.01*Math.sin(t*41+1),-.06+dz*ca-dy*sa];
+}
+const ventPoint=()=>birdPoint(rumpBend([0,-.07,-.43])); // where it all comes out
 // The spray fans out on the way down, so the area it can hit grows with the fall.
 function hitRadius(fall){return clamp(1.4+(fall-6)*.075,1.4,6.5);}
 function splashAt(x,y,z,n,nx=0,nz=0){
  for(let k=0;k<n;k++){const a=Math.random()*tau,s=1.2+2.6*Math.random();
-  splash.push({x,y:y+.05,z,vx:Math.cos(a)*s+nx*2.5,vy:1.5+3*Math.random(),vz:Math.sin(a)*s+nz*2.5,age:0,life:.35+.3*Math.random()});}
+  splash.push({hot:splashHot,x,y:y+.05,z,vx:Math.cos(a)*s+nx*2.5,vy:1.5+3*Math.random(),vz:Math.sin(a)*s+nz*2.5,age:0,life:.35+.3*Math.random()});}
  if(splash.length>260)splash.splice(0,splash.length-260);
 }
 function updateSplash(dt){
@@ -235,7 +255,7 @@ function award(base,label,p,targetY=0,pos){
  addPoints(amount);
 }
 function reset(){
- resetChase();points=0;combo=comboTime=bestCombo=carsHit=shield=slipTick=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0};lag.clear();plume=[];tanks=[];tankWait=0;
+ resetChase();points=0;combo=comboTime=bestCombo=carsHit=shield=slipTick=0;feathers=3;hawk=null;heli=null;brokeUmb.clear();alarms.clear();sprayCount=0;fallen.clear();run={chain:0,carSlips:0,alarms:0,statue:0,wedding:0,dodges:0,tanks:0,stars:0,chilis:0};chiliEaten.clear();chiliUntil=-1;growlAt=0;lag.clear();plume=[];tanks=[];tankWait=0;
  popups=[];feed=[];bubbles=[];splash=[];marker=lastDrop=lastBubble=-9;bannerUntil=0;$('feedback').classList.remove('on');wrecks.clear();cars=[];
  if(crashVoice){try{crashVoice.stop();}catch{}crashVoice=null;}
  resetEvents();replay=[];killClip=null;killPending=null;killBest=0;killPlay=0;
@@ -267,7 +287,7 @@ function birdPoint([x,y,z]){
 // It leaves from the vent under the tail. A hard turn slings it outwards: it keeps the sideways
 // swing of the bird's rump, so the sight swings out of the turn too.
 function payload(){
- const [x,y,z]=birdPoint([0,-.07,-.43]),v=forwardSpeed(),sling=clamp(-(bird.turn||0)*v*.21,-6,6);
+ const [x,y,z]=ventPoint(),v=forwardSpeed(),sling=clamp(-(bird.turn||0)*v*.21,-6,6);
  return {x,y,z,vx:Math.sin(bird.angle)*v+Math.cos(bird.angle)*sling,vz:Math.cos(bird.angle)*v-Math.sin(bird.angle)*sling,vy:bird.vy-6};
 }
 // Climbing scatters the spray, diving packs it tight: the hit area follows the bird's vertical speed.
@@ -290,19 +310,20 @@ function landingTime(p){
 }
 function drop(){
  if(cooldown>0||emptyTank||tank+1e-8<1/60)return;
- const p=payload(),n=++sprayCount,big=elapsed-lastDrop>.3;lastDrop=elapsed;
+ const p=payload(),n=++sprayCount,big=elapsed-lastDrop>.3,hot=chiliOn();lastDrop=elapsed;
  if(!big){ // the stream wavers sideways and fans out; the opening blob flies true
-  const lateral=.46*Math.sin(n*.73)+.22*Math.sin(n*2.11),fan=n*2.39996,wide=.55*Math.sqrt(hash(n,5,9));
+  const lateral=.46*Math.sin(n*.73)+.22*Math.sin(n*2.11),fan=n*2.39996,wide=.55*Math.sqrt(hash(n,5,9))*(hot?1.8:1);
   p.vx+=Math.cos(bird.angle)*lateral+Math.cos(fan)*wide;p.vz+=-Math.sin(bird.angle)*lateral+Math.sin(fan)*wide;p.vy+=.32*Math.sin(n*1.4);
  }
- p.big=big;p.r=big?.19:.055+.05*hash(n,2,6);p.dark=n%4===0;
- p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.spread=bird.spread||1;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=.05;tank=Math.max(0,tank-1/60);refillWait=.3;
+ p.big=big;p.r=(big?.19:.055+.05*hash(n,2,6))*(hot?1.3:1);p.dark=n%4===0;p.hot=hot;
+ p.end=landingTime(p);p.age=0;p.seed=n;p.alt=bird.y;p.spread=bird.spread||1;p.dive=bird.fold>.5||bird.vy<-14;drops.push(p);cooldown+=hot?.033:.05;if(!hot)tank=Math.max(0,tank-1/60);refillWait=.3;
  if(tank<1/60-1e-8){emptyTank=true;banner('SLUT PÅ BAJS','Det fylls på av sig självt','hurt',1.6);}
  for(let k=0;k<2;k++){const a=(n*2+k)*2.39996,drift=.65+hash(n,k,1)*1.5;
   mist.push({x:p.x,y:p.y,z:p.z,vx:p.vx+Math.cos(a)*drift,vy:p.vy*.85+Math.sin(a),vz:p.vz+Math.sin(a)*drift,age:0,life:.65+hash(k,n,3)*.8});}
 }
 function simulate(dt){
  const b=bird,held=(...codes)=>codes.some(c=>keys.has(c)),dive=held('ShiftLeft','ShiftRight');
+ const hot=chiliOn(),spraying=hot||held('Space'); // on chili it cannot be held back
  // Secret air brake on Q: wings thrown forward and beating against the airflow, tail fanned, nose up.
  const braking=held('KeyQ')&&!dive&&!(b.snare>0);
  if(braking&&!(b.brake>.2))whoosh();
@@ -343,7 +364,7 @@ function simulate(dt){
  b.effort=mix(b.effort,effort,1-Math.exp(-(effort>b.effort?9:4)*dt));
  b.nextGlance-=dt;if(b.nextGlance<=0){b.glance=Math.random()<.35?0:(Math.random()-.5)*1.3;b.nextGlance=.7+2.6*Math.random();}
  b.lookYaw=mix(b.lookYaw,clamp(b.bank*.55+b.glance,-.9,.9),1-Math.exp(-dt*7));
- b.lookPitch=mix(b.lookPitch,held('Space')?-.45:-.06+.1*Math.sin(elapsed*1.3),1-Math.exp(-dt*6));
+ b.lookPitch=mix(b.lookPitch,spraying?-.45:-.06+.1*Math.sin(elapsed*1.3),1-Math.exp(-dt*6));
  // Speed won in a dive carries into the glide and bleeds off slowly; climbing spends it faster.
  b.speed=clamp(b.speed+(Math.max(0,-b.vy)*1.65*(1-b.brake)+(14-b.speed)*(dive?.18:b.speed>14?.13:.55)*(1-b.brake)-Math.max(0,b.vy)*.45-b.brake*24)*dt,10-6.5*b.brake,58);
  // Visual pitch and roll ride on critically damped springs: no sudden jerks when the controls change.
@@ -367,13 +388,21 @@ function simulate(dt){
  if(solid(b.x,b.y,b.z,1.15)&&Math.hypot(forwardSpeed(),b.vy)>12)b.skim+=dt;
  else{if(b.skim>.12&&elapsed-b.lastSkim>2){b.lastSkim=elapsed;feedLine('NÄRA ÖGAT',10);addPoints(10);tone(900,1300,.07,'triangle',.04);}b.skim=0;}
  const wingCycle=Math.floor(wingPhase/tau);
- elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=held('Space')?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,held('Space'));wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort+9*b.brake);
+ elapsed+=dt;shield=Math.max(0,shield-dt);if(comboTime>0&&(comboTime-=dt)<=0)combo=0;cooldown=spraying?Math.max(-dt,cooldown-dt):Math.max(0,cooldown-dt);recharge(dt,spraying);wingPhase+=dt*(1.4+20*b.effort+8*b.climb*b.effort+9*b.brake);
  if(b.effort>.5&&Math.floor(wingPhase/tau)>wingCycle)wingBeat();
- if(held('Space'))drop();
+ // Chili: grab one by flying through it; while it burns the tank stays full, the gut growls and the picture trembles.
+ for(let i=Math.floor(b.x/tile)-1,i1=i+2;i<=i1;i++)for(let j=Math.floor(b.z/tile)-1,j1=j+2;j<=j1;j++){
+  const blk=block(i,j),c=chiliAt(blk);if(c&&(b.x-c[0])**2+(b.y-c[1])**2+(b.z-c[2])**2<3.4*3.4)eatChili(blk);
+ }
+ b.squirm=mix(b.squirm||0,+hot,1-Math.exp(-dt*(hot?8:3)));
+ if(hot){tank=1;emptyTank=false;shake=Math.max(shake,.1);if(elapsed>growlAt){growlAt=elapsed+.35+.5*Math.random();gutGrowl();}}
+ else if(b.wasHot){banner('PUH!','Magen har lugnat sig','',1.8);tone(520,170,.45,'sine',.05);}
+ b.wasHot=hot;
+ if(spraying)drop();
  crowdTime+=dt;if(!halfStep){gather(crowdTime);crowdTime=0;}updateMist(dt);updateSplash(dt);updateThreats(dt);updateHawk(dt);updateHeli(dt);updateEvent(dt);updateTanks(dt);if(state!=='play')return;
  const floating=balloons();
  drops=drops.filter(p=>{
-  const prev=p.age;p.age+=dt;const end=p.end;
+  const prev=p.age;p.age+=dt;const end=p.end;splashHot=!!p.hot;
   const [x0,y0,z0]=at(p,prev),[x1,y1,z1]=at(p,Math.min(end,p.age));
   for(const q of floating)if(Math.hypot(x1-q.x,y1-q.y-7,z1-q.z)<5.7){
    if(!scored.has(q.id)){scored.add(q.id);award(80,'LUFTBALLONGEN',p,q.y+12,[q.x,q.y+14,q.z]);bubble(q.x,q.y+1.6,q.z,'VI SJUNKER!');splat(x1,y1,z1,true);}
@@ -420,7 +449,7 @@ function simulate(dt){
    }
   }
   if(p.age>=end){
-   const [x,y,z]=at(p,end),fall=clamp(p.alt-y,0,80),stain={x,y,z,t:elapsed,seed:hash(p.seed,3,1),r:(p.big?1.15:.55)*(1+.011*fall)};
+   const [x,y,z]=at(p,end),fall=clamp(p.alt-y,0,80),stain={x,y,z,t:elapsed,seed:hash(p.seed,3,1),r:(p.big?1.15:.55)*(1+.011*fall),hot:p.hot};
    const wall=y>.3?wallAt(x,y,z):null;
    if(wall){ // on a wall it sticks, then runs
     stain.x=wall.x;stain.z=wall.z;stain.wall=wall.yaw;stain.drip=.3+1.9*hash(p.seed,5,2);
@@ -433,6 +462,7 @@ function simulate(dt){
   }
   return true;
  });
+ splashHot=false;
  if(elapsed>bannerUntil)$('feedback').classList.remove('on');
  if(++slipTick%5===0)slips();if(slipTick%30===0)checkFeats();
  popups=popups.filter(p=>elapsed-p.t<1.1);bubbles=bubbles.filter(b=>elapsed-b.t<1.5);

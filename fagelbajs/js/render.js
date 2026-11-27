@@ -158,7 +158,8 @@ function pitchTarget(){const raw=rawPitch(),b=bird.brake||0;return b>0?Math.min(
 function renderBird(){
  const b=bird,br=crash?0:b.brake||0,fl=Math.max(b.fold*(crash?Math.exp(-crash.age*2):1),b.snare>0&&!crash?.96:0),bank=(b.vb??b.bank)*1.02+(crash?.roll??0),pitch=flightPitch()+(crash?.pitch??0);
  const sy=Math.sin(b.angle),cy=Math.cos(b.angle),sb=Math.sin(bank),cb=Math.cos(bank),sp=Math.sin(pitch),cp=Math.cos(pitch);
- const bob=-.03*Math.sin(wingPhase)*b.effort; // the body rides up on each downstroke
+ const squirm=crash?0:b.squirm||0; // chili cramps: the rump bends down and shakes (rumpBend in game.js), and the whole bird trembles
+ const bob=-.03*Math.sin(wingPhase)*b.effort+squirm*.012*Math.sin(elapsed*43); // the body rides up on each downstroke
  function world([x,y,z]){
   y+=bob;const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
   const offset=[bx*cy+bz*sy,by*cp+z*sp,-bx*sy+bz*cy];
@@ -182,6 +183,7 @@ function renderBird(){
    const full=w===1,ca=full?cosYaw:Math.cos(hy*w),sa=full?sinYaw:Math.sin(hy*w),ce=full?cosNod:Math.cos(hp*w),se=full?sinNod:Math.sin(hp*w);
    const py=y-.2,pz=z-.2,x1=x*ca+pz*sa,z1=-x*sa+pz*ca;x=x1;y=py*ce+z1*se+.2;z=z1*ce-py*se+.2;
   }
+  if(squirm&&z<-.06){const q=rumpBend([x,y,z]);x=q[0];y=q[1];z=q[2];}
   y+=bob;const bx=x*cb+y*sb,by=y*cb-x*sb,bz=z*cp-by*sp;
   out[k]=b.x+bx*cy+bz*sy;out[k+1]=b.y+by*cp+z*sp;out[k+2]=b.z-bx*sy+bz*cy;
  }
@@ -201,14 +203,15 @@ function renderBird(){
  }
  drawLook(face,(pts,color)=>poly(pts.map(world),color),p=>world(head(p)),world);if(looksLive)drawCape(); // worn things keep their own colours
  // Separate overlapping tail feathers with a dark terminal band and pale tips.
- const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl+.16*br; // fanned wide as an air brake
+ const spread=.17+.07*Math.abs(b.bank)+.06*b.effort-.09*fl+.16*br+.1*squirm; // fanned wide as an air brake, and in a cramp
+ const tailPlain=squirm?(pts,color)=>poly(pts.map(p=>world(rumpBend(p))),color):plain; // the tail follows the rump
  for(let k=-3;k<=3;k++){
   if(hash(k,5,31)<(3-feathers)*.25)continue; // lost feathers leave gaps
   const t=k/3,root=[t*.055,.051,-.33],tx=t*spread,tz=-.73+.09*t*t;
   const end=[tx,.037-.029*t*t+.014*flutter(k,23+k)-.16*br,tz],w=.042;
   const mid=[mix(root[0],tx,.66),.049-.024*t*t,mix(root[2],tz,.66)];
-  plain([root,[mid[0]-w,mid[1],mid[2]],[tx-w*.62,end[1],tz],end,[tx+w*.62,end[1],tz],[mid[0]+w,mid[1],mid[2]]],'#687695');
-  plain([[mid[0]-w,mid[1]+.002,mid[2]],[mid[0]+w,mid[1]+.002,mid[2]],[tx+w*.65,end[1]+.002,tz+.02],[tx-w*.65,end[1]+.002,tz+.02]],'#424a67');
+  tailPlain([root,[mid[0]-w,mid[1],mid[2]],[tx-w*.62,end[1],tz],end,[tx+w*.62,end[1],tz],[mid[0]+w,mid[1],mid[2]]],'#687695');
+  tailPlain([[mid[0]-w,mid[1]+.002,mid[2]],[mid[0]+w,mid[1]+.002,mid[2]],[tx+w*.65,end[1]+.002,tz+.02],[tx-w*.65,end[1]+.002,tz+.02]],'#424a67');
  }
  // The hand lags the arm on the downstroke. Sweeping both joints aft folds the wing.
  const amplitude=.15+.93*b.effort;
@@ -283,6 +286,14 @@ function drawRing(aim,R,target){
  }
  ctx.lineJoin='round';ctx.fillStyle=target?'#6dff8526':'#ffe45c1c';ctx.fill();
  ctx.lineWidth=5;ctx.strokeStyle='#0b0e14b3';ctx.stroke();ctx.lineWidth=2.5;ctx.strokeStyle=target?'#6dff85':'#ffe45c';ctx.stroke();
+}
+// A small chili drawn on the 2D layer: over the ones in the city, and beside the countdown.
+function chiliSign(x,y,k,alpha){
+ ctx.save();ctx.globalAlpha=alpha;ctx.translate(x,y);ctx.scale(k,k);ctx.rotate(-.55);ctx.lineJoin='round';
+ ctx.beginPath();ctx.moveTo(-5,-8);ctx.bezierCurveTo(7,-11,10,1,2,13);ctx.bezierCurveTo(3,3,0,-3,-7,-3);ctx.closePath();
+ ctx.lineWidth=3.5;ctx.strokeStyle='#0b0e14';ctx.stroke();ctx.fillStyle='#f2331f';ctx.fill();
+ ctx.beginPath();ctx.moveTo(-6,-6);ctx.quadraticCurveTo(-10,-10,-8,-14);ctx.lineWidth=5;ctx.strokeStyle='#0b0e14';ctx.stroke();ctx.lineWidth=2.5;ctx.strokeStyle='#4d9a34';ctx.stroke();
+ ctx.restore();
 }
 function drawHitmarker([x,y]){
  const age=elapsed-marker;if(age<0||age>.2)return;
@@ -372,6 +383,7 @@ const M={
   m.box(-.9,0,-.9,.9,2.3,.9,stone,0,0,0,.86).box(-1.15,0,-1.15,1.15,.35,1.15,stone);
   m.ball(0,3.55,0,.44,1.15,.38,bronze,0,0,0,8,6).ball(0,4.95,0,.27,.3,.27,bronze,0,0,0,8,5).tube(.5,3.9,5.5,.1,.1,.07,bronze,0,0,0,6).tube(-.2,2.3,3,0,.2,.16,bronze,0,0,0,6).tube(.2,2.3,3,0,.2,.16,bronze,0,0,0,6);return m.build();})(),
 // Splatter shapes: an uneven blob with a few long rays (flat for the ground, upright for walls) and a drip.
+ chili:chiliMesh(),
  splat:splatMesh(false),splatWall:splatMesh(true),splatFar:splatMesh(false,true),splatWallFar:splatMesh(true,true),
  dome:(()=>{const m=new Mesh();for(let j=0;j<3;j++)for(let i=0;i<9;i++){const q=(a,b)=>{const t=a*tau/9,u=b*Math.PI/6,n=[Math.sin(u)*Math.cos(t),Math.cos(u),Math.sin(u)*Math.sin(t)];return [n,n];};
   const c=[q(i,j),q(i+1,j),q(i+1,j+1),q(i,j+1)];for(const k of [0,1,2,0,2,3])m.v(c[k][0],c[k][1],WHITE,1);}return m.build();})(),
@@ -379,6 +391,29 @@ const M={
   for(let i=1;i<6;i++){const a=Math.PI+i*Math.PI/6;pts.push([.5*Math.cos(a),-.8+.2*Math.sin(a),0]);}
   pts.push([.5,-.8,0],[.5,0,0]);for(let i=2;i<pts.length;i++)m.tri(pts[0],pts[i-1],pts[i],WHITE,1);return m.build();})(),
 };
+// A smooth skin over a grid of points (one closed ring per row), for meshes that are built once. col(j) colours row j.
+function skinMesh(m,P,col){
+ const J=P.length,I=P[0].length,at=(j,i)=>P[clamp(j,0,J-1)][(i+I)%I];
+ const N=P.map((row,j)=>row.map((_,i)=>{const a=at(j,i+1),b=at(j,i-1),c=at(j+1,i),d=at(j-1,i);
+  const u=[a[0]-b[0],a[1]-b[1],a[2]-b[2]],v=[c[0]-d[0],c[1]-d[1],c[2]-d[2]],n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],l=Math.hypot(...n)||1;
+  return [n[0]/l,n[1]/l,n[2]/l];}));
+ for(let j=0;j<J-1;j++)for(let i=0;i<I;i++){const k=(i+1)%I,c0=col(j),c1=col(j+1);
+  m.v(P[j][i],N[j][i],c0);m.v(P[j+1][i],N[j+1][i],c1);m.v(P[j+1][k],N[j+1][k],c1);
+  m.v(P[j][i],N[j][i],c0);m.v(P[j+1][k],N[j+1][k],c1);m.v(P[j][k],N[j][k],c0);}
+ return m;
+}
+// The chili that floats over some roofs: a plump pod that curves to a point, with a green cap and a bent stalk.
+function chiliMesh(){
+ const m=new Mesh(),n=14,ring=(cx,y,r)=>Array.from({length:n},(_,i)=>{const a=i*tau/n;return [cx+Math.cos(a)*r,y,Math.sin(a)*r];});
+ const top=rgb('#f2331f'),tip=rgb('#a8120d'),lerp=(a,b,t)=>[mix(a[0],b[0],t),mix(a[1],b[1],t),mix(a[2],b[2],t)];
+ const pod=[[0,.2],[.05,.37],[.14,.44],[.3,.42],[.5,.34],[.68,.25],[.82,.16],[.93,.08],[1,.015]];
+ skinMesh(m,pod.map(([t,r])=>ring(.5*t*t,1-2.25*t,r)),j=>lerp(top,tip,pod[j][0]**1.5));
+ const green=rgb('#4d9a34'),dark=rgb('#2f6b22'),cap=[[.99,.3],[1.04,.33],[1.1,.24],[1.17,.11],[1.22,.075]],stalk=[0,.25,.5,.75,1];
+ skinMesh(m,cap.map(([y,r])=>ring(0,y,r)),j=>j<2?green:dark);
+ skinMesh(m,stalk.map(t=>ring(-.26*t*t,1.22+.42*t,.075-.02*t)),()=>dark);
+ skinMesh(m,[ring(-.26,1.64,.055),ring(-.27,1.645,.012)],()=>dark);
+ return m.build();
+}
 function personMesh(skin,hair,pants,long,far){
  // far: the same figure with fewer sides on every part (about a quarter of the triangles), same limbs and animation
  const m=new Mesh(),shoe=rgb('#1c1a19'),T=far?4:6,B=far?5:8,Bh=far?3:5,Bl=far?2:4;
@@ -443,7 +478,7 @@ function splatMesh(upright,simple){
 }
 M.cube.cull=true;
 const statics=[M.cube,M.tree,M.treeFar,M.lamp,M.table,M.stall,M.bench,M.statue,M.gable];
-const moving=[...M.people,...M.peopleFar,M.umbrella,M.car,M.carFar,M.hatchFar,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,M.ball,M.blob,M.dot,M.dome];
+const moving=[...M.people,...M.peopleFar,M.umbrella,M.car,M.carFar,M.hatchFar,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,M.chili,M.ball,M.blob,M.dot,M.dome];
 const decals=[M.splat,M.splatWall,M.splatFar,M.splatWallFar,M.drip];
 const leaf=['#3f6b2a','#4d7a2c','#5a7f33','#6b8a36','#3b6034'], roofKit=rgb('#8b8f92');
 // ---- What the camera can see. A ball of radius r round a point is in view unless it lies wholly outside one side of the picture.
@@ -486,7 +521,7 @@ function packBlock(i,j){
    put('cube',x+16.4,.95,z+wz+.14,0,9.2,.08,.1,iron);for(let n=0;n<=9;n++)put('cube',x+16.45+n,.16,z+wz+.15,0,.07,.8,.07,iron);}
   for(const [gx,gz,h,seed] of b.gables){put('gable',gx,h,gz,0,5.5,1.6+1.6*seed,5,rgb(seed<.5?'#5a2f26':'#3a3d42'));top=Math.max(top,h+4);}
  }
- g={i,j,x:b.x+tile/2,z:b.z+tile/2,top,r:Math.hypot(tile*.71,top/2),dist:0,d:0};
+ g={i,j,key,chili:b.chili,x:b.x+tile/2,z:b.z+tile/2,top,r:Math.hypot(tile*.71,top/2),dist:0,d:0};
  for(const name in lists)g[name]=new Float32Array(lists[name]);
  blockGeo.set(key,g);
  if(blockGeo.size>1200){const bi=Math.round(bird.x/tile),bj=Math.round(bird.z/tile);for(const [k,q] of blockGeo)if(Math.abs(q.i-bi)>16||Math.abs(q.j-bj)>16)blockGeo.delete(k);}
@@ -528,6 +563,7 @@ function drawShadowStatics(ax,az){
 }
 let gooMat=-1; // -1 wet and glossy, -2 polished gold
 const gooShade=['#efe9d2','#e2dbb4','#d3cf9a','#f4f0e2','#c9c08a'].map(rgb);
+const hotShade=['#e8742a','#d9541e','#f0a03a','#c8401c','#e89a2a'].map(rgb); // what comes out after a chili
 // A thick, tapering strand of goo between two points, turned to face the camera and shaded as wet.
 function strand(p,q,w0,w1,col){
  const ax=q[0]-p[0],ay=q[1]-p[1],az=q[2]-p[2],ex=camera.x-p[0],ey=camera.y-p[1],ez=camera.z-p[2];
@@ -590,6 +626,13 @@ function buildMoving(){
   if(!held)for(let i=1;i<4;i++){const q=.09*(1-i/4);M.dot.add(x-o.vx*i*.03,y-o.vy*i*.03,z-o.vz*i*.03,0,q,q,q,splatCol,gooMat);}
  }
  if(bird.snare>0)drawNet(bird.x,bird.y+.25,bird.z,1,true);
+ // Chilis over the roofs: big, glossy, turning slowly and bobbing, with three sparks circling them.
+ for(const g of visBlocks){
+  const c=chiliAt(g);if(!c)continue;
+  const t=elapsed+g.i*3+g.j,y=c[1]+.45*Math.sin(t*2.1);
+  M.chili.add(c[0],y-.2,c[2],t*1.3,1.25,1.25,1.25,WHITE,-1,0,0,.5);
+  for(let k=0;k<3;k++){const a=t*2.6+k*tau/3;M.dot.add(c[0]+Math.cos(a)*1.9,y+.7*Math.sin(a*1.7+k),c[2]+Math.sin(a)*1.9,0,.09,.09,.09,amber,2);}
+ }
  // Star targets with their props: rowing boats on the canal, hot-air balloons.
  for(let i=Math.floor(bird.x/tile)-3;i<=Math.floor(bird.x/tile)+3;i++)for(let j=Math.floor(bird.z/tile)-3;j<=Math.floor(bird.z/tile)+3;j++){
   const b=block(i,j);
@@ -624,24 +667,25 @@ function buildMoving(){
  // The spray: wet, glossy blobs stretched along their fall, in mixed shades with darker bits,
  // joined by thick strands that thin out and snap as they fall apart. While it flows, a strand hangs from the vent.
  let prior=null;
- const vent=birdPoint([0,-.07,-.43]),flowing=state==='play'&&elapsed-lastDrop<.09;
+ const vent=ventPoint(),flowing=state==='play'&&elapsed-lastDrop<.09;
  for(const d of drops){
   const p=at(d,d.age),vx=d.vx,vy=d.vy-gravity*d.age,vz=d.vz,sp=Math.hypot(vx,vy,vz)||1;
   const stretch=1+clamp(sp*.035,0,1.6)*(d.big?.6:1),wob=1+.22*Math.sin(d.age*26+d.seed),tilt=Math.atan2(-vy,Math.hypot(vx,vz)||1e-3);
-  (d.big?M.ball:M.blob).add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,gooShade[d.seed%gooShade.length],gooMat,0,0,tilt);
+  const shade=(d.hot?hotShade:gooShade)[d.seed%gooShade.length];
+  (d.big?M.ball:M.blob).add(p[0],p[1],p[2],Math.atan2(vx,vz),d.r*wob,d.r/wob,d.r*stretch,shade,gooMat,0,0,tilt);
   if(d.dark)M.dot.add(p[0]+.4*d.r,p[1]+.2*d.r,p[2]+.3*d.r,d.seed,d.r*.5,d.r*.45,d.r*.6,bits,-1);
-  if(prior&&prior.age-d.age<.1&&d.age<1.1)strand(at(prior,prior.age),p,prior.r*.75*(1-prior.age*.8),d.r*.75*(1-d.age*.8),gooShade[d.seed%gooShade.length]);
+  if(prior&&prior.age-d.age<.1&&d.age<1.1)strand(at(prior,prior.age),p,prior.r*.75*(1-prior.age*.8),d.r*.75*(1-d.age*.8),shade);
   prior=d;
  }
- if(flowing&&drops.length){const d=drops.at(-1);strand(vent,at(d,d.age),.07,d.r*.7,gooShade[0]);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,gooShade[0],gooMat);}
- for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.dot.add(s.x,s.y,s.z,0,r,r*1.5,r,gooShade[Math.floor(s.life*20)%gooShade.length],gooMat);}
+ if(flowing&&drops.length){const d=drops.at(-1),shade=(d.hot?hotShade:gooShade)[0];strand(vent,at(d,d.age),.07,d.r*.7,shade);M.ball.add(vent[0],vent[1],vent[2],0,.06,.06,.06,shade,gooMat);}
+ for(const s of splash){const r=.05*(1-.5*s.age/s.life);M.dot.add(s.x,s.y,s.z,0,r,r*1.5,r,(s.hot?hotShade:gooShade)[Math.floor(s.life*20)%gooShade.length],gooMat);}
  // Stains: close to the camera they have a raised wet heap, dark streaks and flung droplets; further off only the flat
  // splat in a simpler outline. There can be hundreds of them, so the far ones have to be cheap.
  const stainNear=(fastest?16:fast?22:28)**2;
  for(const s of stains){
   const dx=s.x-camera.x,dz=s.z-camera.z;
   if(Math.abs(dx)>130||Math.abs(dz)>130||!inView(s.x,s.y,s.z,3))continue;
-  const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau,col=gooShade[Math.floor(s.seed*97)%gooShade.length];
+  const age=elapsed-s.t,r=s.r*Math.min(1,.4+age*6),turn=s.seed*tau,col=(s.hot?hotShade:gooShade)[Math.floor(s.seed*97)%gooShade.length];
   const near=dx*dx+dz*dz+(s.y-camera.y)**2<stainNear;
   if(s.wall!==undefined){
    (near?M.splatWall:M.splatWallFar).add(s.x,s.y,s.z,s.wall,r,r,1,col,gooMat);
@@ -975,7 +1019,7 @@ function drawFeed(){
  }
  ctx.globalAlpha=1;
 }
-const shadowCasters=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,dyn,omen,goo];
+const shadowCasters=[...M.people,M.umbrella,M.car,M.hatch,M.cab,M.bus,M.tank,M.turret,M.heli,M.box,M.balloon,M.boat,M.chili,dyn,omen,goo];
 const solidScene=[...statics,...moving,dyn,goo];
 function draw3D(){
  frustumSetup();
@@ -1047,7 +1091,17 @@ function render(dt=1/60){
   drawRing(aim,R,target);
   const centre=point(aim);if(centre){drawSight(centre,target);drawHitmarker(centre);}
   drawWorldText();drawFeed();drawEventHud();
-  if(tank<.995||emptyTank){ // how much is left, right under the bird where the eyes already are
+  for(const g of visBlocks){ // a chili in sight gets a small sign, so that it can be found from far away
+   const c=chiliAt(g);if(!c)continue;const far=Math.hypot(c[0]-bird.x,c[2]-bird.z);if(far>260||far<14)continue;
+   const m=point([c[0],c[1]+3.2,c[2]]);if(m)chiliSign(m[0],m[1],.75+.5*clamp(1-far/160,0,1),clamp((260-far)/60,0,1));
+  }
+  const hotLeft=chiliUntil-elapsed;
+  if(hotLeft>0){ // the seconds of chili left, burning down
+   const at=point([bird.x,bird.y-.9,bird.z]),m=at&&camView!==2?at:[width/2,height*.72],wide=96,x=m[0]-wide/2,y=Math.min(height-46,m[1]+14),f=hotLeft/chiliTime;
+   ctx.fillStyle='#0b0e14cc';ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,x-2,y-2,wide+4,12,6);ctx.fill();
+   ctx.fillStyle=Math.sin(elapsed*20)>0?'#ff7a1a':'#ffb020';ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,x,y,Math.max(4,wide*f),8,4);ctx.fill();
+   chiliSign(x-13,y+4,.7,1);text('CHILI '+Math.ceil(hotLeft),m[0],y+27,13,'#ffb347','center',900);
+  }else if(tank<.995||emptyTank){ // how much is left, right under the bird where the eyes already are
    const m=point([bird.x,bird.y-.9,bird.z]);
    if(m){const wide=64,x=m[0]-wide/2,y=Math.min(height-30,m[1]+14);
     ctx.fillStyle='#0b0e14cc';ctx.beginPath();(ctx.roundRect||ctx.rect).call(ctx,x-2,y-2,wide+4,10,5);ctx.fill();
@@ -1073,7 +1127,8 @@ function render(dt=1/60){
  hud('meter-label',wanted===maxWanted?'MAXKAOS':'KAOS '+number(points)+' / '+number(hi));
  hud('stars','★'.repeat(wanted)+'☆'.repeat(maxWanted-wanted));hud('points',number(points));
  const level=Math.round(tank*100)+'%',bar=$('tank-fill');if(bar.style.width!==level)bar.style.width=level;
- $('reserve').classList.toggle('low',tank<.3||emptyTank);hud('tank-label',emptyTank?'SLUT PÅ BAJS':'BAJS');
+ const onChili=playing&&chiliOn();
+ $('reserve').classList.toggle('low',!onChili&&(tank<.3||emptyTank));$('reserve').classList.toggle('hot',onChili);hud('tank-label',onChili?'CHILI!':emptyTank?'SLUT PÅ BAJS':'BAJS');
  for(const [i,el] of [...$('feathers').children].entries())el.classList.toggle('lost',i>=feathers);
  if(wanted){hud('time',Math.floor(elapsed/60)+':'+String(Math.floor(elapsed%60)).padStart(2,'0'));hud('time-label','JAKT PÅGÅR');}
  else{hud('time',String(Math.max(0,Math.ceil(60-elapsed))));hud('time-label','SEKUNDER KVAR');}

@@ -32,7 +32,7 @@ const views={
   return ['Topplista',board().length?scoreList():'<p class="cause">Inga flygningar än.</p>'];},
  feats:()=>['Bedrifter',featList(true)],
  settings:()=>['Inställningar',setting('Invertera upp/ner',reversePitch?'↑ stiger':'↓ stiger','pitch')+setting('Ljud',muted?'Av':'På','sound')+(testSite?setting('Ljudnivåer','Ställ in →','volumes'):'')+setting('Kamera',viewNames[camView][0].toUpperCase()+viewNames[camView].slice(1),'camera')+setting('Grafik',qualityNames[quality]+(quality==='auto'?' (just nu '+['snygg','snabb','snabbast'][gfx]+')':''),'graphics')+(smoothEdges===fast?'<p class="cause">Kantutjämningen ändras när sidan laddas om.</p>':'')],
- help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li></ul>'+controlsPicture()],
+ help:()=>['Så spelar du','<ul><li><b>Pricka folk och bilar.</b> 100 poäng på en minut startar jakten.</li><li><b>Lågt och i störtdyk ger dubbelt.</b> Högt upp ger hälften.</li><li><b>Guldstjärnor</b> är värda mest.</li><li><b>Bajset</b> fylls på när du slutar spruta.</li><li><b>Tre fjädrar = tre liv.</b> Frukt och hökar tar en, väggar och träd tar alla.</li><li><b>Nät</b> drar ner dig – håll upp nosen.</li><li><b>Röd chili</b> över vissa tak: flyg in i den och få obegränsat bajs i tio sekunder.</li></ul>'+controlsPicture()],
 };
 function openView(name){
  const [title,body]=views[name](),v=$('view');
